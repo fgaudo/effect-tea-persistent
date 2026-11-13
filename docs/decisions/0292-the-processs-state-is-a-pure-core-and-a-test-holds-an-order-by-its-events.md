@@ -96,6 +96,28 @@ which no transaction holds. So `Tx` modules would take out few pins, and leave t
   the orders of `inline` and of `queued`, and the orders between them.
 - **A pin goes only once a test that replaces it kills the same mutation.** The mutation is the pin's own, in
   `src/runtime.test_pins.ts`. The pins go one test at a time, and `bun run test:pins` goes with the last.
+- **A pin's mutation takes a check out. A form is held by its construction.** A mutation of form leaves every check
+  in place and opens a window between two statements: it splits one synchronous step in two, puts a yield in a region
+  that cannot be interrupted, or writes by hand what a primitive of Effect does. No test without a schedule kills such
+  a mutation, since no code a test can hold lies in the window. So before a pin of form goes, its mutation is written
+  again as a check or a write taken out of a transition of the core, which a case of the core kills. Where the form is
+  a primitive's, the mutation drops the primitive's release, which a test with no schedule sees. The form itself is
+  held by the test of `src/form.test.ts` that refuses a write of the core's fields outside the core. effect-tea found
+  the same of its own run, in `docs/single-owner.md` of `github.com/fgaudo/effect-tea` at commit `5cc8c89`.
+- **Each pin is listed by why it needs a schedule, before its part begins.** A pin needs a schedule for one of four
+  reasons, and each reason names what replaces the pin.
+  - Its mutation is of form. The mutation is written again, as the rule above says.
+  - Its check is the first step of a fiber forked for it, which starts when the scheduler says. The check moves to
+    the step that decides the fork, or the fork is one documented to start at once.
+  - Its check stands behind an earlier check of the same state, which answers first in every order a test without a
+    schedule reaches. A case of the core gives the event between the two checks.
+  - Its rule is an order of a registration and a read of the storage. A gate on the storage holds the read.
+
+  A reading of the mutations on 2026-11-13 found five of form: the waker's look for a poke of decision 0068, the
+  drain's signal of decision 0119, the caller's permit of decision 0147, the reading's count of decision 0163 and the
+  count of what runs detached of decision 0079. It found four of an order across a read: the sender's registration of
+  decision 0063, the reading's signal of decision 0142, the watcher's version of decision 0163 and the inspection's
+  snapshot of decision 0185. The other nine are not listed yet. The first part of the step lists all eighteen.
 - **The bookkeeping stays out of Effect's `Tx` modules.** [Decision 0177](archive/0177-the-runtimes-bookkeeping-stays-in-synchronous-steps.md)
   stays, and its reason that `suspended` reads the list of who waits fell with
   [decision 0265](0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md). This note's
@@ -141,6 +163,11 @@ which no transaction holds. So `Tx` modules would take out few pins, and leave t
   Deferred resumes runs before its resumer goes on, as under Effect`.
 - That a pin may go once another test kills its mutation: **chosen** by this note, at the advice of Fable 5.2. A
   random search with no pin holds a rare order only by chance.
+- That no test without a schedule kills a mutation of form: **open**. effect-tea checked it for one mutation of its
+  own, and nothing checked it here. The first part of the step checks it on the pin of the waker's look for a poke, by
+  a test with no schedule that passes with the pin's mutation made.
+- That the five pins named are of form and the four named are of an order across a read: **open**. They were listed
+  by a reading of `src/runtime.test_pins.ts` alone. The first part of the step checks each as it lists the eighteen.
 - That a wait in a `Tx` transaction holds no I/O, since its body runs again whole: **read in the source**, `tx` in
   `internal/effect.ts` at 4.1.3, which reruns the body in a `whileLoop` after a conflict or a `txRetry`.
 

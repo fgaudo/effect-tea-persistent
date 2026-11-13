@@ -1034,6 +1034,24 @@ with a requirement that no example has yet.
   - what the source of Effect at the version pinned does with an observer added to a fiber that has ended, and
     whether `addObserver` is a stable API;
   - a test under the scheduler that ends the fiber between its fork and the observer.
+- **A fork of the runtime that starts at once.** `forkApart` of `src/runtime/process.ts` is `Effect.forkIn`, and a
+  fiber it forks starts when the scheduler says. A fiber stopped before its first step runs no finalizer
+  ([decision 0110](decisions/archive/0110-detached-work-is-counted-until-it-ends-however-it-ends.md)). So `detached`
+  of `src/runtime/loop.ts` forks a second fiber that waits for the first, `crash` adds an observer of its stop, and
+  both hold the fork and what tells its end in one region that cannot be interrupted, written by hand. `FiberSet.run`
+  and `FiberMap.run` start their fiber at once and take it out as it ends, as their JSDoc says at 4.1.3, and both are
+  `@stability stable`. Whether a fork of the runtime becomes one of them is not decided. A fiber that starts at once
+  runs its first step on the stack of the fiber that forks it, so the count raised and the fork would be one step. The
+  test of `src/form.test.ts` on forks refuses both modules today, since a fiber they fork keeps the services of the
+  forking fiber, its transaction among them (decision 0164). effect-tea proposes the same rule for its renderer, in
+  `docs/single-owner.md` of `github.com/fgaudo/effect-tea` at commit `5cc8c89`. It would be decided by:
+  - a spike that forks through `FiberSet.run` in a scope, interrupts the forking fiber at the fork, and checks whether
+    the fiber forked ran a step and a finalizer;
+  - whether `FiberSet.run` forks a fiber that can be interrupted inside a region that cannot, as `forkApart` says by
+    its option ([decision 0271](decisions/0271-every-fork-of-the-runtime-says-it-is-interruptible.md));
+  - whether a fiber forked at once inside a transaction of Cluster's can be given `untransacted` before its first step;
+  - the second part of the step The process's state as a pure core, and the tests of an order, of the
+    [roadmap](roadmap.md), which decides the question above on the counts.
 - **One primitive for a look that waits.** Five places take a signal before they look, so that no change between the
   look and the wait is missed: `settled` and `emptied` in `src/runtime.ts`, the waker's poke, `awaitResumption` in
   `src/runtime/callers.ts`, and `commitOf` in `src/runtime/readings.ts`. Each is written by hand, with a test of its

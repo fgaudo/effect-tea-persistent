@@ -541,7 +541,10 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     entity and request, and the locks with their users. Its test generates the orders of the events and checks the
     rules as invariants. Its cases are the two interleavings of
     [decision 0104](decisions/archive/0104-the-runtimes-tests-choose-where-fibers-yield.md), each of which fails with
-    its rule taken out of the core. The part names the module, adds it to the modules of the runtime in
+    its rule taken out of the core. Before any code, the part lists each of the eighteen pins of
+    [`src/runtime.test_pins.ts`](../src/runtime.test_pins.ts) by why it needs a schedule, in decision 0292, which names
+    the four reasons and the nine pins a first reading listed. It also runs a test with no schedule against the
+    mutation of the waker's look for a poke, to check that no such test kills a mutation of form. The part names the module, adds it to the modules of the runtime in
     [`AGENTS.md`](../AGENTS.md) and to the diagram of [`CONTRIBUTING.md`](../CONTRIBUTING.md), and counts the seeds
     `bun run test:pins` loses to it. The part also decides the move of `holding` to `RcMap`, of the later step Code
     written by hand where a module of Effect does the same, since the core then counts the users of a lock.
@@ -568,7 +571,8 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     fast-check with no scheduler.
   - The sixth part is the scheduler. A resumption becomes a choice of the strategy, and `Resumptions` goes from
     `src/testing.ts`. `bun run test:explore` runs in a job of the CI on a schedule. A pin of
-    `src/runtime.test_pins.ts` goes once a case of the core, a gate or a primitive's test kills its mutation.
+    `src/runtime.test_pins.ts` goes once a case of the core, a gate or a primitive's test kills its mutation. A
+    mutation of form is first written again as a check taken out, as decision 0292 says.
   - The step leaves this file when the parts above are done, and decision 0292 is taken, `accepted`, by that commit.
     The same commit changes the rules of `AGENTS.md` on two fields written in one step, on pinned seeds and on
     `bun run test:pins`.
