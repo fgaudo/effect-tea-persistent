@@ -103,7 +103,9 @@ which no transaction holds. So `Tx` modules would take out few pins, and leave t
   again as a check or a write taken out of a transition of the core, which a case of the core kills. Where the form is
   a primitive's, the mutation drops the primitive's release, which a test with no schedule sees. The form itself is
   held by the test of `src/form.test.ts` that refuses a write of the core's fields outside the core. effect-tea found
-  the same of its own run, in `docs/single-owner.md` of `github.com/fgaudo/effect-tea` at commit `5cc8c89`.
+  the same of its own run, in `docs/single-owner.md` of `github.com/fgaudo/effect-tea` at commit `a138792`. Its
+  renderer is forked and stopped by one `Effect.acquireRelease` there, and thirteen tests with no schedule kill the
+  mutation that drops the release.
 - **Each pin is listed by why it needs a schedule, before its part begins.** A pin needs a schedule for one of four
   reasons, and each reason names what replaces the pin.
   - Its mutation is of form. The mutation is written again, as the rule above says.

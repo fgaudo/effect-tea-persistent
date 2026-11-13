@@ -1043,8 +1043,11 @@ with a requirement that no example has yet.
   `@stability stable`. Whether a fork of the runtime becomes one of them is not decided. A fiber that starts at once
   runs its first step on the stack of the fiber that forks it, so the count raised and the fork would be one step. The
   test of `src/form.test.ts` on forks refuses both modules today, since a fiber they fork keeps the services of the
-  forking fiber, its transaction among them (decision 0164). effect-tea proposes the same rule for its renderer, in
-  `docs/single-owner.md` of `github.com/fgaudo/effect-tea` at commit `5cc8c89`. It would be decided by:
+  forking fiber, its transaction among them (decision 0164). Bug 101 of [`docs/bugs.md`](bugs.md) names the same
+  change as one of its fixes: `forkHeld` would register a fiber in the step that forks it. effect-tea rested three
+  tests on `FiberSet.run` starting its fiber at once, and dropped the premise once it took out the checks those tests
+  held, in `docs/single-owner.md` of `github.com/fgaudo/effect-tea` at commit `a138792`. So effect-tea gives no
+  evidence for the change here. It would be decided by:
   - a spike that forks through `FiberSet.run` in a scope, interrupts the forking fiber at the fork, and checks whether
     the fiber forked ran a step and a finalizer;
   - whether `FiberSet.run` forks a fiber that can be interrupted inside a region that cannot, as `forkApart` says by

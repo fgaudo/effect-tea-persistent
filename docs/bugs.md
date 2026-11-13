@@ -578,7 +578,15 @@ family gets a fix of its own.
     every seed of `SCHEDULES=all` once `start` and `arm` stop the fiber they registered where they then find
     `draining` set. The fix begins at `start` and `arm`, which would read `draining` again once the fiber is
     registered, or at `forkHeld`, which would register the fiber in the step that forks it. Each test pins a seed, so
-    each needs a pin in `src/runtime.test_pins.ts` once it moves to `main`.
+    each needs a pin in `src/runtime.test_pins.ts` once it moves to `main`. A third fix was read on 2026-11-13 and
+    not tried: the fiber that runs an entity's steps stops the entity's own timers and operations that run again,
+    where it decides its next step, so that the stop reads no fiber another fiber forks. Its test would need no
+    schedule. effect-tea took that form for the end of its run, in `docs/single-owner.md` of
+    `github.com/fgaudo/effect-tea` at commit `a138792`. Two things stand against it here. The drain cannot stop an
+    entity's loop first, as effect-tea's end does, since the loop delivers the at-most-once operations the drain waits
+    for. And on Cluster a door runs an entity's steps, not its loop, and a step of the loop does not take the entity's
+    lock, so no one fiber and no lock owns what an entity forks. The second part of the step The process's state as a
+    pure core, and the tests of an order, of the [roadmap](roadmap.md), fixes the bug and chooses among the three.
 102. **Reproduced: on PostgreSQL, a step whose index, key parameter, request or id holds a long text cannot be written,
     where SQLite writes it.** Decision 0157 holds the same tables on both dialects, so that a program tested on SQLite
     meets there what PostgreSQL refuses

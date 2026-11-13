@@ -550,7 +550,8 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     written by hand where a module of Effect does the same, since the core then counts the users of a lock.
   - The second part is the rest of the state: the counts `settled` and `drained` read, `draining`, the entities
     stopping, the shards held and the order of use. Its cases are decision 0109, the form of decision 0274 that
-    `settled` reads, and bug 101 of [`docs/bugs.md`](bugs.md), which the part fixes. It decides the
+    `settled` reads, and bug 101 of [`docs/bugs.md`](bugs.md), which the part fixes by one of the three fixes the bug
+    names. It decides the
     [open question](open-questions.md#running) A count of the process kept by an observer of a fiber's exit.
   - The third part is the semantics of the process that the rehearsal shares: which program steps an entity, a
     deploy and a restart, the replies kept across a restart and the ids refused. [`src/rehearse.ts`](../src/rehearse.ts)
