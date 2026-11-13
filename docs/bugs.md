@@ -720,3 +720,17 @@ family gets a fix of its own.
     `42f0832`. The fix begins at `test:postgres` of `package.json`, run under `SCHEDULES=all` where the job of the
     server has the time, or at the job `release`, which would get the service of PostgreSQL and `POSTGRES_URL`.
 111. **Fixed by [decision 0288](decisions/0288-a-batch-of-prune-skips-the-rows-another-batch-holds.md)**, whose batch of `prune` locks the rows it selects and skips those another batch holds. On a pool of PostgreSQL two prunes at once locked rows of the outbox in opposite orders, and PostgreSQL ended one as a deadlock. Found by the test of a contract of the pool on the CI's server, for the pair of two prunes.
+112. **Reproduced: a request id that two fibers of a scenario send at once is applied twice in a rehearsal.**
+    [Decision 0200](decisions/0200-a-rehearsal-sends-under-a-request-id-the-test-names.md) answers a second send under
+    a sender and request id from the reply stored for the first, and does not apply it again. `receive` of
+    `src/rehearse.ts` reads the stored reply in one effect and applies the message in the next. A fiber may yield
+    between the two, and Effect makes a fiber yield after 2,048 operations by default. So a second fiber of the
+    scenario sends the same request whole in between, the first fiber goes on with no reply stored, and the machine
+    applies the message again. The test `applies once a request id that two fibers of the scenario send at once`, in
+    `src/rehearse.test.ts`, reproduces it on `main` as a `test.failing`, with `Scheduler.MaxOpsBeforeYield` at 1. No
+    note took a premise away: decision 0200 names no fiber, and no note says what a rehearsal promises to a scenario
+    of several fibers. It was found on 2026-11-13 by a reading of effect-tea's `docs/rehearse-owned-effects.md`, whose
+    rehearsal lost what a fiber of the test's asked for. The fix begins at `receive`, which would read the reply and
+    apply the message in one synchronous step, or at the rehearsal, which would fail a scenario whose fiber acts while
+    an act of another is under way. The [open question](open-questions.md#programs) on a scenario of several fibers
+    holds the choice, and the other acts of the same form.

@@ -636,6 +636,22 @@ it leaves this file, and what it decided goes into the design, a decision or an 
   hold a step by a probe, which a file of SQLite shared by two runners cannot hold
   ([decision 0283](decisions/0283-a-contract-runs-one-set-of-calls-on-every-backend.md)).
 
+- **An act of a rehearsal from several fibers**, postponed by the maintainer on 2026-11-13. Bug 112 of
+  [`docs/bugs.md`](bugs.md) is a request id that two fibers of a scenario send at once, applied twice. Its test is a
+  `test.failing` of `src/rehearse.test.ts`. The [open question](open-questions.md#programs) on a scenario of several
+  fibers lists the other acts of the same form, none run, and the two fixes. The maintainer chose neither yet. The
+  session that found the bug recommends that each act be one synchronous step:
+  - a synchronous core of `apply` in `src/rehearse.ts` gives the outputs or the suspension, and `receive`,
+    `complete`, `fireOf`, `born` and the two `create` call it in the thunk that reads;
+  - `advance` becomes one step, since all it does is synchronous;
+  - `run` stays in two steps, since the runner is an effect of the program, and the incarnation drops an answer that
+    came late;
+  - each act gets a test of two fibers under `Scheduler.MaxOpsBeforeYield` at 1, and the test of bug 112 becomes a
+    `test`;
+  - a note says what a rehearsal promises to a scenario of several fibers, and the guide says it in a sentence.
+
+  The step begins at `receive` of `src/rehearse.ts`.
+
 - **Code written by hand where a module of Effect does the same**, of low priority. A review of `src/` against
   the rule of [`AGENTS.md`](../AGENTS.md) on Effect's modules found four places, on 2026-11-11:
   - The lock of each entity, `holding` in `src/runtime/process.ts`, keeps a `Map` of a semaphore and a count of its

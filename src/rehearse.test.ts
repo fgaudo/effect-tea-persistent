@@ -9,6 +9,7 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
+import * as Scheduler from 'effect/Scheduler'
 import * as Schema from 'effect/Schema'
 import fc from 'fast-check'
 import { booking } from './fixtures/booking.ts'
@@ -380,6 +381,25 @@ describe("a rehearsal's request ids", () => {
         yield* rehearsal.send(entered, { sender: north, requestId: 'entry-2' })
         expect(yield* rehearsal.projection).toEqual({ entries: 2 })
       }),
+    )))
+
+  // Bug 112 of docs/bugs.md. Each fiber yields after every operation, so that one send reads that no reply is stored
+  // before the other send applies its message.
+  test.failing('applies once a request id that two fibers of the scenario send at once', () =>
+    Effect.runPromise(Effect.provideService(
+      rehearse(
+        door,
+        opened,
+        Effect.fnUntraced(function*(rehearsal) {
+          yield* rehearsal.send({ _tag: 'Opened' }, { sender: north })
+          const send = rehearsal.send(entered, { sender: north, requestId: 'entry-1' })
+          expect(yield* Effect.all([send, send], { concurrency: 'unbounded' }))
+            .toEqual([{ _tag: 'Accepted' }, { _tag: 'Accepted' }])
+          expect(yield* rehearsal.projection).toEqual({ entries: 1 })
+        }),
+      ),
+      Scheduler.MaxOpsBeforeYield,
+      1,
     )))
 
   // The runtime refuses such a request id, so that a test passes only what a deployment runs (decision 0204).

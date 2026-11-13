@@ -1097,6 +1097,25 @@ with a requirement that no example has yet.
   - The step What a deploy may change of a program, against what is stored, of the [roadmap](roadmap.md), decides
     both, since its list of pieces names the children and the keys.
 
+- **A scenario of a rehearsal that acts from several fibers.** No note says whether a scenario may act from two
+  fibers at once, as with `Effect.all` under a concurrency or a fiber it forks. Bug 112 of [`docs/bugs.md`](bugs.md)
+  is one act that reads and writes in two effects, with a yield between them: `receive` of `src/rehearse.ts`. Other
+  acts have the same form, and none was run. `create` of a runner's `Entities` and `create` of a world look for the
+  entity, then store it in `born`, so two creations of one id at once may store the second over the first.
+  `complete` reads the work before its step, to fail an operation that comes back the same. `fireOf` moves the time,
+  then applies the timer. `advance` chooses a timer, then fires it. `run` is different by design: its runner runs
+  between the read and the completion, and the incarnation drops an answer that came late. effect-tea changed its
+  rehearsal for what a fiber of the test's loses, in its `docs/rehearse-owned-effects.md`; its four roots need a
+  loop, a queue and an end that reads a ledger, and this rehearsal has none. It was found on 2026-11-13, by a
+  reading. It would be decided by:
+  - whether each act is one synchronous step, which no fiber falls into, with a test of two fibers for each act
+    above, under `Scheduler.MaxOpsBeforeYield` at 1;
+  - or whether the rehearsal fails a scenario whose fiber acts while an act of another fiber is under way, the sends
+    of a runner under `run` aside;
+  - what the guide says of a scenario of several fibers, either way;
+  - the step An act of a rehearsal from several fibers, of the [roadmap](roadmap.md), which holds the fix the
+    session that found the bug recommends, and which the maintainer postponed.
+
 - **A rehearsal in a browser.** The machine computes the digest of an idempotency key with `node:crypto`, so the
   machine runs only where that module is
   ([decision 0192](decisions/0192-the-digest-of-a-key-is-computed-by-the-machine.md)). `rehearse` and the runtime
