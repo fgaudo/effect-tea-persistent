@@ -50,7 +50,10 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     [`docs/bugs.md`](bugs.md), or an [open question](open-questions.md) where no test reproduces it yet. The first
     area moved makes `docs/premises.md` and `docs/rejected.md`, and the test of `src/form.test.ts` that every premise
     of `docs/premises.md` states its state in bold and that each test it names exists. A session that moves an area
-    writes `Done, ` before it here, with what it found and what it did not reach.
+    writes `Done, ` before it here, with what it found and what it did not reach. Of areas 13 to 16, which hold no
+    shared state, the state of that section's brief is the module or the section the area names. A subagent may
+    draft an area, and the session checks the draft against the code before it commits. Two sessions do not move
+    areas at once, since every area writes `docs/design.md`, `docs/premises.md` and the index.
   - The last part changes the rules of work, as decision 0294 says: the section on notes of
     [`AGENTS.md`](../AGENTS.md), the records of `docs/records/` for a design weighed for a step, the citations of a
     comment, the consent of the maintainer to a new premise, the checks of `src/form.test.ts` on the notes, the skill
@@ -350,6 +353,16 @@ it leaves this file, and what it decided goes into the design, a decision or an 
   site, `sideEffects`, and `keywords` with the words people search this problem by, `saga` and `durable-execution`
   among them, since the README says where the library differs. What it publishes leaves out the files of the tests,
   `*.test.ts` and `*.test_*.ts` ([decision 0241](decisions/0241-a-group-of-modules-lies-in-a-folder-entered-by-the-module-of-its-name.md)).
+  The release also weighs what effect-tea does at its own, as a reading of 2026-11-17 found:
+  - a `CHANGELOG.md` with an entry for each change a user can notice, and a skill of the release that says how a
+    version is chosen before 1.0 and when the site deploys, from a tag rather than from `main`;
+  - a report of the public API, written by API Extractor from the declarations and committed, which the CI checks;
+  - the conditions `bun`, `types` and `default` of `exports`, a build of `dist/`, and a test that packs the package,
+    installs it with npm, and runs and typechecks it as a user outside Bun gets it;
+  - a skill shipped in the package that leads a user's coding agent to the guide and the examples of the version
+    installed;
+  - a tutorial on the site, built step by step from regions of the examples;
+  - a benchmark of the runtime, as the steps and the transactions a second, run in the CI.
 
 - **The runtime on Cluster across machines, on PostgreSQL**, once Cluster has a fence
   ([Effect-TS/effect#10058](https://github.com/Effect-TS/effect/issues/10058)), or the runtime one of its own. Until

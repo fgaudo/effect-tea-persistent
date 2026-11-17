@@ -1260,3 +1260,66 @@ with a requirement that no example has yet.
   - whether the names of OpenTelemetry's attributes for a library are expected to carry the library's whole name, as
     in its conventions for instrumentation libraries;
   - whether a backend a deployment uses already holds a series named `tea_…`.
+
+## The project's tooling and process
+
+A reading of effect-tea (`github.com/fgaudo/effect-tea`) on 2026-11-17 compared its tooling and its process with this
+repository's. The site, the skills `guide-reader` and `premise-review`, the runner of the mutations and the names of
+the files of the tests came from effect-tea already. Its documents kept true of the code are the step The rules move
+from the notes into documents kept true, of the [roadmap](roadmap.md). What it does at a release is under the step
+The release there. The rest is not decided, and is listed here.
+
+- **A lint of the deprecated APIs.** effect-tea fails `bun run lint` on any API marked `@deprecated`, by Oxlint's
+  type-aware rule `typescript/no-deprecated`. This repository runs `tsc` alone, so a deprecation that a new release of
+  Effect adds shows only when someone reads it. The lint would cost two dependencies of development and a step of
+  `ci.yml`. It would be decided by:
+  - a run of Oxlint with that rule on `src/`, `examples/` and `scripts/`, which says what it finds today;
+  - whether `AGENTS.md` then forbids a deprecated API, as effect-tea's does.
+- **A job that runs the tests at the newest Effect.** effect-tea runs, every night, the typecheck and the tests at the
+  newest Effect its range accepts, so that a premise a new release breaks is known the day after it is published. This
+  repository pins `effect` and every `@effect/` package at one version, 4.1.3, while effect-tea is at 4.1.4. The job
+  would update them together, as a move of Effect's version does, and a failure would be a lead for a move, not a red
+  commit. It would be decided by:
+  - whether `bun update` can move `effect` and the `@effect/` packages together to their newest release within the
+    major;
+  - whether the job runs the spikes too, since a spike checks a premise about Effect.
+- **The procedures of `AGENTS.md` as skills.** effect-tea keeps in `AGENTS.md` the rules that every change keeps, and
+  each procedure in a skill read before its task: a change of the API, of the engine, of an example, a move of Effect,
+  a release. This `AGENTS.md` holds 27 KB, and every session loads it whole. The move of Effect's version and the
+  rules of a change of the runtime are procedures of this kind. It waits for the last part of the step The rules move
+  from the notes into documents kept true, which writes the section on notes again. It would be decided by:
+  - which paragraphs of `AGENTS.md` only one kind of task reads;
+  - whether a check of `src/form.test.ts` reads a paragraph that would move.
+- **The tests of the types as a kind of test.** `AGENTS.md` says that a test of the library is of four kinds, and that
+  a test of none of them is not added. `src/` holds 61 uses of `@ts-expect-error`, which check what the compiler
+  refuses, and fit none of the four. effect-tea names a fifth kind, the types, and a sixth, the boundary of a run: its
+  lifecycle, its scopes and what it holds and lets go. It would be decided by:
+  - whether the tests of `src/` that check the types, and those of a launch's hold and scope, are named as kinds of
+    their own in `AGENTS.md`.
+- **Effect's language service in the typecheck.** effect-tea typechecks with `@effect/tsgo`, which reports an effect
+  left unused, a `yield*` missing, and an import that is not a namespace. Its rule `unstableApiUsage` fails on a module
+  marked `@stability unstable`. This repository builds on `effect/cluster`, `effect/sql`, `effect/rpc`,
+  `effect/testing`, `effect/crypto` and `effect/encoding`, all of them unstable, so that rule cannot be an error here.
+  It could check instead that `src/` imports no unstable module beyond a list the maintainer agreed to, which
+  `AGENTS.md` asks and no check holds. effect-tea's `prepare` runs `effect-tsgo patch --typescript`, which changes
+  TypeScript in `node_modules`, while `AGENTS.md` says that a dependency is never changed there. It would be decided
+  by:
+  - whether a patch of the compiler that only the typecheck runs counts as a change of a dependency;
+  - whether the language service runs without the patch, and which of its rules this repository would keep.
+- **The mutations kept in the repository.** effect-tea keeps one mutation for each check an invariant rests on, in
+  `tools/mutations/mutations.ts`, with the tests that must fail under it. Its runner refuses a mutation whose text it
+  does not find exactly once, so a refactor shows which mutations to write again. This repository keeps a review's
+  mutations outside the repository, and `src/runtime.test_pins.ts` holds only those of the pinned seeds. So a test
+  that stops holding its rule fails nothing. It would be decided by:
+  - whether each area of the step The rules move from the notes into documents kept true leaves the mutations of its
+    rules, beside its premises;
+  - what a run of the whole list costs under the two passes of `scripts/mutate.ts`.
+- **The principles of an API.** effect-tea's `AGENTS.md` says that a function earns its place by doing what Effect
+  alone cannot, that a type is Effect's or the library's and never half of each, and how a key of the library is
+  named. This repository has no such rules for its four entries. It waits for the release, since the surface changes
+  then. It would be decided by:
+  - a reading of the four entries against those rules, before the surface is published.
+- **The tests on Node.** effect-tea runs its tests on Node too, through a shim of `bun:test`, since browsers run V8.
+  This repository launches on Bun, with `@effect/platform-bun` and `@effect/sql-sqlite-bun`, and names no other
+  runtime. It would be decided by:
+  - whether a deployment runs the library on Node, or a browser loads more than a program's module.
