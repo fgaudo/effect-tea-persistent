@@ -82,12 +82,22 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     the answers and the waits of an ended work, `reply`, `answer` and `keepAnswer`, `expire` and `ended`, which sweep,
     and `waitingOf`. `waiters` of `onClusterOf` in [`src/storage/cluster.ts`](../src/storage/cluster.ts) reads
     `effecttea_waiting` and cites no note.
-    A session moves its notes with `git mv` into `archive/`, and then rewrites every relative link to them and in them,
-    which `bun run links` checks. An area that finds no note outside the archive still writes its premises and its
-    alternatives, as area 4 did. A premise a note said only reasoned is written by the state it is in today, which the
-    test of `src/form.test.ts` checks, as area 1 wrote its margin `tested`, `failed` and `open`. Nothing of this step is
-    left in a conversation: an area's session needs only this step, decision 0294, and the two documents as area 1
-    left them.
+    A session moves its notes by `bun scripts/archive-notes.ts <numbers>`, which runs `git mv` into `archive/` and
+    rewrites every relative link to the notes and in them, and then runs `bun run links`. An area that finds no note
+    outside the archive still writes its premises and its alternatives, as area 4 did.
+  - How an area is written, as area 1 found it. A premise a note said only reasoned is written by the state it is in
+    today, as area 1 wrote its margin `tested`, `failed` and `open`. A premise `open` names its
+    [open question](open-questions.md) or its bug of `docs/bugs.md`, and the session reads both files first, since
+    the premise review found most of what an area meets. The test `the form of the list of premises` of
+    `src/form.test.ts` refuses the words `reasoned` and `not run` anywhere in a premise, and reads a state in bold
+    only where it lies on one line, so `**read in the source**` is never broken across two lines. A test named after
+    `**tested** by` is its name as `src/` writes it, cut at most before a `, `. The section of `docs/design.md` that
+    says the area's rules is rewritten whole, and a word the area gives a meaning is defined in `docs/glossary.md`.
+    The tests of the area run under `SCHEDULES=all`, since many of Cluster's are under `slow`, and `src/cluster.test.ts`
+    with `src/storage.test.ts` took 270 s. The commit passes `bun test`, `bun run typecheck`, `bun run links` and the
+    build of the site, and its subject reads as area 1's, `docs: move the area of Cluster's requests into
+    premises.md`. Nothing of this step is left in a conversation: an area's session needs only this step, decision
+    0294, and the two documents as area 1 left them.
   - Then the areas, one at a time, each moved in one commit. A session reads the area's notes whole, the archived
     notes its code cites and the declarations of its state that cite no note, with the code, by the section A reading
     of one shared state of [`.claude/skills/premise-review/SKILL.md`](../.claude/skills/premise-review/SKILL.md). It
