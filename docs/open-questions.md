@@ -452,7 +452,7 @@ with a requirement that no example has yet.
     `applied`, would decide it.
 
 - **On Cluster, a duplicate of a request on the runner that holds its shard, under a `keep` of 0.** The test of
-  [decision 0248](decisions/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md) runs the second client
+  [decision 0248](decisions/archive/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md) runs the second client
   on another runner. A second client on the runner that holds the shard is expected to join the first request, as
   `saveRequest` of Cluster does, so that the message is applied once. The second reading of the premise review
   noticed it on 2026-11-12, and did not run it.
@@ -532,7 +532,7 @@ with a requirement that no example has yet.
 - **The margin of a caller's rows on Cluster, once runners have clocks of their own.** Cluster's rows of a caller's
   request are kept for two polls of replies and a second after its client has the answer, so that every other client
   of the request reads its reply first
-  ([decision 0248](decisions/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md)). The second covers
+  ([decision 0248](decisions/archive/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md)). The second covers
   the clocks of the runners, which share one clock while Cluster runs on one machine. Whether the margin holds once
   runners run on machines of their own is not decided. It waits for the step on Cluster across machines on
   PostgreSQL in the [roadmap](roadmap.md). It would be decided by:
@@ -651,7 +651,7 @@ with a requirement that no example has yet.
   Cluster ([decision 0166](decisions/archive/0166-on-cluster-an-operator-resumes-and-discards-through-the-doors-client.md)).
   The client keeps the Cluster id its door's answer carries once it has the answer, and a step or `expire` deletes
   the rows past the least time
-  ([decision 0290](decisions/0290-on-cluster-an-operators-client-keeps-the-id-the-doors-answer-carries.md)), which
+  ([decision 0290](decisions/archive/0290-on-cluster-an-operators-client-keeps-the-id-the-doors-answer-carries.md)), which
   fixes bug 11 of [`docs/bugs.md`](bugs.md). Three cases leave rows for ever still. An operator that stops waiting
   before the answer keeps no id, as a caller does under bug 59, reproduced. A failure Cluster saved without running
   the door's handler carries no id. The `Resumed` a step sends to a sender that waits is kept as a pending id, and the
@@ -667,12 +667,12 @@ with a requirement that no example has yet.
   - a test where Cluster saves a failure of its own for an operator's event, and of a `Resumed` that no runner
     delivers, read after `expire`;
   - for bug 91, reasoned by a reading, whether a second client's `reset` drops only a keep whose answer it read
-    ([decision 0249](decisions/0249-on-cluster-a-reset-drops-the-id-a-callers-client-kept.md)), since it may drop the
+    ([decision 0249](decisions/archive/0249-on-cluster-a-reset-drops-the-id-a-callers-client-kept.md)), since it may drop the
     keep of the first client's reply and, interrupted then, leave the rows for ever.
 - **A cause holding U+0000 in Cluster's tables.** A defect's cause is written as text every database holds, with U+0000
   escaped ([decision 0205](decisions/0205-a-defects-cause-is-written-as-text-every-database-holds.md)), in the
   runtime's tables. A door's `Died` carries its cause escaped, and Cluster writes its reply as JSON, which escapes a
-  U+0000 too: a test of [decision 0291](decisions/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md) finds none in `cluster_replies` on SQLite, with the
+  U+0000 too: a test of [decision 0291](decisions/archive/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md) finds none in `cluster_replies` on SQLite, with the
   cause written escaped or not. A door that dies on such a cause may still hand it to Cluster, which may store it in
   its own tables unescaped, and so may a failure Cluster saves
   ([decision 0168](decisions/archive/0168-on-cluster-a-failure-cluster-saved-is-reset-before-it-is-given.md)). It matters once Cluster runs on PostgreSQL, the step Later of the roadmap. The premise review of

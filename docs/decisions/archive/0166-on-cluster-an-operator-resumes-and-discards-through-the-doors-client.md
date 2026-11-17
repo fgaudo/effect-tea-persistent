@@ -5,7 +5,7 @@
 `Resume` and `Discard`, which it decides are steps of the entity on the runner that holds its shard. The step that
 resumes or discards tells the senders that wait for the entity's resumption by `Resumed`, by
 [decision 0167](0167-on-cluster-an-operation-sends-through-the-doors-client-and-is-woken-by-resumed.md). Changed by
-[decision 0290](../0290-on-cluster-an-operators-client-keeps-the-id-the-doors-answer-carries.md): the door's answer
+[decision 0290](0290-on-cluster-an-operators-client-keeps-the-id-the-doors-answer-carries.md): the door's answer
 carries the request's Cluster id, which the operator's client keeps, so that Cluster's rows of the event go as a
 caller's.
 

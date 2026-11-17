@@ -19,8 +19,18 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     by the state its rule keeps, and a note of no state by what it decides. The notes `proposed` of the steps under
     way, decisions 0283, 0292, 0293 and 0294, are listed in no area. A note taken while this step runs joins the area
     of its state.
-    1. The tables of Cluster's requests: `effecttea_sent_requests`, `effecttea_given_requests`, `cluster_messages`
-       and `cluster_replies`. Notes 0248, 0249, 0290 and 0291.
+    1. Done, the tables of Cluster's requests: `effecttea_sent_requests`, `effecttea_given_requests`,
+       `cluster_messages` and `cluster_replies`. Notes 0248, 0249, 0290 and 0291, now in `archive/`. Its session read
+       them whole with the code, and the archived notes on Cluster's rows their code cites, 0090, 0169, 0171 and 0173.
+       It read the archived notes 0085, 0165, 0166, 0168 and 0170 for what they rest on of these tables alone. Every
+       premise of Effect the notes read at 4.1.2 still holds at 4.1.3, and the prefix `cluster` of Cluster's tables is
+       now documented by the JSDoc of `SqlMessageStorage`. `docs/design.md` now says, under Cluster's rows, the rules
+       of the reset and of an operator's id, how the least time is read, and the prefix, and `docs/glossary.md`
+       defines the least time. The area found no new bug: bugs 59, 89, 91 and 97 of `docs/bugs.md` already hold its
+       tables, and their premises are `open` or `failed` in `docs/premises.md`. `SCHEDULES=all bun test
+       src/cluster.test.ts src/storage.test.ts` passed, 153 tests with those under `slow`. Not reached: the rules of
+       decisions 0165, 0166, 0168 and 0170 on the door's client, which area 11 reads with the callers, and the second
+       client on the runner that holds the shard, an open question no test runs.
     2. The tables of replies: `effecttea_replies`, `effecttea_answers` and `effecttea_waiting`. Notes 0245, 0253,
        0265, 0269, 0282, 0285 and 0289.
     3. The tables of an entity: `effecttea_entities`, `effecttea_entity_keys` and `effecttea_mailbox`. Notes 0185,
@@ -63,18 +73,21 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     thirty is divided before its session starts.
   - Done, area 4 first, so that a small area set the form of `docs/premises.md` and `docs/rejected.md`. Each says
     how an entry is written, and `the form of the list of premises` in `src/form.test.ts` checks the premises.
-  - Next, area 1, then the areas in the order of the list. A session of an area starts from
+  - Done, area 1, on 2026-11-17, the second area moved, which archived the first notes.
+  - Next, area 2, then the areas in the order of the list. A session of an area starts from
     `bun scripts/premise-pairs.ts --tables`, or from the declarations of the module of its area, and lists the
     archived notes its code cites. It checks first that each note of its list keeps its state, and moves a note that
-    does not to the area that keeps it, as area 4 moved decision 0247 to area 3. Area 1 begins in
-    [`src/storage/cluster.ts`](../src/storage/cluster.ts), which writes `effecttea_sent_requests` and
-    `effecttea_given_requests` and deletes Cluster's rows of `cluster_messages` and `cluster_replies`, with
-    `forgetUnder` of [`src/storage/entities.ts`](../src/storage/entities.ts). A fix the area makes that deletes
-    Cluster's rows, or moves the time they are deleted at, has a test with a second client on another runner, as
-    `AGENTS.md` asks.
-    An area that finds no note outside the archive still writes its premises and its alternatives, as area 4 did.
-    Nothing of this step is left in a conversation: an area's session needs only this step, decision 0294, and
-    the two documents as area 4 left them.
+    does not to the area that keeps it, as area 4 moved decision 0247 to area 3. Area 2 begins in
+    [`src/storage/entities.ts`](../src/storage/entities.ts): `write`, which a step runs and which deletes the replies,
+    the answers and the waits of an ended work, `reply`, `answer` and `keepAnswer`, `expire` and `ended`, which sweep,
+    and `waitingOf`. `waiters` of `onClusterOf` in [`src/storage/cluster.ts`](../src/storage/cluster.ts) reads
+    `effecttea_waiting` and cites no note.
+    A session moves its notes with `git mv` into `archive/`, and then rewrites every relative link to them and in them,
+    which `bun run links` checks. An area that finds no note outside the archive still writes its premises and its
+    alternatives, as area 4 did. A premise a note said only reasoned is written by the state it is in today, which the
+    test of `src/form.test.ts` checks, as area 1 wrote its margin `tested`, `failed` and `open`. Nothing of this step is
+    left in a conversation: an area's session needs only this step, decision 0294, and the two documents as area 1
+    left them.
   - Then the areas, one at a time, each moved in one commit. A session reads the area's notes whole, the archived
     notes its code cites and the declarations of its state that cite no note, with the code, by the section A reading
     of one shared state of [`.claude/skills/premise-review/SKILL.md`](../.claude/skills/premise-review/SKILL.md). It
@@ -160,10 +173,10 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     passed after them.
   - Done, on 2026-11-13, bug 11, the rows of an operator's resume or discard that Cluster kept for ever: reproduced
     by a test of `src/cluster.test.ts`, and fixed by
-    [decision 0290](decisions/0290-on-cluster-an-operators-client-keeps-the-id-the-doors-answer-carries.md).
+    [decision 0290](decisions/archive/0290-on-cluster-an-operators-client-keeps-the-id-the-doors-answer-carries.md).
   - Done, on 2026-11-13, bugs 10 and 58, a creation the program dies on that Cluster delivered again without end:
     reproduced by tests of `src/cluster.test.ts`, and fixed by
-    [decision 0291](decisions/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md), which the maintainer chose after an opinion of a Fable 5.2 agent,
+    [decision 0291](decisions/archive/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md), which the maintainer chose after an opinion of a Fable 5.2 agent,
     each of its premises tested. The test of a contract no longer marks such a creation by `diesOn`.
   - Done, on 2026-11-13, an operation's creation in the contract, on every backend: a message `Spawn` of the program
     `item`, whose operation creates another item, and a `Spawn` whose label is text no database holds, which the

@@ -17,7 +17,7 @@ whose projection holds U+0000 in an index, which the program dies on. One proces
 stores nothing. On Cluster the creation waited until a deploy fixed the program, delivered again without end, and
 every later request to the same entity waited behind it
 ([decision 0160](archive/0160-on-cluster-a-door-answers-as-text-and-a-creation-the-program-dies-on-waits-for-a-fix.md)).
-Since [decision 0291](0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md) Cluster gives the creator the defect too.
+Since [decision 0291](archive/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md) Cluster gives the creator the defect too.
 
 ## Decision
 

@@ -62,6 +62,10 @@ Cluster's says so.
 - **Key.** A name the program declares, under which `work` returns one piece of work, or one piece for each
   *parameter* of a key declared with a schema for it. Two parameters are one when they encode alike. The names are
   finite, and one the program does not declare is a defect.
+- **Least time.** On Cluster: how long Cluster's rows of a caller's or an operator's request are kept at least, from
+  the time its client has the answer, so that every other client of the request reads the reply first. It is two of
+  Cluster's polls of replies and a second, `2 × entityReplyPollInterval + 1 000` ms, 1.4 s by default
+  ([0248](decisions/archive/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md)).
 - **Machine.** The runtime's semantics as a pure state machine, in [`src/machine.ts`](../src/machine.ts): from an event
   to the next machine and the rows it writes. `rehearse` runs it, and the runtime interprets it.
 - **Mailbox.** The entity's stored queue of messages, in order. A message that finds it empty is received and handled

@@ -5452,7 +5452,7 @@ one declaration, and most of it was not read.
 - **Two callers of one request, sent before it is answered, have its message applied twice on one process under a
   short `keep`.** The notes are [decision 0125](archive/0125-a-callers-reply-is-kept-as-long-as-its-boundary-says.md),
   with [decision 0245](0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md), against
-  [decision 0248](0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md).
+  [decision 0248](archive/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md).
   - The premise that fell: decision 0125 counts a reply's time from the step that answers, so that a message that
     waits loses none of its time. It rests, without saying so, on a retry read no later than its caller sent it. A
     retry sent before the answer waits in the runtime too, and its reply is read when its `Receive` is applied, which

@@ -126,8 +126,8 @@ family gets a fix of its own.
    suspended.
 8. **Fixed by [decision 0270](decisions/0270-a-childs-name-is-never-an-own-tag.md)**, which refuses an own tag that may be a child's, and tries a child's wrapper first.
 9. **Fixed by [decision 0253](decisions/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)**, which keeps an operation's `Rejected` of `init` and its `NotFound` for its work.
-10. **Fixed by [decision 0291](decisions/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md)**, whose door answers a creation the program dies on `Died`, which the creator's client resets and gives as the creator's defect, so that an operation's sender is suspended.
-11. **Fixed by [decision 0290](decisions/0290-on-cluster-an-operators-client-keeps-the-id-the-doors-answer-carries.md)**, whose operator's client keeps the Cluster id its door's answer carries, so that a step or `expire` deletes Cluster's rows of the event.
+10. **Fixed by [decision 0291](decisions/archive/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md)**, whose door answers a creation the program dies on `Died`, which the creator's client resets and gives as the creator's defect, so that an operation's sender is suspended.
+11. **Fixed by [decision 0290](decisions/archive/0290-on-cluster-an-operators-client-keeps-the-id-the-doors-answer-carries.md)**, whose operator's client keeps the Cluster id its door's answer carries, so that a step or `expire` deletes Cluster's rows of the event.
 12. **Noticed, not checked: a defect's cause holding U+0000 may reach Cluster's tables unescaped.**
     ([decision 0205](decisions/0205-a-defects-cause-is-written-as-text-every-database-holds.md)). It matters once
     Cluster runs on PostgreSQL. Verified by reading what Cluster stores of a defect: the
@@ -300,7 +300,7 @@ family gets a fix of its own.
     [decision 0060](decisions/archive/0060-send-and-create-take-no-key.md). No helper can freeze a runner past its
     lease, so no test was written. The fix begins at the receiver, which would not apply a request whose asker's
     work no longer holds. The [open question](open-questions.md#running) A send after the work it belongs to ended.
-58. **Fixed by [decision 0291](decisions/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md)**, under which Cluster saves the `Died` of a creation the program dies on, and delivers it no more ahead of another creator of the id.
+58. **Fixed by [decision 0291](decisions/archive/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md)**, under which Cluster saves the `Died` of a creation the program dies on, and delivers it no more ahead of another creator of the id.
 59. **Reproduced: on Cluster, a caller that stops waiting keeps its rows in Cluster's tables for ever.** A client
     keeps its id only once it is given the answer
     ([decision 0171](decisions/archive/0171-on-cluster-a-callers-rows-go-once-its-client-has-the-answer-and-its-time-is-past.md)),
@@ -452,7 +452,7 @@ family gets a fix of its own.
     the id waits for ever.** A caller's rows go once its client has the answer and its time is past
     ([decision 0171](decisions/archive/0171-on-cluster-a-callers-rows-go-once-its-client-has-the-answer-and-its-time-is-past.md)),
     and they are kept for `2 × entityReplyPollInterval + 1 000` ms so that every other client reads its reply first
-    ([decision 0248](decisions/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md)). The interval is
+    ([decision 0248](decisions/archive/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md)). The interval is
     that of the runner whose client keeps the id, at `least` and `keptGiven` of `src/cluster.ts`, and a second client
     reads at the interval of its own runner. So a client on a runner that polls every 5 s, beside a runner that polls
     every 200 ms, finds the rows gone after a later step, `expire` or the sweep, and waits for ever. A process that is
@@ -477,9 +477,9 @@ family gets a fix of its own.
     belongs to ended.
 91. **Reasoned by a reading: on Cluster, a second client's reset may drop the keep of an id whose answer is a
     reply, and a second client interrupted then leaves Cluster's rows for ever.** An id whose answer is a reply is
-    never dropped ([decision 0249](decisions/0249-on-cluster-a-reset-drops-the-id-a-callers-client-kept.md)), and the
+    never dropped ([decision 0249](decisions/archive/0249-on-cluster-a-reset-drops-the-id-a-callers-client-kept.md)), and the
     rows of a request are kept for every client's poll
-    ([decision 0248](decisions/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md)). `reset` of
+    ([decision 0248](decisions/archive/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md)). `reset` of
     `src/cluster.ts` reads the request's latest answer, then deletes the kept id. A second client may read
     `Suspended` there while the first client's retry is answered and kept, and its `forgetGiven` then drops that
     keep. Its own send keeps the id again once answered, so only a second client interrupted in that send leaves the

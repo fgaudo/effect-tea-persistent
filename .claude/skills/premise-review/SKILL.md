@@ -9,7 +9,7 @@ A rule of an earlier note is safe under conditions, written in its `What it rest
 note that changes, extends or reuses the rule may take one away, and nothing fails until two callers, two runners or
 a sweep meet. Decision 0245 kept a creation's Cluster id as a `keep` of 0 does, where decision 0171 was safe only
 because `keep` outlasts another client's poll of replies, and a second client of the creation waited for ever
-([decision 0248](../../../docs/decisions/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md)). This
+([decision 0248](../../../docs/decisions/archive/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md)). This
 review looks for the same in the notes already taken. [`AGENTS.md`](../../../AGENTS.md) asks it of each new note
 that changes another. It reads by pairs of notes, in the briefs of an area and of a last session, and by one shared
 state, in the brief of a reading of one shared state, which finds what the pairs miss.

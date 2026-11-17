@@ -1,9 +1,9 @@
 # 0290. On Cluster, an operator's client keeps the id its door's answer carries, and its rows go as a caller's
 
-**Status:** accepted, 2026-11-13, as the fix of bug 11 of [`docs/bugs.md`](../bugs.md). It changes
-[decision 0166](archive/0166-on-cluster-an-operator-resumes-and-discards-through-the-doors-client.md): Cluster's rows
+**Status:** accepted, 2026-11-13, as the fix of bug 11 of [`docs/bugs.md`](../../bugs.md). It changes
+[decision 0166](0166-on-cluster-an-operator-resumes-and-discards-through-the-doors-client.md): Cluster's rows
 of an operator's `Resume` and `Discard` are no longer kept for ever. It applies
-[decision 0171](archive/0171-on-cluster-a-callers-rows-go-once-its-client-has-the-answer-and-its-time-is-past.md) and
+[decision 0171](0171-on-cluster-a-callers-rows-go-once-its-client-has-the-answer-and-its-time-is-past.md) and
 [decision 0248](0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md) to them. The maintainer chose it
 on 2026-11-13, after an opinion of a Fable 5.2 agent.
 
@@ -19,7 +19,7 @@ requests stayed for ever, which bug 11 is. A caller's client finds the id by the
 
 The `Resumed` a step sends to a sender that waits is no operator's event. Its door keeps its id as pending, and the
 next step of any entity deletes its rows
-([decision 0169](archive/0169-on-cluster-an-operations-request-ids-are-kept-under-its-work-and-deleted-with-it.md)).
+([decision 0169](0169-on-cluster-an-operations-request-ids-are-kept-under-its-work-and-deleted-with-it.md)).
 
 The premises of decision 0166 still hold, but its last, that an operator's event is rare enough for Cluster's rows
 of it to be kept, which this note makes unneeded.
@@ -28,7 +28,7 @@ of it to be kept, which this note makes unneeded.
 
 - **The door answers an operator's event with the Cluster id of its request.** The handler is given the id with the
   request, and the answer's text carries it under the key `request`, beside what the event did. The key is optional
-  in `operatedCodec` of [`src/cluster.ts`](../../src/cluster.ts).
+  in `operatedCodec` of [`src/cluster.ts`](../../../src/cluster.ts).
 - **The operator's client keeps the id once it has the answer, for the least time, as a caller's creation does.** It
   writes the id, the entity's id and the time, now and the least time, to `effecttea_given_requests`. A step of the
   entity or `expire` then deletes Cluster's rows of the request past that time, by the code that deletes a caller's.
@@ -41,7 +41,7 @@ of it to be kept, which this note makes unneeded.
 
 - That the id the door's handler is given is the id of Cluster's rows of the request, and that a step or `expire`
   deletes them past the least time: **tested**, by `an operator’s resume and discard leave no Cluster rows past the
-  least time, by expire` and `by a step`, of [`src/cluster.test.ts`](../../src/cluster.test.ts). Against the code
+  least time, by expire` and `by a step`, of [`src/cluster.test.ts`](../../../src/cluster.test.ts). Against the code
   before this note, the first found the two requests and their two replies after `expire`.
 - That an operator on a runner that does not hold the entity's shard is answered, though a later step deletes rows
   past their time before its poll reads the reply: **tested**, by `an operator's discard on another runner is answered
@@ -73,5 +73,5 @@ of it to be kept, which this note makes unneeded.
 - Bug 11 is fixed. The rows a database holds from before this note stay.
 - An operator that stops waiting before the answer, or a process that dies between the answer and the keep, leaves
   its rows for ever, as a caller's are under bug 59. A failure Cluster saved without running the handler gives no
-  id, and its rows stay too. Both are in the [open question](../open-questions.md#running) The rows of operators'
+  id, and its rows stay too. Both are in the [open question](../../open-questions.md#running) The rows of operators'
   events on Cluster.

@@ -19,7 +19,7 @@ Two callers of one request may send at once. The step of the first `Receive` ans
 `Receive` is still in the loop's queue. Its step reads the reply from the storage, at its own time, and under a short
 `keep` finds none. So the message is applied twice, though both callers were answered `Accepted`. That is bug 94,
 which the second reading of the premise review found. The machine's own join holds only a retry whose message is
-still in the mailbox. On Cluster, [decision 0248](0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md)
+still in the mailbox. On Cluster, [decision 0248](archive/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md)
 joins a second client to the first's rows.
 
 ## Decision

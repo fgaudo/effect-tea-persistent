@@ -1,9 +1,9 @@
 # 0248. On Cluster, a caller's rows are kept for every client's poll of replies
 
 **Status:** accepted, 2026-11-10. Changes
-[decision 0245](0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md), whose creation's client kept
+[decision 0245](../0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md), whose creation's client kept
 its Cluster id until the time it had the answer, and
-[decision 0171](archive/0171-on-cluster-a-callers-rows-go-once-its-client-has-the-answer-and-its-time-is-past.md),
+[decision 0171](0171-on-cluster-a-callers-rows-go-once-its-client-has-the-answer-and-its-time-is-past.md),
 whose message's client kept its Cluster id until its `keep` was past, however short.
 
 ## Context
@@ -41,7 +41,7 @@ injected. A `send` whose `keep` is shorter than a poll has the same race.
 - That a client on another runner reads replies from Cluster's table at each `entityReplyPollInterval`:
   **documented**, in the JSDoc of `Runners.make` at 4.1.3, which says pending replies are polled according to
   `ShardingConfig.entityReplyPollInterval`. **Tested** by `a second client of a caller's request on another runner
-  is answered after a later step`, by `create` and by `send`, in [`src/cluster.test.ts`](../../src/cluster.test.ts).
+  is answered after a later step`, by `create` and by `send`, in [`src/cluster.test.ts`](../../../src/cluster.test.ts).
   The second runner's storage withholds every answer until a later step of the entity has run. Each test fails
   against the code before the change, its second client never answered.
 - That a duplicate joins the first request's rows, and reads at once when it joins: **read** in
@@ -50,7 +50,7 @@ injected. A `send` whose `keep` is shorter than a poll has the same race.
   (decision 0017).
 - That the clocks of two runners differ by less than a second: **only reasoned**. On Cluster the runtime runs on
   one machine, on one file of SQLite that every runner shares, so the runners share a clock
-  ([`docs/guide/cluster.md`](../guide/cluster.md)). Runners on several machines wait for a fence of Cluster.
+  ([`docs/guide/cluster.md`](../../guide/cluster.md)). Runners on several machines wait for a fence of Cluster.
 - That a read of replies that fails twice running is rare: **only reasoned**. A client that misses both polls waits
   for ever, as before this note.
 - The margin: the least time outlasts the second client's next read. It depends on `entityReplyPollInterval`, 200 ms

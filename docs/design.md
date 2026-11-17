@@ -1601,7 +1601,7 @@ operations. A loop with nothing to do starts its wait at once
   A creation the program dies on stores nothing, and is answered `Died` with its cause. The creator's client resets
   a `Died` Cluster saved before it sends, and gives it as the creator's defect, as one process does: a caller is
   given the defect, an operation's sender is suspended, and a retry runs `init` again
-  ([decision 0291](decisions/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md)).
+  ([decision 0291](decisions/archive/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md)).
 - What a door's step sets going starts once the step has committed. The entity's row counts the steps that wrote it,
   and the next step of the entity settles the uncommitted machine by that count. On Cluster an entity's lock is
   taken only inside a transaction, or by code that touches no database while it holds it, so nothing holds the lock
@@ -1630,21 +1630,56 @@ A runner learns of another runner's commit from the file: while a reading of the
 #### Cluster's rows
 
 - Cluster deletes no reply of its own, so the runtime deletes Cluster's rows by statements of its own
-  ([decision 0090](decisions/archive/0090-on-cluster-a-reply-is-deleted-as-on-one-process.md)). An operation's request ids
-  are kept under its work, and the step whose work ends deletes Cluster's rows under them
+  ([decision 0090](decisions/archive/0090-on-cluster-a-reply-is-deleted-as-on-one-process.md)). A statement deletes,
+  under a request id, the request's row of `cluster_messages`, its replies in `cluster_replies` and any envelope
+  stored under the id. The tables are those of the prefix `SqlMessageStorage` takes by default, `cluster`. A launcher
+  that gives `SqlMessageStorage` another prefix keeps Cluster's rows for ever.
+- An operation's request ids are kept under its work, in `effecttea_sent_requests`, and the step whose work ends
+  deletes Cluster's rows under them
   ([decision 0169](decisions/archive/0169-on-cluster-an-operations-request-ids-are-kept-under-its-work-and-deleted-with-it.md)).
-- A caller's client keeps its message's id once it has the answer, and Cluster's rows go once the message's `keep`
-  is past, by a step of the entity or by `Handle.expire`
+- A caller's client keeps its request's id once it has the answer, in `effecttea_given_requests`, with a time. The
+  next step of the entity that answers a caller deletes Cluster's rows under each id of the entity whose time is
+  past, and so does `Handle.expire`, for the ids of the program
   ([decision 0171](decisions/archive/0171-on-cluster-a-callers-rows-go-once-its-client-has-the-answer-and-its-time-is-past.md)).
-  A message sent with `keep: 'forever'` keeps its rows for ever. A creation's client keeps its id as a `keep` of 0
-  does, and a retry after its rows go is answered `Created` from the entity's row
-  ([decision 0245](decisions/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)).
-- A caller's client keeps the id for at least two of Cluster's polls of replies and a second, 1.4 s by default,
-  whatever the `keep`, a creation's included. Another client of the same request, on another runner, reads the reply
-  from Cluster's table only at its poll, and would wait for ever once the rows are gone
-  ([decision 0248](decisions/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md)).
+  The client reads the id and keeps it without interruption, so a caller that stops waiting once its answer came
+  keeps the id all the same. A message sent with `keep: 'forever'` keeps its rows for ever.
+- The time is the message's `keep`, or the least time where the `keep` is shorter. The least time is two of
+  Cluster's polls of replies and a second, `2 × entityReplyPollInterval + 1 000` ms, 1.4 s by default, read from the
+  `ShardingConfig` of the runner whose client keeps the id. Another client of the same request, on another runner,
+  reads the reply from Cluster's table only at its poll, and would wait for ever once the rows are gone. The first
+  poll covers the reply's commit, and the second a read that failed, which Cluster logs at the level `Debug`
+  ([decision 0248](decisions/archive/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md)).
+- A creation's client keeps its id for the least time, and a retry after its rows go is answered `Created` from the
+  entity's row ([decision 0245](decisions/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)).
+- The runtime's own reply, in `effecttea_replies`, is still deleted past its `keep`, and only Cluster's rows wait
+  for the least time. So a retry of a message under the same request id, within the least time of a shorter `keep`,
+  is given the reply Cluster saved, and is not applied again.
+- A request's id is kept once per answer, and not again. A second client given the same answer keeps nothing new,
+  and the time counts from the first answer.
+- A reset of a request's answer deletes the id its caller's client kept, before `Sharding.reset`, and none of
+  Cluster's rows. Every reset does so: of a `Rejected` or a `Died` before a creation is sent, of a `Suspended`, a
+  `NotFound` or a `Reused` after a message's first answer, and of a failure Cluster saved of its own. A reset runs only
+  where the latest answer is one to reset, so an id whose answer is a reply is not dropped by the client that reads
+  it. The retry's answer keeps the id anew. So nothing deletes the request between the reset and Cluster's delivery,
+  and the step that answers the retry finds no kept id of its own request
+  ([decision 0249](decisions/archive/0249-on-cluster-a-reset-drops-the-id-a-callers-client-kept.md)).
+- A door answers an operator's `Resume` or `Discard` with the Cluster id of its request, under the key `request` of
+  the answer's text. The operator's client keeps the id for the least time once it has the answer, without
+  interruption, as a caller's creation keeps its own, and a step of the entity or `Handle.expire` deletes Cluster's
+  rows of the event past that time. The key is optional, so that a client decodes the answer of a door of a release
+  before it, and an answer with no id keeps nothing
+  ([decision 0290](decisions/archive/0290-on-cluster-an-operators-client-keeps-the-id-the-doors-answer-carries.md)).
+- A creation the program dies on is answered `Died`, which a caller's client keeps as any answer. A `Died` is not
+  kept for an operation's work in `effecttea_answers`, since a resume after a fix must create the entity. The door
+  keeps the operation's request id before `init` runs, as for any creation, so that the work's end deletes Cluster's
+  rows of it ([decision 0291](decisions/archive/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md)).
 - A reply Cluster saves of its own after its request's rows are gone is left
   ([decision 0173](decisions/archive/0173-on-cluster-a-reply-cluster-saves-after-its-request-is-gone-is-left.md)).
+- Three cases leave Cluster's rows for ever: a caller or an operator that stops waiting before its answer, a
+  failure Cluster saved for an operator's event, and a `Resumed` no runner delivers. They are the
+  [open question](open-questions.md#running) The rows of operators' events on Cluster, and bug 59 of
+  [`bugs.md`](bugs.md). What the rows on Cluster rest on, and what checks it, is in [`premises.md`](premises.md),
+  under The tables of Cluster's requests.
 
 ### How the machine and the runtime are tested
 
