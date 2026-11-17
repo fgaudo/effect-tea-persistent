@@ -24,8 +24,14 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     2. The tables of replies: `effecttea_replies`, `effecttea_answers` and `effecttea_waiting`. Notes 0245, 0253,
        0265, 0269, 0282, 0285 and 0289.
     3. The tables of an entity: `effecttea_entities`, `effecttea_entity_keys` and `effecttea_mailbox`. Notes 0185,
-       0205 and 0260.
-    4. The tables of versions: `effecttea_versions` and `effecttea_runner_versions`. Note 0247.
+       0205, 0247 and 0260. Decision 0247 is `check`, which reads the entities' rows as an activation would.
+    4. Done, the tables of versions: `effecttea_versions` and `effecttea_runner_versions`. No note outside the archive
+       keeps them. Its session read the archived notes their code cites, 0159 and 0176, with the code and the source of
+       Effect 4.1.3. Every premise of the two notes still holds at 4.1.3, though the notes read them at 4.1.2, and they
+       are in `docs/premises.md`. `docs/design.md` now says that each door is registered without
+       `disableFatalDefects`, and what a deploy costs where every runner of the newest version stops. The area found
+       no bug. Not reached: the lease of a shard of decision 0175, which area 9 reads, and the parts of decisions
+       0156 and 0157 that do not write `effecttea_versions`.
     5. The tables of projections and of the log: `effecttea_projections`, `effecttea_log` and `effecttea_heads`.
        Notes 0207, 0209, 0277, 0284 and 0287.
     6. The table `effecttea_publications`. Note 0286.
@@ -55,16 +61,27 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     `bun scripts/premise-pairs.ts --tables` gives each table's declarations and notes. Of the other areas, the notes
     are those the declarations of the state or of the module cite. An area whose notes to read whole are more than
     thirty is divided before its session starts.
-  - Next, area 4, then the areas in the order of the list. Area 4 holds one note, so its session sets the form of
-    `docs/premises.md` and `docs/rejected.md` on a small area.
+  - Done, area 4 first, so that a small area set the form of `docs/premises.md` and `docs/rejected.md`. Each says
+    how an entry is written, and `the form of the list of premises` in `src/form.test.ts` checks the premises.
+  - Next, area 1, then the areas in the order of the list. A session of an area starts from
+    `bun scripts/premise-pairs.ts --tables`, or from the declarations of the module of its area, and lists the
+    archived notes its code cites. It checks first that each note of its list keeps its state, and moves a note that
+    does not to the area that keeps it, as area 4 moved decision 0247 to area 3. Area 1 begins in
+    [`src/storage/cluster.ts`](../src/storage/cluster.ts), which writes `effecttea_sent_requests` and
+    `effecttea_given_requests` and deletes Cluster's rows of `cluster_messages` and `cluster_replies`, with
+    `forgetUnder` of [`src/storage/entities.ts`](../src/storage/entities.ts). A fix the area makes that deletes
+    Cluster's rows, or moves the time they are deleted at, has a test with a second client on another runner, as
+    `AGENTS.md` asks.
+    An area that finds no note outside the archive still writes its premises and its alternatives, as area 4 did.
+    Nothing of this step is left in a conversation: an area's session needs only this step, decision 0294, and
+    the two documents as area 4 left them.
   - Then the areas, one at a time, each moved in one commit. A session reads the area's notes whole, the archived
     notes its code cites and the declarations of its state that cite no note, with the code, by the section A reading
     of one shared state of [`.claude/skills/premise-review/SKILL.md`](../.claude/skills/premise-review/SKILL.md). It
     writes the area's rules into the documents, its premises into `docs/premises.md` and its alternatives into
     `docs/rejected.md`, and moves its notes to `archive/`, with the index. A finding is a bug of
-    [`docs/bugs.md`](bugs.md), or an [open question](open-questions.md) where no test reproduces it yet. The first
-    area moved makes `docs/premises.md` and `docs/rejected.md`, and the test of `src/form.test.ts` that every premise
-    of `docs/premises.md` states its state in bold and that each test it names exists. A session that moves an area
+    [`docs/bugs.md`](bugs.md), or an [open question](open-questions.md) where no test reproduces it yet. A premise
+    of Effect that a note read at an older version is read again at the version pinned. A session that moves an area
     writes `Done, ` before it here, with what it found and what it did not reach. Of areas 13 to 17, which hold no
     shared state, the state of that section's brief is the module or the section the area names. A subagent may
     draft an area, and the session checks the draft against the code before it commits. Two sessions do not move

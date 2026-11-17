@@ -4,7 +4,9 @@
 [roadmap](../roadmap.md). The maintainer chose in a session of 2026-11-17 to move every rule and premise of the notes
 into documents kept true of the code, as effect-tea keeps its own, and to keep the notes as records of why. The
 maintainer chose in the same session that this step replaces what was left of the premise review. Its first part
-is done: the step lists each note in one area. No area is moved yet, and the next part is area 4.
+is done: the step lists each note in one area. Area 4 is moved, and made [`docs/premises.md`](../premises.md) and
+[`docs/rejected.md`](../rejected.md), with the test of `src/form.test.ts` that checks the premises. The next part is
+area 1.
 
 ## Context
 

@@ -1430,6 +1430,13 @@ it leaves to the runtime is in [`cluster.md`](cluster.md).
 - A step that either check refuses dies and rolls back. Cluster delivers a door's request again, a step of the loop
   crashes its entity, and an activation is tried again after `retry`, until a runner of the newest version that
   holds the shard steps it. The checks are a guard beside the count of the steps that wrote the entity's row.
+- Each door is registered without `disableFatalDefects`, so that a step that dies restarts the door's entity and
+  saves no reply, and its request is delivered again. With it, the defect would be saved as the request's reply,
+  and the message lost.
+- Where every runner of the newest version stops, an older runner takes the shards again, since Cluster never marks
+  its last healthy runner unhealthy. Its steps die, and the messages wait in storage for a runner of the newest
+  version. What runs on Cluster rests on, and what checks it, is in [`premises.md`](premises.md), under The tables of
+  versions.
 - A deploy dies unless the runner's `sharding` named its program at the version deployed. A process with no
   `runnerAddress` is a client of the cluster alone: it holds no shard, and deploys any program
   ([decision 0174](decisions/archive/0174-on-cluster-a-runner-deploys-only-the-programs-its-sharding-names.md)).

@@ -722,6 +722,36 @@ export const testedUnnamed = (
   })
 }
 
+/** The heading of the section of `docs/premises.md` that says how a premise is written, and holds no premise. */
+const howAPremiseIsWritten = 'How a premise is written'
+
+/**
+ * The premises of `docs/premises.md` as one section `What it rests on`, so that the checks of the notes read them
+ * alike (decision 0294). The text before the first heading of level two is left out, and so is the section that says
+ * how a premise is written. Each other heading of level two names an area, and is taken out.
+ */
+export const premisesOfTheList = (text: string): string => {
+  const sections = text.split(/^(?=## )/m).filter((section) => section.startsWith('## '))
+  const body = sections.filter((section) => !section.startsWith(`## ${howAPremiseIsWritten}`))
+    .map((section) => section.replace(/^## .*$/m, '')).join('\n')
+  return `## What it rests on\n${body}`
+}
+
+/** The names of the tests the repository keeps, the scripts of `package.json`, and the files a premise may name. */
+const testsOfTheRepository = () => {
+  const root = join(import.meta.dir, '..')
+  const files = ['src', 'spikes', 'examples', 'scripts'].flatMap((folder) =>
+    readdirSync(join(root, folder), { recursive: true, encoding: 'utf8' })
+      .map((file) => `${folder}/${file.replaceAll(sep, '/')}`)
+      .filter((file) => !file.includes('node_modules/'))
+  )
+  const names = files.filter((file) => /\.test(_\w+)?\.ts$/.test(file))
+    .flatMap((file) => testNamesOf(readFileSync(join(root, file), 'utf8')))
+  const scripts = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts: Record<string, string> })
+    .scripts
+  return { names, scripts: new Set(Object.keys(scripts)), files: new Set(files) }
+}
+
 const notesOfTheRepository = () => {
   const folder = join(import.meta.dir, '..', 'docs', 'decisions')
   return new Map(readdirSync(folder, { recursive: true, encoding: 'utf8' })
@@ -749,16 +779,7 @@ describe('the form of the notes', () => {
   // notes that cite the old name; the notes before 0292 may name their test by its place in the note (AGENTS.md,
   // under Notes).
   test('every test a premise said tested names exists, and a note numbered 0292 or above names one', () => {
-    const root = join(import.meta.dir, '..')
-    const files = ['src', 'spikes', 'examples', 'scripts'].flatMap((folder) =>
-      readdirSync(join(root, folder), { recursive: true, encoding: 'utf8' })
-        .map((file) => `${folder}/${file.replaceAll(sep, '/')}`)
-        .filter((file) => !file.includes('node_modules/'))
-    )
-    const names = files.filter((file) => /\.test(_\w+)?\.ts$/.test(file))
-      .flatMap((file) => testNamesOf(readFileSync(join(root, file), 'utf8')))
-    const scripts = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts: Record<string, string> })
-      .scripts
+    const { names, scripts, files } = testsOfTheRepository()
     // Tests a later note took out with the rule they held, so that the notes before it keep their names.
     const retired = new Set([
       // Decision 0198 makes the tables under new names, so a launch adds no column to a database made before.
@@ -768,8 +789,20 @@ describe('the form of the notes', () => {
       'on PostgreSQL the tables are made in the schema the search_path names first, though one further on has them',
     ])
     expect(names.length).toBeGreaterThan(500)
-    expect(testedUnnamed(notesOfTheRepository(), names, new Set(Object.keys(scripts)), new Set(files), 292, retired))
-      .toEqual([])
+    expect(testedUnnamed(notesOfTheRepository(), names, scripts, files, 292, retired)).toEqual([])
+  })
+})
+
+describe('the form of the list of premises', () => {
+  // `docs/premises.md` holds the premises the notes held, so it is checked as the newest notes are: no premise only
+  // reasoned, a state of the set on each, and a test that exists for each premise said tested (decision 0294).
+  test('every premise of docs/premises.md states its state in bold, and names a test that exists where it is tested', () => {
+    const { names, scripts, files } = testsOfTheRepository()
+    const text = readFileSync(join(import.meta.dir, '..', 'docs', 'premises.md'), 'utf8')
+    const list = new Map([['docs/premises.md', premisesOfTheList(text)]])
+    expect(premisesUnchecked(list, 0)).toEqual([])
+    expect(premisesWithoutState(list, 0)).toEqual([])
+    expect(testedUnnamed(list, names, scripts, files, 0)).toEqual([])
   })
 })
 
@@ -1033,6 +1066,41 @@ describe('the check of the form', () => {
       '0290-old.md: no test is named `a step replies twice`: That it renames: **tested** by `a step replies t',
       '0292-new.md: names no test: That it holds: **tested** by the test above, who',
       '0292-new.md: names no test: That it ran: **tested** by `bun run test:gone`.',
+    ])
+  })
+
+  test('the list of premises gives the bullets of its areas to the checks, and leaves out its opening and its rules', () => {
+    const text = [
+      '# What the code rests on',
+      '',
+      '- An opening bullet, reasoned.',
+      '',
+      `## ${howAPremiseIsWritten}`,
+      '',
+      '- A premise says its state, as `tested`.',
+      '',
+      '## An area',
+      '',
+      'What the area holds.',
+      '',
+      '- That it holds: **tested** by `a test that holds`.',
+      '- That it holds, since it does.',
+      '',
+      '## Another area',
+      '',
+      '- That it fails: **reasoned**.',
+    ].join('\n')
+    const list = new Map([['docs/premises.md', premisesOfTheList(text)]])
+    expect(premisesUnchecked(list, 0)).toEqual(['docs/premises.md: reasoned'])
+    expect(premisesWithoutState(list, 0)).toEqual([
+      'docs/premises.md: no state: That it holds, since it does.',
+      'docs/premises.md: **reasoned** is no state: That it fails: **reasoned**.',
+    ])
+    const names = testNamesOf("test('a test that holds', () => {})")
+    expect(testedUnnamed(list, names, new Set(), new Set(), 0)).toEqual([])
+    expect(testedUnnamed(list, [], new Set(), new Set(), 0)).toEqual([
+      'docs/premises.md: no test is named `a test that holds`: That it holds: **tested** by `a test that holds`',
+      'docs/premises.md: names no test: That it holds: **tested** by `a test that holds`',
     ])
   })
 
