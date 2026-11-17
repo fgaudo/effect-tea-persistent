@@ -618,7 +618,7 @@ the caller's level, as [Databases](#databases) says. So it runs `work`, `project
 state, compares the operations under way with the new `work`, and calls the `unknown` of an at-most-once operation
 that may have run. A suspended entity is stepped as a `resume` by the new program would activate it, and the
 message it died on is not handled. The check launches nothing, holds nothing and writes nothing, so it runs on the
-database the old version holds ([decision 0247](decisions/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)).
+database the old version holds ([decision 0247](decisions/archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)).
 On SQLite the check's client is opened `readonly`. A writable client of `@effect/sql-sqlite-bun` begins each
 transaction with `BEGIN IMMEDIATE`, which waits for the old version's steps even where it only reads
 ([decision 0267](decisions/0267-a-file-of-sqlite-is-held-by-a-file-of-its-own-and-refuses-no-reader.md)).
@@ -629,8 +629,14 @@ so that every activation of the entity dies, or `Activation`, an activation that
 its cause, as a suspension renders it. What the runtime throws fails the whole call, as it fails `reindex`. The
 entities are read by pages of their ids, so the check is a reading of a moment: an operation under way at the check
 may have ended by the deploy. `renames` are the launch's, and the check reads the entities of a name renamed to the
-program's as the program's. The check dies on tables that a migration of another release made, since it migrates
-nothing.
+program's as the program's, and refuses the renames as the launch refuses them. The check dies on tables that a
+migration of another release made, since it migrates nothing: `effecttea_migrations` must record every migration of
+this release's `createTables`, and no other. The program is refused as a deploy refuses it, before any row is read.
+`limit` is a non-negative integer, required, and a `limit` of 0 gives the counts alone, since one broken program may
+fail every entity. The check leaves out the handling of the mailbox's first message by `update`, the messages
+Cluster saved and has not delivered, the rows of the read model, which `reindex` writes, and whether the launch's
+rename itself would run
+([decision 0247](decisions/archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)).
 
 ### Renaming a program
 
@@ -745,8 +751,9 @@ resumption follows it ([decision 0064](decisions/archive/0064-the-program-is-not
 discarded message stores no reply, and the caller's retry is a new message
 ([decision 0014](decisions/archive/0014-rules-the-machine-settled.md)). A discarded message an operation sent stores a
 rejection with no reason, kept while the work that sent it holds. The operation's `send` sends the request again at
-the resumption, and is given the rejection instead of the message being applied again
-([decision 0260](decisions/0260-a-discard-of-a-message-an-operation-sent-stores-a-rejection.md)). An internal message is not discarded: the state
+the resumption, and is given the rejection instead of the message being applied again. A discard that leaves the
+entity suspended, since the program deployed dies on the stored state, keeps the message and stores no rejection
+([decision 0260](decisions/archive/0260-a-discard-of-a-message-an-operation-sent-stores-a-rejection.md)). An internal message is not discarded: the state
 before it still holds its work, so an operation's completion would run the operation again under another
 idempotency key, and a timer's firing would fire again at once. Only a program that handles it gets the entity
 past it ([decision 0041](decisions/archive/0041-a-completion-is-not-discarded.md),
@@ -773,7 +780,9 @@ An operator decides between `resume` and `discard` with `inspect(id)`. It gives 
 state, the mailbox with the next message first, the work under way with the oldest first, and the suspension as
 `suspended` lists it. It reads what is stored and activates nothing, so an entity this process does not hold is
 inspected too. Its rows are read through the migrations from one snapshot, so a step that commits meanwhile is read
-whole or not at all ([decision 0185](decisions/0185-inspect-gives-what-is-stored-of-one-entity.md)). Inside a
+whole or not at all. A row that no migration reads is a defect of `inspect`, as it is of the entity's activation,
+and an entity that is not stored is inspected as `null`
+([decision 0185](decisions/archive/0185-inspect-gives-what-is-stored-of-one-entity.md)). Inside a
 transaction the caller left open, `inspect` reads at the caller's level, as [Databases](#databases) says.
 
 ## Reading
@@ -1284,7 +1293,7 @@ is written once. A launch on a client of any other dialect is the launcher's def
   holds this, `a page read in a caller’s transaction gives a row twice at READ COMMITTED, and once at REPEATABLE
   READ` of `src/postgres.test.ts`, and the four readings begin their transaction alike
   ([decisions 0158](decisions/archive/0158-an-older-database-of-sqlite-is-given-request-id-and-a-page-keeps-the-level-of-a-callers-transaction.md),
-  [0185](decisions/0185-inspect-gives-what-is-stored-of-one-entity.md),
+  [0185](decisions/archive/0185-inspect-gives-what-is-stored-of-one-entity.md),
   [0222](decisions/0222-postgresql-with-many-connections.md)).
 - An integer of a row may come from the driver as a number or as a bigint: PGlite gives a number, and
   `@effect/sql-pg` a bigint. Either is read as a number up to 2^53
@@ -1559,8 +1568,12 @@ one caller's request the text another's had, and its reply then replaces nothing
 
 The cause of a suspension is stored as text, and holds the program's data wherever `defect` or an error of a schema
 cites it. So each U+0000 and each lone surrogate in it is written as the escape JSON gives it, such as `\u0000`,
-which every database holds
-([decision 0205](decisions/0205-a-defects-cause-is-written-as-text-every-database-holds.md)).
+which every database holds. A pair of surrogates is one character, and is kept as it is. The rule is the machine's
+`render`, and not the storage's, so every place that shows a cause renders it alike: a suspension, `StillSuspended`
+of `resume` and `discard`, and the failures of `reindex` and of `check`. An operator then reads the same cause from
+what is stored and from what a call answered. A cause that holds the six characters `\u0000` reads the same as one
+that held U+0000, since no code compares a cause
+([decision 0205](decisions/archive/0205-a-defects-cause-is-written-as-text-every-database-holds.md)).
 
 An index that is an integer beyond 2^53 is written with the exact digits of its double, so that the database reads
 the number the query compares: the digits `JSON.stringify` writes spell another integer to SQLite and to PostgreSQL

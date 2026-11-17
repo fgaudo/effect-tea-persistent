@@ -30,7 +30,7 @@ chose on 2026-11-11, after the opinion of a Fable 5.2 agent, that the runtime re
 - **The defect names both schemas and the two ways out.** The operator sets the role's `search_path` to the schema
   that holds the tables, or moves the tables into the first schema.
 - **`check` dies alike**, since `tablesMade` reads the tables a launch would read
-  ([decision 0247](0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)).
+  ([decision 0247](archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)).
 - **No statement of the storage names a schema but `effecttea_migrations`**, as decisions 0215 and 0217 have it.
 - **On SQLite nothing changes.**
 

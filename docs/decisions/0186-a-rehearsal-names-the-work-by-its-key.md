@@ -44,7 +44,7 @@ so the test would wrap it in `Effect.exit` and read the exit.
 Each structure of Effect that could give the reading of no work was weighed.
 
 - **`Option` from `underWay`.** The library gives null for what is not there, as `read` and `inspect` do
-  ([decision 0185](0185-inspect-gives-what-is-stored-of-one-entity.md)), and a test asserts null with no import.
+  ([decision 0185](archive/0185-inspect-gives-what-is-stored-of-one-entity.md)), and a test asserts null with no import.
 - **`Effect.exit` around `pending`.** It works, since `Effect.exit` holds a defect too. A test then reads an `Exit`,
   and cannot tell no work from a key the program does not declare, which also fails.
 - **`Effect.option` around `pending`.** It turns a failure into `None`, and `pending` dies rather than fails, so the

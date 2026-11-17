@@ -6,7 +6,7 @@ by a probe, in [decision 0073](0073-what-the-runtime-did-is-told-to-a-probe.md).
 every entity whose state holds work is replaced by [decision 0029](0029-an-idle-entity-is-unloaded.md). Its bullet that an
 entity is one loop gains a yield after a step that leaves it more to do, in
 [decision 0134](0134-an-entitys-loop-yields-between-two-steps.md). The cause it renders as text escapes each character no database
-holds, in [decision 0205](../0205-a-defects-cause-is-written-as-text-every-database-holds.md).
+holds, in [decision 0205](0205-a-defects-cause-is-written-as-text-every-database-holds.md).
 
 ## Context
 

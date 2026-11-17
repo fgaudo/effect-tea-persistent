@@ -274,6 +274,16 @@ with a requirement that no example has yet.
   - whether the failure comes again on the CI, and under what load;
   - whether the holder was slow, or the reader read an old snapshot after its transaction ended;
   - a spike that waits for the count to rise up to a bound, rather than for a time.
+- **A reading of one snapshot beside a step, on a pool of PostgreSQL.** `inspect`, `suspended` and each entity of
+  `check` read their rows in one transaction, which begins at `REPEATABLE READ` on PostgreSQL, so that a step that
+  commits meanwhile is read whole or not at all
+  ([decision 0185](decisions/archive/0185-inspect-gives-what-is-stored-of-one-entity.md)). PostgreSQL documents that
+  such a transaction reads its first snapshot in every statement. The test of the snapshot runs on SQLite, under the
+  scheduler, and no test runs a reading beside a step on a server with a pool. The move of area 3 of the step The
+  rules move from the notes into documents kept true, of the [roadmap](roadmap.md), found no question that held it on
+  2026-11-18. It would be decided by:
+  - a test of `src/postgres.test.ts` that holds a step between two of its statements, at a point of the test of the
+    pool, while `inspect` reads the entity, and finds the step read whole or not at all.
 
 ## Running
 
@@ -670,7 +680,7 @@ with a requirement that no example has yet.
     ([decision 0249](decisions/archive/0249-on-cluster-a-reset-drops-the-id-a-callers-client-kept.md)), since it may drop the
     keep of the first client's reply and, interrupted then, leave the rows for ever.
 - **A cause holding U+0000 in Cluster's tables.** A defect's cause is written as text every database holds, with U+0000
-  escaped ([decision 0205](decisions/0205-a-defects-cause-is-written-as-text-every-database-holds.md)), in the
+  escaped ([decision 0205](decisions/archive/0205-a-defects-cause-is-written-as-text-every-database-holds.md)), in the
   runtime's tables. A door's `Died` carries its cause escaped, and Cluster writes its reply as JSON, which escapes a
   U+0000 too: a test of [decision 0291](decisions/archive/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md) finds none in `cluster_replies` on SQLite, with the
   cause written escaped or not. A door that dies on such a cause may still hand it to Cluster, which may store it in
@@ -1232,7 +1242,7 @@ with a requirement that no example has yet.
   runtime alone. The second reading of the premise review found both by a reading on 2026-11-12.
   - A commit that adds the two links, as `AGENTS.md` asks of a note that changes another, would settle it.
 - **A reason an operator gives to a discard.** A discard of a message an operation sent stores a rejection with a
-  reason of `null` ([decision 0260](decisions/0260-a-discard-of-a-message-an-operation-sent-stores-a-rejection.md)).
+  reason of `null` ([decision 0260](decisions/archive/0260-a-discard-of-a-message-an-operation-sent-stores-a-rejection.md)).
   The sender cannot tell it from a bare `reject` of the receiver, though a discard says the receiver had a bug and
   an operator dropped the message. An operator could give the reason, as `discard(id, { reason })`, typed by the
   receiver's schema of rejections, with `null` when none is given. The rule of decision 0260 would not change. It

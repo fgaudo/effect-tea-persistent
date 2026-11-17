@@ -4707,7 +4707,7 @@ Every note of the list was read whole, and so was every note of the area it meet
 
 #### 2. `check` cannot run beside the old version on SQLite, though 0247 says it runs on a database the old version holds
 
-- **The notes.** [Decision 0247](0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md) launches
+- **The notes.** [Decision 0247](archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md) launches
   nothing and takes no lock, "so it runs on a database another version holds", since on one process the old version
   holds the database alone. `docs/design.md`, under Checking a program before its deploy, says the same.
   [Decision 0080](archive/0080-a-database-is-held-by-one-runtime.md) holds a file of SQLite in the exclusive locking
@@ -5668,7 +5668,7 @@ were not read.
 
 1. **Reproduced: `check` dies whole on a migration of the flags that throws, where it should name the entity as a
    `Load`.**
-   - The notes: [decision 0247](0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md) and
+   - The notes: [decision 0247](archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md) and
      [decision 0269](archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md).
    - The premise that fell: decision 0247 tells a row the program's readings die on from what the runtime throws,
      since the storage runs the migrations and the schema inside a guard. Decision 0269 added the kind `flags` to
@@ -7185,7 +7185,7 @@ the area, and not in its own text.
    steps through every operation and its timer, and `c` acts once. On PGlite, within one second of the test's clock,
    the entity's state never moves past its creation, its timer never rings, the at-most-once `b` delivers `unknown`,
    the at-least-once `c` acts 13 times, and the entity is not suspended, so `suspended` names nothing. `check`
-   ([decision 0247](0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)) steps the machine and
+   ([decision 0247](archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)) steps the machine and
    writes nothing, so it names no such entity before a deploy, which was read and not run. The fix is finding 1's: a
    bound in `shownOf` makes it a defect that suspends the entity, as decision 0206 has an index that is no scalar.
 5. **Measured by a mutation: no test holds the guard of `reindex` that writes a row only over the state it was
@@ -7257,7 +7257,7 @@ concurrency run under `SCHEDULES=all`, in finding 5, found a rule no test holds.
   a door is reached by Cluster's address of the entity, which a client of Cluster built apart from the library could
   give as `''`. Not read in the code of the door.
 - [Decision 0216](0216-the-tables-are-made-by-effects-migrator.md) says that a release older than a database's latest
-  migration launches on it and runs nothing, and nothing refuses it. Since [decision 0247](0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)
+  migration launches on it and runs nothing, and nothing refuses it. Since [decision 0247](archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)
   `tablesMade` refuses tables made by another set of migrations for `check`, and a launch does not. Read, and not run;
   no release has a second migration yet.
 

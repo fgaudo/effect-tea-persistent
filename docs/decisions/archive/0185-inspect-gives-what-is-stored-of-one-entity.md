@@ -1,7 +1,7 @@
 # 0185. `inspect` gives what is stored of one entity, read from one snapshot
 
-**Status:** accepted, 2026-11-08, with the step The API before the release of the [roadmap](../roadmap.md). Adds to
-[decision 0114](archive/0114-an-operator-sees-the-suspended-entities-and-what-a-resume-did.md) the reading of one
+**Status:** accepted, 2026-11-08, with the step The API before the release of the [roadmap](../../roadmap.md). Adds to
+[decision 0114](0114-an-operator-sees-the-suspended-entities-and-what-a-resume-did.md) the reading of one
 entity that an operator decides a `resume` or a `discard` by.
 
 ## Context
@@ -31,28 +31,28 @@ keys from after it.
   `inspect`, as it is of the entity's activation.
 - **The rows are read from one snapshot.** The readings run in one transaction. On PostgreSQL it begins at
   `REPEATABLE READ`, as a query's pages do
-  ([decision 0157](archive/0157-the-storage-speaks-sqlite-and-postgresql.md)). Within a transaction the caller left
+  ([decision 0157](0157-the-storage-speaks-sqlite-and-postgresql.md)). Within a transaction the caller left
   open, the readings run at the caller's level, as a query's do
-  ([decision 0158](archive/0158-an-older-database-of-sqlite-is-given-request-id-and-a-page-keeps-the-level-of-a-callers-transaction.md)).
+  ([decision 0158](0158-an-older-database-of-sqlite-is-given-request-id-and-a-page-keeps-the-level-of-a-callers-transaction.md)).
   So a step that commits meanwhile is read whole or not at all.
 - **An id that is no id is the caller's defect**, as it is of `read`, `resume` and `discard`
-  ([decision 0179](0179-an-id-is-not-empty.md)).
+  ([decision 0179](../0179-an-id-is-not-empty.md)).
 
 ## What it rests on
 
 - That `inspect` gives the state, the mailbox, the work and the suspension as stored, and that it activates nothing:
   **tested** by `an operator inspects an entity: its state, its mailbox, its work and its suspension, as stored` in
-  [`src/runtime.test.ts`](../../src/runtime.test.ts), on SQLite and PGlite. The test inspects an entity under a
+  [`src/runtime.test.ts`](../../../src/runtime.test.ts), on SQLite and PGlite. The test inspects an entity under a
   program whose `durable` dies, and finds the old cause, which a resume then replaces.
 - That a step can commit between two statements read outside a transaction, and none can within one: **documented**
   by `makeSqliteAcquirers` in `node_modules/effect/src/sql/SqlClient.ts`, whose statement holds the client's
   semaphore until it finishes, and whose transaction holds it until its scope closes. **Read** in
   `node_modules/@effect/sql-sqlite-bun/src/SqliteClient.ts`: the client of SQLite is built with it. **Tested** on SQLite by `an
   inspection reads one snapshot, so a step that commits meanwhile is read whole, under prioritized schedules` in
-  [`src/runtime.test.ts`](../../src/runtime.test.ts), which fails at its first seed when the readings run outside the
+  [`src/runtime.test.ts`](../../../src/runtime.test.ts), which fails at its first seed when the readings run outside the
   transaction.
 - That `REPEATABLE READ` gives every statement of the transaction its first snapshot on PostgreSQL: **documented**,
-  as [decision 0157](archive/0157-the-storage-speaks-sqlite-and-postgresql.md) found for a query. No test runs
+  as [decision 0157](0157-the-storage-speaks-sqlite-and-postgresql.md) found for a query. No test runs
   `inspect` against a step on a server of PostgreSQL with a pool, which the roadmap's step on PostgreSQL waits for.
 - That the waiting senders are the ones `suspended` lists: **reasoned**. Both read the registrations of this process
   with the same function, after the rows are read.
@@ -62,7 +62,7 @@ keys from after it.
 Each structure of Effect that could give the reading was weighed.
 
 - **The machine the process holds**, in `deployed.loaded`. Only an entity loaded here has one. On Cluster a
-  machine a door's step computed may not be committed yet ([decision 0161](archive/0161-on-cluster-a-step-settles-the-machine-by-the-count-of-the-steps-that-wrote-it.md)).
+  machine a door's step computed may not be committed yet ([decision 0161](0161-on-cluster-a-step-settles-the-machine-by-the-count-of-the-steps-that-wrote-it.md)).
   The stored rows are what every runner and every activation reads.
 - **The entity's lock**, as an activation takes it with `withEntity`. That function activates the entity it
   loads, which runs the program deployed on the stored state, and may suspend the entity anew. Holding the lock
@@ -80,5 +80,5 @@ Each structure of Effect that could give the reading was weighed.
 ## Consequences
 
 - `Handle` gains `inspect`, and `Inspected` is exported, with `Key` and `Request`, which it names.
-- [`src/storage.ts`](../../src/storage.ts) reads one entity's rows in one function, which `load` and `inspect` share.
+- [`src/storage.ts`](../../../src/storage.ts) reads one entity's rows in one function, which `load` and `inspect` share.
   The reading of a suspension is shared with `suspended`, and the snapshot with `query`.

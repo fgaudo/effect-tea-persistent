@@ -352,3 +352,67 @@ talk, Defects, The sweep, What the storage writes and Fibers and locks, of `desi
 - That a wait whose operation, run again under the same incarnation, sends to another entity misleads no operator:
   **open**. The wait stays listed under the first receiver until its suspension ends. It is the
   [open question](open-questions.md#running) A wait whose operation, run again, sends elsewhere.
+
+## The tables of an entity
+
+The table `effecttea_entities` holds an entity's row: its state, its creation and flags, the count of its
+incarnations and of its steps, its partition, and its suspension with the cause rendered as text.
+`effecttea_entity_keys` holds its keys, with each incarnation, work and time due, and `effecttea_mailbox` its queue of
+messages in order. `write` of [`src/storage/entities.ts`](../src/storage/entities.ts) writes them, and `entity` reads
+them for `load`, `inspect` and `examine`, with `entities`, `suspensions`, `interruptedWithin`, `due` and `stepsOf`.
+[`src/check.ts`](../src/check.ts) reads them by `examine` and `entities`. The rules are under Defects, Checking a
+program before its deploy and What the storage writes, of `design.md`.
+
+- That `inspect` gives the state, the mailbox, the work and the suspension as stored, and activates nothing: **tested**
+  by `an operator inspects an entity: its state, its mailbox, its work and its suspension, as stored`, in
+  `src/runtime.test.ts`, on SQLite and PGlite.
+- That on SQLite a step can commit between two statements read outside a transaction, and none can within one:
+  **documented** by the JSDoc of `makeSqliteAcquirers` in `sql/SqlClient.ts` at Effect 4.1.3, whose borrower holds the
+  connection's semaphore until a statement finishes and whose acquirers hold it until the transaction's scope closes,
+  and **read in the source** of `SqliteClient.ts` of `@effect/sql-sqlite-bun` at 4.1.3, whose client is built with it.
+  **Tested** by `an inspection reads one snapshot, so a step that commits meanwhile is read whole, under prioritized
+  schedules`, in `src/runtime.test.ts`. `inspect`, `suspended` and each entity of `check` rest on it.
+- That `REPEATABLE READ` gives every statement of a transaction its first snapshot on PostgreSQL: **documented** by the
+  section Transaction Isolation of PostgreSQL 17. Whether a reading of one snapshot sees a step whole against a pool of
+  PostgreSQL is **open**: no test runs `inspect` beside a step on a server with a pool. It is the
+  [open question](open-questions.md#storage-and-reading) A reading of one snapshot beside a step, on a pool of
+  PostgreSQL.
+- That `inspect` lists the waits that `suspended` lists: **tested** by `a suspended entity lists the stored waits
+  whose run holds, and its resumption deletes them`, in `src/storage.test.ts`, which reads both. Both read
+  `effecttea_waiting` by `waitingOf`, in the snapshot of the reading.
+- That the time of a suspension is kept through a step while the entity stays suspended, and cleared with the
+  suspension: **tested** by `a suspended entity is listed with what it died on, its cause and since when, kept while
+  it stays suspended`, in `src/storage.test.ts`.
+- That PostgreSQL holds U+0000 in no text, so that a cause written as it was fails the suspension's write:
+  **tested** by `a defect whose cause holds U+0000 suspends the entity, and lists it`, in `src/runtime.test.ts`, on
+  SQLite and on PGlite, which failed before the cause was escaped.
+- That every cause a suspension stores passes through `render`: **tested** by `the cause a suspension writes is text a
+  database holds, with each character none holds escaped`, in `src/machine.test.ts`, and by `a defect whose cause
+  holds U+0000 suspends the entity, and lists it`, in `src/runtime.test.ts`.
+- That a regular expression with the flag `u` reads a pair of surrogates as one code point, so that `\p{Cs}` finds a
+  lone surrogate alone: **documented** by ECMAScript, and **tested** by `the cause a suspension writes is text a
+  database holds, with each character none holds escaped`, in `src/machine.test.ts`, whose cause holds a pair.
+- That `check` finds what a deploy does, for an entity not suspended and for a suspended one: **tested** by `finds the
+  entities whose activation the new program suspends, as a deploy then suspends them` and by `checks a suspended entity
+  as a resume would activate it`, in `src/check.test.ts`, on SQLite and PGlite.
+- That a `Load` is told apart from an `Activation` and from what the runtime throws, a version no migration reads
+  included: **tested** by `tells a row the migrations do not read from an activation that suspends` and by `dies on
+  what the runtime throws: a row that is no JSON, and tables another release made`, in `src/check.test.ts`.
+- That `Migrator` records `0001_tables` as the id 1 and the name `tables`: **read in the source** of the loader
+  `fromRecord` of `sql/Migrator.ts` at Effect 4.1.3, which parses a migration's key into its id and name, and **tested**
+  by `dies on what the runtime throws: a row that is no JSON, and tables another release made`, in
+  `src/check.test.ts`, which reads the guard's message. The check of the tables rests on it.
+- That a discard of a message an operation sent stores a rejection, only for such a message and only where the entity
+  is resumed: **tested** by `a message an operation sent is discarded with a rejection stored, which its next send is
+  answered`, by `a discard that leaves the entity suspended keeps the message an operation sent, and stores no reply`
+  and by `an inbound message the entity died on is discarded, with no reply stored`, in `src/machine.test.ts`.
+- That the operation's `send` is then given the stored rejection and does not send again: **tested** by `a discard
+  gets an entity past the message an operation sent, which the operation does not send again`, in
+  `src/runtime.test.ts`, and on Cluster by `a discard on another runner of the message an operation sent is answered
+  to the operation as a rejection`, in `src/cluster.test.ts`, under `bun run test:slow`.
+- That the discard's rejection, stored for work that already ended, is deleted as it is written: **tested** by `a reply
+  asked by work that no longer holds goes as it is stored, and one whose work holds is kept`, in `src/storage.test.ts`.
+- That a sender handles a rejection with a reason of `null`: **documented** by the type of the reply of `send`, whose
+  rejection's reason is `null` for a bare `reject` of every program.
+- That a sender need not tell a discard from a bare `reject`: **chosen** by the maintainer, in
+  [decision 0260](decisions/archive/0260-a-discard-of-a-message-an-operation-sent-stores-a-rejection.md).

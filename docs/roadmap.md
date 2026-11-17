@@ -43,8 +43,18 @@ it leaves this file, and what it decided goes into the design, a decision or an 
        its sender`, in `src/machine.test.ts`. The area found no new bug: bugs 3, 13, 49 and 94 hold its tables and are
        fixed, and its premises `open` are open questions already. Not reached: the premises of decision 0167 on
        `Resumed`, which area 11 reads with the door's client.
-    3. The tables of an entity: `effecttea_entities`, `effecttea_entity_keys` and `effecttea_mailbox`. Notes 0185,
-       0205, 0247 and 0260. Decision 0247 is `check`, which reads the entities' rows as an activation would.
+    3. Done, the tables of an entity: `effecttea_entities`, `effecttea_entity_keys` and `effecttea_mailbox`. Notes
+       0185, 0205, 0247 and 0260, now in `archive/`. Each keeps the state of the area: decision 0247 is `check`, which
+       reads the entities' rows as an activation would, and decision 0260 writes a discard's rejection beside the
+       mailbox it takes the message from. Its session read them whole with `write`, `entity`, `inspect`, `examine`,
+       `entities` and `suspensions` of `src/storage/entities.ts`, and the archived notes their code cites, 0014, 0041,
+       0044, 0114 and 0161, of which 0114 and 0161 list premises. Every premise of Effect the notes read at 4.1.2 still
+       holds at 4.1.3. `docs/design.md` now says what a discard that leaves the entity suspended stores, what
+       `inspect` does with a row no migration reads, where a cause is rendered, and what `check` refuses and leaves
+       out. The area found no bug. One premise had no question: whether a reading of one snapshot sees a step whole on
+       a pool of PostgreSQL, now the open question A reading of one snapshot beside a step, on a pool of PostgreSQL.
+       Not reached: the premises of decision 0161 on a door's step, and of decision 0114 on operators in line, which
+       areas 10 and 11 read; the partition and `due` of an entity's rows, which area 9 reads.
     4. Done, the tables of versions: `effecttea_versions` and `effecttea_runner_versions`. No note outside the archive
        keeps them. Its session read the archived notes their code cites, 0159 and 0176, with the code and the source of
        Effect 4.1.3. Every premise of the two notes still holds at 4.1.3, though the notes read them at 4.1.2, and they
@@ -85,16 +95,16 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     how an entry is written, and `the form of the list of premises` in `src/form.test.ts` checks the premises.
   - Done, area 1, on 2026-11-17, the second area moved, which archived the first notes.
   - Done, area 2, on 2026-11-17.
-  - Next, area 3, then the areas in the order of the list. A session of an area starts from
+  - Done, area 3, on 2026-11-18.
+  - Next, area 5, then the areas in the order of the list. A session of an area starts from
     `bun scripts/premise-pairs.ts --tables`, or from the declarations of the module of its area, and lists the
     archived notes its code cites. It checks first that each note of its list keeps its state, and moves a note that
-    does not to the area that keeps it, as area 4 moved decision 0247 to area 3. Area 3 begins in
-    [`src/storage/entities.ts`](../src/storage/entities.ts): `write`, which writes the three tables of an entity,
-    `entity`, which loads them, and `entities`, `onHold`, `within`, `interruptedWithin`, `due`, `suspensions` and
-    `stepsOf`, which read them. `entities`, `onHold`, `interruptedWithin`, `suspensions` and `stepsOf` cite no note.
-    `keepSent` of `onClusterOf` in [`src/storage/cluster.ts`](../src/storage/cluster.ts), `renamed` of
-    [`src/storage/tables.ts`](../src/storage/tables.ts) and `reindex` of
-    [`src/storage/projections.ts`](../src/storage/projections.ts) read them too.
+    does not to the area that keeps it, as area 4 moved decision 0247 to area 3. Area 5 begins in
+    [`src/storage/projections.ts`](../src/storage/projections.ts): `reindex`, which writes `effecttea_projections`,
+    and `query`, `count`, `sum`, `countBy` and `projected`, which read it. `count` and `projected` cite no note. The
+    log's tables are written by `write` of [`src/storage/entities.ts`](../src/storage/entities.ts), which moves the
+    head of the step's partition, and by `partitioned` of [`src/storage/tables.ts`](../src/storage/tables.ts).
+    `heads` of `logOf` in [`src/storage/log.ts`](../src/storage/log.ts) reads `effecttea_heads` and cites no note.
     A session moves its notes by `bun scripts/archive-notes.ts <numbers>`, which runs `git mv` into `archive/` and
     rewrites every relative link to the notes and in them, and then runs `bun run links`. An area that finds no note
     outside the archive still writes its premises and its alternatives, as area 4 did.

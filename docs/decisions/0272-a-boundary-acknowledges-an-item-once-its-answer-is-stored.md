@@ -27,7 +27,7 @@ Two cases decision 0127 did not take up lead to the same loss. A reply is kept f
 ([decision 0125](archive/0125-a-callers-reply-is-kept-as-long-as-its-boundary-says.md)), and a request sent again
 after it is applied again. A source gives an item again whenever a crash comes between the answer and the
 acknowledgement, which may be later than any `keep`. And a discard of a caller's message stores no reply
-([decision 0260](0260-a-discard-of-a-message-an-operation-sent-stores-a-rejection.md)), so an item the entity died
+([decision 0260](archive/0260-a-discard-of-a-message-an-operation-sent-stores-a-rejection.md)), so an item the entity died
 on, sent again after the discard, is a new request, and the entity dies on it again.
 
 ## Decision

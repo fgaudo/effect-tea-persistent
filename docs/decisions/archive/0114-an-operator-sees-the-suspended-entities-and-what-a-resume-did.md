@@ -5,7 +5,7 @@ suspended entities its consequences asked for, and to [decisions 0041](0041-a-co
 and [0044](0044-a-firing-is-not-discarded.md) what a `discard` that drops nothing answers. Decides the second
 half of the roadmap's step on suspended entities, with
 [decision 0113](0113-a-suspended-entitys-operations-run-to-their-end.md), and closes its
-[open question](../../open-questions.md#running). [Decision 0185](../0185-inspect-gives-what-is-stored-of-one-entity.md)
+[open question](../../open-questions.md#running). [Decision 0185](0185-inspect-gives-what-is-stored-of-one-entity.md)
 adds `inspect`, the reading of one entity that an operator decides a `resume` or a `discard` by.
 Changed by [decision 0265](0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md), which reads who waits from the waits
 the step that answers stores, on every storage and every runner, not from the senders registered in the process.

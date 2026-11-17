@@ -4,13 +4,13 @@
 [roadmap](../roadmap.md), as the fix of bug 87. It changes
 [decision 0080](archive/0080-a-database-is-held-by-one-runtime.md): a file of SQLite is no longer held in the exclusive
 locking mode, and another connection reads it while a runtime runs. It makes
-[decision 0247](0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md) hold on SQLite as on
+[decision 0247](archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md) hold on SQLite as on
 PostgreSQL.
 
 ## Context
 
 `check` runs in the new version's process, while the old version's runtime holds the database
-([decision 0247](0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)). On PostgreSQL the runtime
+([decision 0247](archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)). On PostgreSQL the runtime
 holds the database by a session advisory lock, which refuses a second runtime and no reader. On SQLite the runtime
 held the file in the exclusive locking mode ([decision 0080](archive/0080-a-database-is-held-by-one-runtime.md)). In
 WAL mode that mode keeps every other connection from opening the file, one opened `readonly` included. So the check of

@@ -210,3 +210,51 @@ The list is written area by area, by the step The rules move from the notes into
   cost a wrong answer.
 - **A trigger, or a check deferred to the commit.** Weighed in decision 0289. Each reads the same snapshot, and splits
   the dialects. Reopen if: both dialects come to give a check that reads what is committed at the commit.
+
+## The tables of an entity
+
+- **`inspect` read from the machine the process holds.** Weighed, 2026-11-08, in
+  [decision 0185](decisions/archive/0185-inspect-gives-what-is-stored-of-one-entity.md). Only an entity loaded on the runner
+  has one, and on Cluster a machine a door's step computed may not be committed yet. Reopen if: every runner comes to
+  hold every entity it may be asked about.
+- **`inspect` under the entity's lock.** Weighed in decision 0185. The function that takes the lock activates the
+  entity, which runs the program deployed on the stored state and may suspend it anew. A lock without the load would
+  only block the entity's steps for a reading the snapshot already makes consistent. Reopen if: a reading needs more
+  than one snapshot.
+- **The state and the mailbox in `suspended`'s list.** Weighed in decision 0185. The list would decode the state of
+  every suspended entity, and one state no migration reads would fail the whole list. Reopen if: the list comes to be
+  read one entity at a time.
+- **`inspect` giving the stored JSON, not read through the migrations.** Weighed in decision 0185. An operator would
+  read each version's own shape. Reopen if: an operator's tool needs the rows as they lie.
+- **U+FFFD for each character of a cause no database holds.** Weighed, 2026-11-09, in
+  [decision 0205](decisions/archive/0205-a-defects-cause-is-written-as-text-every-database-holds.md). It loses which character
+  it was, and the cause tells an operator less. Reopen if: an escape comes to mislead an operator.
+- **The storage escapes the cause where it writes it.** Weighed in decision 0205. The cause read back would differ
+  from the cause a call answered, and a storage of another kind would have to know the rule again. Reopen if: a cause
+  comes to be written by the storage alone.
+- **The cause held as JSON.** Weighed in decision 0205. JSON escapes the same characters and quotes the whole text, so
+  every reader would parse it for the same escapes. Reopen if: a cause comes to hold more than text.
+- **`check` as a call of `Runtime` or of `Handle`.** Weighed, 2026-11-10, in
+  [decision 0247](decisions/archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md). A runtime needs a
+  launch, which the old version's hold refuses, and a handle is the deployed program's. Reopen if: a launch comes to
+  run beside another version's hold.
+- **Every failure of `check`, as `reindex` gives them.** Weighed in decision 0247. One broken program may fail every
+  entity, so one array would hold the whole table. Reopen if: a page of failures is needed, by an `after` added later.
+- **A suspended entity passed over by `check`, and counted.** Weighed in decision 0247. An operator who deploys a fix
+  for it would learn nothing. Reopen if: never, while a deploy is how a suspension is fixed.
+- **A check of the work against the new `work` written apart from the machine.** Weighed in decision 0247. The
+  machine's `Restart` compares them already, and a second path could drift from the activation. Reopen if: the
+  machine's activation comes to need what a check cannot give it.
+- **The same rejection stored when a caller's message is discarded.** Weighed, 2026-11-11, in
+  [decision 0260](decisions/archive/0260-a-discard-of-a-message-an-operation-sent-stores-a-rejection.md). A caller that retries
+  after a fix would be given the old rejection for its whole `keep`. Reopen if: a caller comes to retry by the
+  runtime's choice and not its own.
+- **A new answer `Discarded` for an operation's `send`.** Weighed in decision 0260. It changes the type of `send` for
+  every program, and nearly every program would handle it as a rejection. Reopen if: programs come to need the
+  difference.
+- **`NotDiscarded` for a message an operation sent.** Weighed in decision 0260. Only a deploy of a receiver that rejects
+  the message would get the entity past it, and the sender's operation would wait until then. Reopen if: a discard of
+  such a message comes to lose the sender's intent.
+- **A reason the operator gives to a discard.** Weighed in decision 0260. It would need a schema on the operator's path
+  and in Cluster's request `Discard`, and it can be added later without changing the rule. Reopen if: a sender needs
+  to tell a discard from a bare `reject`.

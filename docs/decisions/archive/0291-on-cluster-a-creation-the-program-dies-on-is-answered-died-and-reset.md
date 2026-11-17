@@ -33,7 +33,7 @@ sends, and not after the answer, so a retry runs `init` again, once for each cal
 
 - **A door's step answers a creation the program dies on with `Died` and its cause.** The cause is the text an
   operator reads of a suspension, `Machine.render`, which escapes each U+0000 and each lone surrogate
-  ([decision 0205](../0205-a-defects-cause-is-written-as-text-every-database-holds.md)). It is a success of the RPC, so
+  ([decision 0205](0205-a-defects-cause-is-written-as-text-every-database-holds.md)). It is a success of the RPC, so
   Cluster saves it, and the request is processed. Only the defect `Machine.start` gives is answered so. A step that
   cannot commit on this runner, by `guard` or `Unheld`, still dies, and Cluster delivers its request again (decisions
   0159, 0162, 0175).

@@ -76,13 +76,13 @@ each read and found, are in [`reviews.md`](reviews.md).
 | [0002](archive/0002-store-the-state-not-the-messages.md) | Store the state after each message, never replay messages |  |
 | [0003](archive/0003-durable-work-derived-from-state.md) | All durable work is derived from the state | [0195](0195-the-package-is-effect-tea-persistent.md) |
 | [0013](archive/0013-the-runtime-is-a-pure-machine.md) | The runtime's semantics are a pure machine | [0065](archive/0065-the-machine-holds-no-replies.md) |
-| [0014](archive/0014-rules-the-machine-settled.md) | The rules the pure machine settled | [0023](archive/0023-suspended-means-no-reply-yet.md), [0041](archive/0041-a-completion-is-not-discarded.md), [0044](archive/0044-a-firing-is-not-discarded.md), [0064](archive/0064-the-program-is-not-the-machines-state.md), [0124](archive/0124-the-boundary-authenticates-and-update-authorizes.md), [0187](0187-a-rehearsal-moves-time-by-a-duration.md), [0260](0260-a-discard-of-a-message-an-operation-sent-stores-a-rejection.md) |
+| [0014](archive/0014-rules-the-machine-settled.md) | The rules the pure machine settled | [0023](archive/0023-suspended-means-no-reply-yet.md), [0041](archive/0041-a-completion-is-not-discarded.md), [0044](archive/0044-a-firing-is-not-discarded.md), [0064](archive/0064-the-program-is-not-the-machines-state.md), [0124](archive/0124-the-boundary-authenticates-and-update-authorizes.md), [0187](0187-a-rehearsal-moves-time-by-a-duration.md), [0260](archive/0260-a-discard-of-a-message-an-operation-sent-stores-a-rejection.md) |
 | [0031](archive/0031-a-state-is-an-object.md) | A state is an object |  |
 | [0033](archive/0033-a-program-declares-its-keys.md) | A program declares its keys | [0132](archive/0132-a-key-may-take-a-parameter.md) |
 | [0035](archive/0035-one-place-where-a-program-is-declared.md) | One place where a program is declared | [0180](0180-a-program-leaves-out-what-it-does-not-have.md) |
 | [0037](archive/0037-the-machine-checks-the-declared-keys.md) | The machine checks the declared keys | [0132](archive/0132-a-key-may-take-a-parameter.md) |
 | [0057](archive/0057-the-machine-gives-what-is-written.md) | The machine gives what is written |  |
-| [0064](archive/0064-the-program-is-not-the-machines-state.md) | The program is not the machine's state, and a fix is a deploy | [0075](archive/0075-a-name-is-deployed-once-in-a-process.md), [0247](0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md) |
+| [0064](archive/0064-the-program-is-not-the-machines-state.md) | The program is not the machine's state, and a fix is a deploy | [0075](archive/0075-a-name-is-deployed-once-in-a-process.md), [0247](archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md) |
 | [0132](archive/0132-a-key-may-take-a-parameter.md) | A key may take a parameter, and an incarnation is drawn from one counter of the entity | [0136](archive/0136-a-key-is-a-name-and-a-parameter-as-data.md), [0197](0197-a-program-lists-its-keys-and-key-gives-one-a-parameter.md) |
 | [0136](archive/0136-a-key-is-a-name-and-a-parameter-as-data.md) | A key is a name and a parameter, as data, in every value and row that holds one |  |
 | [0133](archive/0133-an-entity-composes-children-as-effect-tea-does.md) | An entity composes children as effect-tea does: a part, placed with `child` or `each`, whose messages, keys, operations and reasons the library wraps | [0155](archive/0155-a-foreach-of-messages-to-children-puts-them-back-once.md), [0270](0270-a-childs-name-is-never-an-own-tag.md) |
@@ -169,10 +169,10 @@ each read and found, are in [`reviews.md`](reviews.md).
 | [0042](archive/0042-an-event-the-runtime-cannot-finish-crashes-its-entity.md) | An event the runtime cannot finish crashes its entity | [0056](archive/0056-nothing-waits-for-an-operation-under-the-permit.md), [0067](archive/0067-each-entity-is-held-by-its-own-lock.md), [0077](archive/0077-the-waker-tries-an-entity-it-cannot-load-again.md) |
 | [0061](archive/0061-only-what-the-program-does-is-its-defect.md) | Only what the program does is its defect |  |
 | [0113](archive/0113-a-suspended-entitys-operations-run-to-their-end.md) | A suspended entity's operations run to their end |  |
-| [0114](archive/0114-an-operator-sees-the-suspended-entities-and-what-a-resume-did.md) | An operator sees the suspended entities, and what a resume or a discard did | [0185](0185-inspect-gives-what-is-stored-of-one-entity.md), [0265](archive/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md) |
-| [0185](0185-inspect-gives-what-is-stored-of-one-entity.md) | `inspect` gives what is stored of one entity, read from one snapshot |  |
-| [0205](0205-a-defects-cause-is-written-as-text-every-database-holds.md) | A defect's cause is written as text every database holds, with each character none holds escaped |  |
-| [0260](0260-a-discard-of-a-message-an-operation-sent-stores-a-rejection.md) | A discard of a message an operation sent stores a rejection with no reason, which the operation's `send` is given |  |
+| [0114](archive/0114-an-operator-sees-the-suspended-entities-and-what-a-resume-did.md) | An operator sees the suspended entities, and what a resume or a discard did | [0185](archive/0185-inspect-gives-what-is-stored-of-one-entity.md), [0265](archive/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md) |
+| [0185](archive/0185-inspect-gives-what-is-stored-of-one-entity.md) | `inspect` gives what is stored of one entity, read from one snapshot |  |
+| [0205](archive/0205-a-defects-cause-is-written-as-text-every-database-holds.md) | A defect's cause is written as text every database holds, with each character none holds escaped |  |
+| [0260](archive/0260-a-discard-of-a-message-an-operation-sent-stores-a-rejection.md) | A discard of a message an operation sent stores a rejection with no reason, which the operation's `send` is given |  |
 | [0265](archive/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md) | The operations that wait for a resumption are stored by the step that answers them `Suspended`, and listed on every runner while their run holds |  |
 
 ## Versions and deploys
@@ -190,7 +190,7 @@ each read and found, are in [`reviews.md`](reviews.md).
 | [0058](archive/0058-work-is-compared-by-what-is-stored.md) | Work is compared by what is stored |  |
 | [0075](archive/0075-a-name-is-deployed-once-in-a-process.md) | A name is deployed once in a process | [0078](archive/0078-a-timer-due-is-no-spare-entity-and-a-registered-deploy-keeps-its-name.md) |
 | [0102](archive/0102-a-deploy-interrupted-before-it-registers-undoes-itself.md) | A deploy interrupted before it registers undoes itself whole | [0280](0280-the-undo-of-a-deploy-drains-its-deployment.md) |
-| [0247](0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md) | `check` reads the stored entities as a deploy of a new program would activate them, and writes nothing | [0267](0267-a-file-of-sqlite-is-held-by-a-file-of-its-own-and-refuses-no-reader.md) |
+| [0247](archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md) | `check` reads the stored entities as a deploy of a new program would activate them, and writes nothing | [0267](0267-a-file-of-sqlite-is-held-by-a-file-of-its-own-and-refuses-no-reader.md) |
 
 ## Schemas, storage and projections
 
@@ -281,7 +281,7 @@ each read and found, are in [`reviews.md`](reviews.md).
 
 | Note | Decides | Changed by |
 | --- | --- | --- |
-| [0028](archive/0028-rules-the-runtime-settled.md) | Rules the runtime settled | [0029](archive/0029-an-idle-entity-is-unloaded.md), [0063](archive/0063-the-runtime-waits-for-what-it-waits-for.md), [0073](archive/0073-what-the-runtime-did-is-told-to-a-probe.md), [0134](archive/0134-an-entitys-loop-yields-between-two-steps.md), [0205](0205-a-defects-cause-is-written-as-text-every-database-holds.md) |
+| [0028](archive/0028-rules-the-runtime-settled.md) | Rules the runtime settled | [0029](archive/0029-an-idle-entity-is-unloaded.md), [0063](archive/0063-the-runtime-waits-for-what-it-waits-for.md), [0073](archive/0073-what-the-runtime-did-is-told-to-a-probe.md), [0134](archive/0134-an-entitys-loop-yields-between-two-steps.md), [0205](archive/0205-a-defects-cause-is-written-as-text-every-database-holds.md) |
 | [0029](archive/0029-an-idle-entity-is-unloaded.md) | An idle entity is unloaded, and what is stored wakes it | [0067](archive/0067-each-entity-is-held-by-its-own-lock.md), [0068](archive/0068-what-another-fiber-reads-changes-in-one-step.md), [0071](archive/0071-a-process-starts-the-entities-with-a-message.md), [0073](archive/0073-what-the-runtime-did-is-told-to-a-probe.md), [0076](archive/0076-a-process-over-its-capacity-unloads-the-least-recently-used.md), [0077](archive/0077-the-waker-tries-an-entity-it-cannot-load-again.md), [0111](archive/0111-an-entity-s-wait-times-out-its-take-alone.md), [0113](archive/0113-a-suspended-entitys-operations-run-to-their-end.md), [0116](archive/0116-an-entitys-wait-ends-with-an-item-of-its-queue.md), [0194](0194-a-timer-months-away-sleeps-on-effects-promise-of-a-duration.md), [0252](0252-the-waker-activates-an-entity-a-crash-took-out-after-the-retry.md) |
 | [0194](0194-a-timer-months-away-sleeps-on-effects-promise-of-a-duration.md) | A timer months away sleeps on Effect's promise of a duration, which Effect keeps by timers of the host in turn | [0221](0221-a-timer-sleeps-an-hour-at-most-and-reads-the-wall-clock-again.md) |
 | [0219](0219-a-drain-holds-when-an-interrupted-fiber-closes-its-scope.md) | A drain holds when an interrupted fiber closes its scope, and on Cluster ends before the runner lets its shards go |  |

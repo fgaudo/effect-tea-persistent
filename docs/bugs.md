@@ -129,7 +129,7 @@ family gets a fix of its own.
 10. **Fixed by [decision 0291](decisions/archive/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md)**, whose door answers a creation the program dies on `Died`, which the creator's client resets and gives as the creator's defect, so that an operation's sender is suspended.
 11. **Fixed by [decision 0290](decisions/archive/0290-on-cluster-an-operators-client-keeps-the-id-the-doors-answer-carries.md)**, whose operator's client keeps the Cluster id its door's answer carries, so that a step or `expire` deletes Cluster's rows of the event.
 12. **Noticed, not checked: a defect's cause holding U+0000 may reach Cluster's tables unescaped.**
-    ([decision 0205](decisions/0205-a-defects-cause-is-written-as-text-every-database-holds.md)). It matters once
+    ([decision 0205](decisions/archive/0205-a-defects-cause-is-written-as-text-every-database-holds.md)). It matters once
     Cluster runs on PostgreSQL. Verified by reading what Cluster stores of a defect: the
     [open question](open-questions.md#running) A cause holding U+0000 in Cluster's tables.
 13. **Fixed by [decision 0285](decisions/archive/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md)**, under which a batch of `expire` locks the replies it selects and skips those a step holds, so that on a pool it never deletes a reply a step wrote again with a new time. Reproduced first by the test of a contract of the pool on the CI's server.
@@ -152,7 +152,7 @@ family gets a fix of its own.
     [open question](open-questions.md#running) A name a rename left.
 17. **Fixed by [decision 0251](decisions/0251-a-retry-and-a-passivation-are-a-millisecond-at-least.md)**, which refuses a `retry` and a `passivate` of 0.
 18. **Fixed by [decision 0252](decisions/0252-the-waker-activates-an-entity-a-crash-took-out-after-the-retry.md)**, whose waker activates an entity a crash took out.
-19. **Fixed by [decision 0260](decisions/0260-a-discard-of-a-message-an-operation-sent-stores-a-rejection.md)**, whose discard of a message an operation sent stores a rejection.
+19. **Fixed by [decision 0260](decisions/archive/0260-a-discard-of-a-message-an-operation-sent-stores-a-rejection.md)**, whose discard of a message an operation sent stores a rejection.
 20. **Reproduced: on Cluster, an operator's resume whose waiting sender is of a program the runner does not
     deploy is delivered again without end.** `Resumed` is sent from the step's transaction
     ([decision 0167](decisions/archive/0167-on-cluster-an-operation-sends-through-the-doors-client-and-is-woken-by-resumed.md)),
@@ -207,7 +207,7 @@ family gets a fix of its own.
     [open question](open-questions.md#running) A name a rename left.
 29. **Noticed, not checked: during a launch on Cluster that renames, `check` may count an entity twice, under its
     old name in one page and under its new name in a later one.**
-    ([decision 0247](decisions/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)). Only the
+    ([decision 0247](decisions/archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)). Only the
     counts would be wrong. The [open question](open-questions.md#running) A name a rename left.
 30. **Noticed, not checked: on Cluster, two programs renamed to one read the rows of the program with no entity
     through the migrations of the other.**
@@ -489,7 +489,7 @@ family gets a fix of its own.
 93. **Fixed by [decision 0281](decisions/0281-a-rehearsals-time-is-a-whole-millisecond.md)**, whose rehearsal refuses a duration and a start time between two milliseconds.
 94. **Fixed by [decision 0282](decisions/archive/0282-a-callers-message-offered-before-its-answer-is-answered-by-it.md)**, whose caller's message offered before its request is answered is answered by that answer, and not applied.
 95. **Reproduced: `check` dies whole on a migration of the flags that throws, where it should name the entity as a
-    `Load`.** [Decision 0247](decisions/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)
+    `Load`.** [Decision 0247](decisions/archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)
     tells a row the program's readings die on from what the runtime throws, since the storage runs the migrations and
     the schema inside a guard.
     [Decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md) added the kind

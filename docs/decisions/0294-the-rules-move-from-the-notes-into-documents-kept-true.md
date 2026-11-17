@@ -7,7 +7,8 @@ maintainer chose in the same session that this step replaces what was left of th
 is done: the step lists each note in one area. Area 4 is moved, and made [`docs/premises.md`](../premises.md) and
 [`docs/rejected.md`](../rejected.md), with the test of `src/form.test.ts` that checks the premises. Area 1 is moved,
 and its notes 0248, 0249, 0290 and 0291 lie in [`archive/`](archive). Area 2 is moved, and its notes 0245, 0253,
-0265, 0269, 0282, 0285 and 0289 lie there too. The next part is area 3.
+0265, 0269, 0282, 0285 and 0289 lie there too. Area 3 is moved, and its notes 0185, 0205, 0247 and 0260 lie
+there too. The next part is area 5.
 
 ## Context
 
