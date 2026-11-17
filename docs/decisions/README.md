@@ -66,6 +66,7 @@ each read and found, are in [`reviews.md`](reviews.md).
 | [0254](0254-a-check-of-the-project-runs-against-the-case-it-refuses.md) | A check of the project runs against the case it refuses: a check gets a sample of each case, a list of files is read from the disk, and a pinned seed of an explored test runs against its rule taken out |  |
 | [0255](0255-a-data-directory-of-pglite-is-held-while-its-client-is-open.md) | A data directory of PGlite is held in the process while the client a runtime launched on is open |  |
 | [0283](0283-a-contract-runs-one-set-of-calls-on-every-backend.md) | A test of a contract runs one set of calls on every backend, and Cluster's decided answers are written there once (proposed, for the step The tests of a contract on every backend) |  |
+| [0294](0294-the-rules-move-from-the-notes-into-documents-kept-true.md) | The rules move from the notes into documents kept true, the premises into `docs/premises.md` and the alternatives into `docs/rejected.md`, and the notes become records (proposed, for the step The rules move from the notes into documents kept true) |  |
 | [0267](0267-a-file-of-sqlite-is-held-by-a-file-of-its-own-and-refuses-no-reader.md) | A file of SQLite is held by a file of its own beside it, by a transaction that writes no row, and the hold refuses no reader |  |
 
 ## The machine and the program

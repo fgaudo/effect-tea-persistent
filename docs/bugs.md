@@ -21,6 +21,32 @@ call this list the step of bugs. A document cites a bug by its number, as `bug 7
   Markdown numbers an ordered list by its place, so a bug taken out would shift the number of every bug after it.
 - The premise review adds each bug it finds at the end of the list, and to a family where it has the family's form.
 
+## Where the tests of the review lie
+
+The reviewers' branches are local to the maintainer's machine, and pushed nowhere. A bug of this list names the
+commit of its failing test on one of them. A session elsewhere writes that test again from the bug's sequence and the
+report in [`reviews.md`](decisions/reviews.md). The branches are these.
+
+- Cut from `main` at `fcd2494`: `claude/premise-review-operations-d2dda3`, `claude/premise-review-creation-03f15d`,
+  `claude/premise-review-messages-975dd7`, `claude/premise-review-cluster-3063df`,
+  `claude/premise-review-versions-36a283`, `claude/premise-review-runtime-1-b0a258`,
+  `claude/premise-review-runtime-2-157489`, `claude/premise-review-schemas-1-0ccf33`,
+  `claude/premise-review-schemas-2-b06280` and `claude/premise-review-queries-ea6b5a`, and the sample's
+  `claude/quizzical-franklin-e9c4d2`.
+- Cut at `a746214`: `claude/premise-review-tables-28f779`, `claude/premise-review-rehearsal-cdcc14`,
+  `claude/premise-review-scheduler-8df79e` and `claude/premise-review-project-17a123`.
+- Cut at `e6d3808`: `claude/premise-pairs-first-ee0216`, `claude/premise-pairs-early-b0bea3`,
+  `claude/premise-pairs-messages-1-dcd7d8`, `claude/premise-pairs-messages-2-a90d4b`,
+  `claude/premise-pairs-cluster-32dc2e` and `claude/premise-pairs-versions-1-e03c02`.
+- Cut at `743881f`: `claude/premise-pairs-versions-2-b6a869`, `claude/premise-pairs-runtime-1-1-eb56fb`,
+  `claude/premise-pairs-runtime-1-2-876ced`, `claude/premise-pairs-runtime-2-4e02ac`,
+  `claude/premise-pairs-schemas-1-1-f736ec` and `claude/dazzling-darwin-f09ea9`.
+- Cut at `9fd90aa`: `claude/premise-pairs-schemas-2-5e31db`, `claude/premise-pairs-queries-tables-b4f457`,
+  `claude/premise-pairs-rehearsal-996d6c`, `claude/premise-pairs-project-1-5b0c65` and
+  `claude/gallant-almeida-c81283`.
+
+The branches of area 13 and of the second reading are named by the bugs they hold, with their commits. The branch of the review of the machine held no commit, and was deleted on 2026-11-11.
+
 ## Families
 
 The bugs are grouped by what they have in common. A family gets one rule, kept in one place of the code, instead of

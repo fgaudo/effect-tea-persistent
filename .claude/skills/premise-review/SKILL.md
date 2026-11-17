@@ -14,6 +14,13 @@ review looks for the same in the notes already taken. [`AGENTS.md`](../../../AGE
 that changes another. It reads by pairs of notes, in the briefs of an area and of a last session, and by one shared
 state, in the brief of a reading of one shared state, which finds what the pairs miss.
 
+The review by pairs is no longer run, as
+[decision 0294](../../../docs/decisions/0294-the-rules-move-from-the-notes-into-documents-kept-true.md) decides. The
+step The rules move from the notes into documents kept true, of the roadmap, reads each of its areas by the section
+A reading of one shared state below, and records what it finds by the section What to do with the report. That step
+says what a session writes for its area, and writes `Done, ` there. The last part of the step writes this skill again,
+for a review of `docs/premises.md`.
+
 ## Before it starts
 
 1. Choose what the review reads. The step of [`docs/roadmap.md`](../../../docs/roadmap.md) that names the review
@@ -273,8 +280,7 @@ docs/decisions/reviews.md of the branch.
   its notes there. Take out of the list of notes not reached each one the review read whole. A note of the table read only in part is listed for the step's last
   session, to read whole. A note not read goes to the area of the list that holds it, or to the last session where
   that area is already read.
-- Check the report whole against what the step, the bugs and the open questions now say, item by item. Then run
-  `bun scripts/premise-coverage.ts`, which fails where a note of the index is in no area, in two, or is a note not
-  reached whose area is read. Commit only once it passes.
+- Check the report whole against what the step, the bugs and the open questions now say, item by item. Commit only
+  once `bun run links` passes.
 - The step leaves the roadmap once its last session is done.
 - Do not merge the reviewer's branch: its tests fail. A test moves to `main` with the fix that makes it pass.
