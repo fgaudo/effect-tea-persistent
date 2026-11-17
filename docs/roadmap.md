@@ -14,34 +14,49 @@ it leaves this file, and what it decided goes into the design, a decision or an 
   [decision 0294](decisions/0294-the-rules-move-from-the-notes-into-documents-kept-true.md), `proposed`, rewritten in
   place while the step is under way. The maintainer chose the step on 2026-11-17, and that it runs beside the step
   The tests of a contract on every backend, below, which changes `src/` and its own note.
-  - The areas are the twelve shared states that the premise review was to read last, and four areas for the notes of
-    no shared state. `bun scripts/premise-pairs.ts --tables` gives each table's places and notes.
+  - The areas are the twelve shared states that the premise review was to read last, and five areas for the notes of
+    no shared state. Each of the 96 notes outside the archive and of no step under way is listed in exactly one area,
+    by the state its rule keeps, and a note of no state by what it decides. The notes `proposed` of the steps under
+    way, decisions 0283, 0292, 0293 and 0294, are listed in no area. A note taken while this step runs joins the area
+    of its state.
     1. The tables of Cluster's requests: `effecttea_sent_requests`, `effecttea_given_requests`, `cluster_messages`
-       and `cluster_replies`.
-    2. The tables of replies: `effecttea_replies`, `effecttea_answers` and `effecttea_waiting`.
-    3. The tables of an entity: `effecttea_entities`, `effecttea_entity_keys` and `effecttea_mailbox`.
-    4. The tables of versions: `effecttea_versions` and `effecttea_runner_versions`.
+       and `cluster_replies`. Notes 0248, 0249, 0290 and 0291.
+    2. The tables of replies: `effecttea_replies`, `effecttea_answers` and `effecttea_waiting`. Notes 0245, 0253,
+       0265, 0269, 0282, 0285 and 0289.
+    3. The tables of an entity: `effecttea_entities`, `effecttea_entity_keys` and `effecttea_mailbox`. Notes 0185,
+       0205 and 0260.
+    4. The tables of versions: `effecttea_versions` and `effecttea_runner_versions`. Note 0247.
     5. The tables of projections and of the log: `effecttea_projections`, `effecttea_log` and `effecttea_heads`.
-    6. The table `effecttea_publications`.
-    7. The tables of the outbox: `effecttea_outbox`, `effecttea_consumers` and `effecttea_cursors`.
-    8. The locks of the process, `locks` of `src/runtime/process.ts`.
+       Notes 0207, 0209, 0277, 0284 and 0287.
+    6. The table `effecttea_publications`. Note 0286.
+    7. The tables of the outbox: `effecttea_outbox`, `effecttea_consumers` and `effecttea_cursors`. Notes 0184, 0224
+       and 0288.
+    8. The locks of the process, `locks` of `src/runtime/process.ts`. Notes 0246 and 0274.
     9. A deployment's entities and shards: `loaded`, `shards` and `waker`, of `src/runtime.ts` and
-       `src/runtime/waker.ts`.
+       `src/runtime/waker.ts`. Notes 0252, 0258, 0259 and 0273.
     10. A loaded entity's state, of `src/runtime/loop.ts`: its queue of events, `operations`, `timers`, `callers`
-        and `links`.
+        and `links`. Notes 0194, 0220, 0221, 0243 and 0271.
     11. The process's maps of callers and deploys: `messages`, `creations`, `operators`, `undeployed`,
-        `resumptions` and `recent`.
-    12. The readings of commits: `commits` and `waiting` of `src/runtime/readings.ts`.
-    13. The machine and the program, of `src/machine.ts` and `src/program.ts`.
-    14. The rehearsal and the testing module, of `src/rehearse.ts` and `src/testing.ts`.
-    15. The schemas and the queries a program declares.
-    16. The project: what enters the library, its entries, its checks and its CI.
-  - Next, the list of the notes of each area, written here under the area. Each of the 99 notes outside the archive
-    is listed in exactly one area, by the state its rule keeps, and a note of no state by the section of
-    [the index](decisions/README.md) it lies in. Each area also lists the archived notes that the code of its state
-    cites, which it reads for the premises that still hold. An area of more than thirty notes to read whole is
-    divided before its session starts. The notes `proposed` of the steps under way, decisions 0283, 0292 and 0293,
-    are listed in no area, and a note taken while this step runs joins the area of its state.
+        `resumptions` and `recent`. Notes 0219, 0261 and 0280.
+    12. The readings of commits: `commits` and `waiting` of `src/runtime/readings.ts`. Notes 0256 and 0275.
+    13. The machine and the program, of `src/machine.ts` and `src/program.ts`, with what a boundary does with an
+        answer. Notes 0179, 0180, 0181, 0182, 0183, 0188, 0190, 0192, 0197, 0199, 0201, 0202, 0204, 0240, 0266,
+        0270 and 0272.
+    14. The rehearsal and the testing module, of `src/rehearse.ts` and `src/testing.ts`. Notes 0186, 0187, 0189,
+        0200, 0211, 0244, 0262 and 0281.
+    15. The schemas a program declares, and what is read back of their JSON. Notes 0206, 0210, 0213, 0214 and 0276.
+    16. The project: its entries, its package, its checks and its CI. Notes 0193, 0195, 0196, 0203, 0212, 0241,
+        0242, 0250 and 0254.
+    17. The launch, the hold of a database and the tables' migrations, of `src/storage/tables.ts` and `launch` of
+        `src/runtime.ts`. Notes 0191, 0198, 0208, 0215, 0216, 0217, 0218, 0222, 0223, 0225, 0251, 0255, 0263, 0264,
+        0267, 0278 and 0279.
+  - Each area also reads the archived notes that the code of its state cites, for the premises that still hold. Its
+    session lists them as it starts, since the code changes while the step runs. Of areas 1 to 7,
+    `bun scripts/premise-pairs.ts --tables` gives each table's declarations and notes. Of the other areas, the notes
+    are those the declarations of the state or of the module cite. An area whose notes to read whole are more than
+    thirty is divided before its session starts.
+  - Next, area 4, then the areas in the order of the list. Area 4 holds one note, so its session sets the form of
+    `docs/premises.md` and `docs/rejected.md` on a small area.
   - Then the areas, one at a time, each moved in one commit. A session reads the area's notes whole, the archived
     notes its code cites and the declarations of its state that cite no note, with the code, by the section A reading
     of one shared state of [`.claude/skills/premise-review/SKILL.md`](../.claude/skills/premise-review/SKILL.md). It
@@ -50,7 +65,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     [`docs/bugs.md`](bugs.md), or an [open question](open-questions.md) where no test reproduces it yet. The first
     area moved makes `docs/premises.md` and `docs/rejected.md`, and the test of `src/form.test.ts` that every premise
     of `docs/premises.md` states its state in bold and that each test it names exists. A session that moves an area
-    writes `Done, ` before it here, with what it found and what it did not reach. Of areas 13 to 16, which hold no
+    writes `Done, ` before it here, with what it found and what it did not reach. Of areas 13 to 17, which hold no
     shared state, the state of that section's brief is the module or the section the area names. A subagent may
     draft an area, and the session checks the draft against the code before it commits. Two sessions do not move
     areas at once, since every area writes `docs/design.md`, `docs/premises.md` and the index.

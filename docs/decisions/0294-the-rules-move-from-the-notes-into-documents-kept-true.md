@@ -3,8 +3,8 @@
 **Status:** proposed, 2026-11-17, for the step The rules move from the notes into documents kept true, of the
 [roadmap](../roadmap.md). The maintainer chose in a session of 2026-11-17 to move every rule and premise of the notes
 into documents kept true of the code, as effect-tea keeps its own, and to keep the notes as records of why. The
-maintainer chose in the same session that this step replaces what was left of the premise review. Nothing of it is
-written yet: the next part lists each note in one area of the step.
+maintainer chose in the same session that this step replaces what was left of the premise review. Its first part
+is done: the step lists each note in one area. No area is moved yet, and the next part is area 4.
 
 ## Context
 
@@ -41,9 +41,10 @@ notes outside it are the rules that no document says whole yet.
 - **A note becomes a record once its area is moved.** It moves to `archive/`, keeps its number and its text, and is
   read for why. A record is history and holds no rule. Where a record and a document differ, the document rules.
 - **The step reads by shared state, not by pairs.** Its areas are the twelve shared states of the code that the
-  premise review was to read last, and four areas for the notes of no shared state: the machine and the program,
-  the rehearsal and the testing module, the schemas and the queries a program declares, and the project. Each note
-  outside the archive is listed in exactly one area. An area reads its notes whole, the archived notes the code of
+  premise review was to read last, and five areas for the notes of no shared state: the machine and the program,
+  the rehearsal and the testing module, the schemas a program declares, the project, and the launch with the hold
+  and the tables' migrations. Each note outside the archive is listed in exactly one area, but the notes of the
+  steps under way. An area reads its notes whole, the archived notes the code of
   its state cites, and the declarations of its state that cite no note. It looks for a premise a later note took
   away, as a reading of one shared state of the premise review does. A finding is a bug of `docs/bugs.md`, or an open
   question where no test reproduces it yet.
