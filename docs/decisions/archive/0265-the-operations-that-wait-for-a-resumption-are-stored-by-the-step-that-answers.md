@@ -1,10 +1,10 @@
 # 0265. The operations that wait for a resumption are stored by the step that answers them
 
 **Status:** accepted, 2026-11-11, with the step The bugs the premise review found, fixed by family, of the
-[roadmap](../roadmap.md), as the fix of bugs 72 and 63. It changes
-[decision 0114](archive/0114-an-operator-sees-the-suspended-entities-and-what-a-resume-did.md): `suspended` reads who
+[roadmap](../../roadmap.md), as the fix of bugs 72 and 63. It changes
+[decision 0114](0114-an-operator-sees-the-suspended-entities-and-what-a-resume-did.md): `suspended` reads who
 waits from what is stored, not from the senders registered in the process. It changes
-[decision 0167](archive/0167-on-cluster-an-operation-sends-through-the-doors-client-and-is-woken-by-resumed.md): the
+[decision 0167](0167-on-cluster-an-operation-sends-through-the-doors-client-and-is-woken-by-resumed.md): the
 table `waiting` holds one row for each run and name, on every storage, and the machine says what is written in it.
 
 ## Context
@@ -16,12 +16,12 @@ held that the registrations are whole once a restarted process is settled, since
 again.
 
 That premise fell twice. A suspended entity's operations run on through its suspension
-([decision 0113](archive/0113-a-suspended-entitys-operations-run-to-their-end.md)), a `Restart` keeps none of them,
+([decision 0113](0113-a-suspended-entitys-operations-run-to-their-end.md)), a `Restart` keeps none of them,
 and a process starts no suspended entity
-([decision 0071](archive/0071-a-process-starts-the-entities-with-a-message.md)). So the operation of a suspended
+([decision 0071](0071-a-process-starts-the-entities-with-a-message.md)). So the operation of a suspended
 sender was listed until the process stopped, and not after a restart, though nothing stored had changed. That is bug
 72. On Cluster, an operator may act from any runner
-([decision 0166](archive/0166-on-cluster-an-operator-resumes-and-discards-through-the-doors-client.md)), and the
+([decision 0166](0166-on-cluster-an-operator-resumes-and-discards-through-the-doors-client.md)), and the
 runner called listed only the senders registered in its own memory. That is bug 63.
 
 An operator reads the list to decide between `resume` and `discard`, by what depends on the entity. What depends on
@@ -53,24 +53,24 @@ the operations of every runner.
 
 - That a step answering an operation `Suspended` writes its wait, that a caller's request writes none, that an
   operation queued when the entity suspends writes one, and that the resumption says the waits go: **tested** by the
-  tests of `the operations a suspended entity answers`, in [`src/machine.test.ts`](../../src/machine.test.ts).
+  tests of `the operations a suspended entity answers`, in [`src/machine.test.ts`](../../../src/machine.test.ts).
 - That the storage lists the waits whose run holds, stores a wait answered twice once, leaves out a run restarted or
   ended, and deletes every wait when the suspension ends: **tested** by `a suspended entity lists the stored waits
-  whose run holds, and its resumption deletes them`, in [`src/storage.test.ts`](../../src/storage.test.ts), on SQLite
+  whose run holds, and its resumption deletes them`, in [`src/storage.test.ts`](../../../src/storage.test.ts), on SQLite
   and on PGlite.
 - That the operation of a suspended sender is listed after a restart: **tested** by `after a restart, a suspended
   entity lists the operation of a suspended sender that waits for it`, in
-  [`src/runtime.test.ts`](../../src/runtime.test.ts). It fails against the code before the change.
+  [`src/runtime.test.ts`](../../../src/runtime.test.ts). It fails against the code before the change.
 - That an operator on any runner of Cluster sees the operation of another runner that waits: **tested** by `an
   operator on any runner sees the operation of another runner that waits for a resumption`, in
-  [`src/cluster.test.ts`](../../src/cluster.test.ts), under `bun run test:slow`. It fails against the code before the
+  [`src/cluster.test.ts`](../../../src/cluster.test.ts), under `bun run test:slow`. It fails against the code before the
   change.
 - That a resumption on Cluster still tells the waiting entities, and leaves no row: **tested** by the tests of
   `src/cluster.test.ts` that count the rows of `effecttea_waiting` after a discard, unchanged by this note.
 - That the wait is written by the step that answers `Suspended`, so that no resumption commits between the answer
   and the wait, and none leaves a row behind: **tested** by the tests of `the operations a suspended entity
   answers`, which find the wait in that step's `Written`. The runtime writes a step's `Written` in one transaction,
-  on one process and on Cluster, as [decision 0028](archive/0028-rules-the-runtime-settled.md) says.
+  on one process and on Cluster, as [decision 0028](0028-rules-the-runtime-settled.md) says.
 - That an operator should see who waits whatever process answers, at the cost of a write per wait: **chosen**, by
   the maintainer.
 
@@ -83,7 +83,7 @@ nothing of what a sender does once woken.
 
 The decision leaves out an operation that, run again, sends to another entity under the same incarnation. Its row
 stays listed under the first receiver until that receiver's suspension ends. That case is an
-[open question](../open-questions.md#running).
+[open question](../../open-questions.md#running).
 
 ## Alternatives
 
@@ -99,16 +99,16 @@ stays listed under the first receiver until that receiver's suspension ends. Tha
 
 ## Consequences
 
-- [`src/machine.ts`](../../src/machine.ts): `Written` has `waits` and `woken`, computed by `step` from the outputs
+- [`src/machine.ts`](../../../src/machine.ts): `Written` has `waits` and `woken`, computed by `step` from the outputs
   and from the suspension before and after.
-- [`src/storage/tables.ts`](../../src/storage/tables.ts): `effecttea_waiting` has the sender's key, parameter,
+- [`src/storage/tables.ts`](../../../src/storage/tables.ts): `effecttea_waiting` has the sender's key, parameter,
   incarnation and the request's name, in its key. No release holds the table, so the first migration changes.
-- [`src/storage/entities.ts`](../../src/storage/entities.ts): the write stores and deletes the waits, and
+- [`src/storage/entities.ts`](../../../src/storage/entities.ts): the write stores and deletes the waits, and
   `suspended` and `inspect` read them.
-- [`src/storage/cluster.ts`](../../src/storage/cluster.ts): `wait` is gone, and `waiters` reads the waiting entities,
+- [`src/storage/cluster.ts`](../../../src/storage/cluster.ts): `wait` is gone, and `waiters` reads the waiting entities,
   each once, without deleting them.
-- [`src/runtime/doors.ts`](../../src/runtime/doors.ts): the door reads the waiting entities before an operator's step.
-- [`src/runtime.ts`](../../src/runtime.ts) and [`src/runtime/callers.ts`](../../src/runtime/callers.ts): `suspended`
+- [`src/runtime/doors.ts`](../../../src/runtime/doors.ts): the door reads the waiting entities before an operator's step.
+- [`src/runtime.ts`](../../../src/runtime.ts) and [`src/runtime/callers.ts`](../../../src/runtime/callers.ts): `suspended`
   and `inspect` give what the storage reads, and `waitingFor` is gone.
 - Bugs 72 and 63 of the roadmap are fixed, and the open question Who an operator sees waiting leaves
   `docs/open-questions.md`.

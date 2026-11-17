@@ -1,27 +1,27 @@
 # 0253. An answer no entity stores is kept for the operation that was given it
 
 **Status:** accepted, 2026-11-11, with the step The bugs the premise review found, fixed by family, of the
-[roadmap](../roadmap.md), as the rule of its family B. It changes
-[decision 0182](0182-init-may-reject-the-flags.md): an operation's creation that `init` rejects is now kept for the
-operation. It changes [decision 0010](archive/0010-a-rejection-may-carry-a-reason.md): an operation's `NotFound` is now
-kept too. It extends [decision 0021](archive/0021-a-reply-is-kept-while-the-work-that-asked-holds.md), whose rule now
+[roadmap](../../roadmap.md), as the rule of its family B. It changes
+[decision 0182](../0182-init-may-reject-the-flags.md): an operation's creation that `init` rejects is now kept for the
+operation. It changes [decision 0010](0010-a-rejection-may-carry-a-reason.md): an operation's `NotFound` is now
+kept too. It extends [decision 0021](0021-a-reply-is-kept-while-the-work-that-asked-holds.md), whose rule now
 holds of these answers as well. It restores the premise of
-[decision 0009](archive/0009-entities-talk-through-operations.md), that a run after a crash is given every answer the
+[decision 0009](0009-entities-talk-through-operations.md), that a run after a crash is given every answer the
 run before it acted on. Completed by [decision 0289](0289-expire-deletes-what-work-that-ended-was-given.md) on a pool of PostgreSQL, where two steps at once leave an
-answer of work that ended: `expire` deletes it. A `Died` on Cluster is not kept for the operation, by [decision 0291](archive/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md).
+answer of work that ended: `expire` deletes it. A `Died` on Cluster is not kept for the operation, by [decision 0291](0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md).
 
 ## Context
 
 An operation that talks only to entities may run at least once and act once, since a run after a crash sends the
 same requests and is given the stored replies
-([decisions 0009](archive/0009-entities-talk-through-operations.md),
-[0060](archive/0060-send-and-create-take-no-key.md)). That holds only if every answer the operation acts on is
+([decisions 0009](0009-entities-talk-through-operations.md),
+[0060](0060-send-and-create-take-no-key.md)). That holds only if every answer the operation acts on is
 stored. Two answers were not:
 
 - A creation that `init` rejects stores neither the entity nor the reply
-  ([decision 0182](0182-init-may-reject-the-flags.md)).
+  ([decision 0182](../0182-init-may-reject-the-flags.md)).
 - A message to an entity that does not exist is answered `NotFound`, which nothing stores
-  ([decision 0010](archive/0010-a-rejection-may-carry-a-reason.md)).
+  ([decision 0010](0010-a-rejection-may-carry-a-reason.md)).
 
 So a run told `Rejected` sends one message, and the process dies before the completion. Another creator then creates
 the entity, and the run after the crash is told `AlreadyExists` and sends another message. A message answered
@@ -50,7 +50,7 @@ bug 9 of the premise review.
   for a reply.
 - **A rename moves the answers with the rest.** A rename of the receiver's program moves the receiver's name, and a
   rename of the sender's program moves the sender's name and rewrites the request's text
-  ([decision 0156](archive/0156-a-program-is-renamed-by-its-launch-and-keeps-its-keys.md)).
+  ([decision 0156](0156-a-program-is-renamed-by-its-launch-and-keeps-its-keys.md)).
 - **On Cluster the creator's client still resets a saved `Rejected` and a saved `NotFound`, and sends the request
   again.** The door's step then answers the request from the kept answer, so the reset gives the operation the same
   answer. A caller's request has no kept answer, and its retry runs `init` again, as decision 0182 says.
@@ -83,9 +83,9 @@ bug 9 of the premise review.
 - That only the operation's own runs read or write its answers, one run after the other: **only reasoned**. The
   request's text holds the run's incarnation, so no other work reads or writes the answer, and the kept answer is
   read outside the receiver's lock. A crash forks the stop of its entity's operations and does not wait for it
-  ([decision 0056](archive/0056-nothing-waits-for-an-operation-under-the-permit.md)), so a run after the crash may
+  ([decision 0056](0056-nothing-waits-for-an-operation-under-the-permit.md)), so a run after the crash may
   start before the old run ends, and read no answer before the old run keeps one. Two runs at once may already act
-  twice on any answer. The [open question](../open-questions.md#running) An operation's kept answer on Cluster across
+  twice on any answer. The [open question](../../open-questions.md#running) An operation's kept answer on Cluster across
   a crash, and under two runs at once, holds it.
 - That the yields this change adds move no pinned seed: **read in the code**. The reads and writes run only for an
   operation's request. The one pinned seed, in `settled never returns between a crash and the activation its due

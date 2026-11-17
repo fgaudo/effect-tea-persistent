@@ -1,17 +1,17 @@
 # 0245. A reply is kept as long as `send` says, and the runtime sweeps what no reader needs
 
 **Status:** accepted, 2026-11-10, with the step The runtime's housekeeping of the roadmap. Changes
-[decision 0125](archive/0125-a-callers-reply-is-kept-as-long-as-its-boundary-says.md): `keep` is required, and the
+[decision 0125](0125-a-callers-reply-is-kept-as-long-as-its-boundary-says.md): `keep` is required, and the
 alternative of a fiber that sweeps is taken. Changes
-[decision 0171](archive/0171-on-cluster-a-callers-rows-go-once-its-client-has-the-answer-and-its-time-is-past.md) for a
-creation's rows on Cluster, and [decision 0223](0223-a-disk-that-is-really-full.md) for a prune in batches. Decides the
+[decision 0171](0171-on-cluster-a-callers-rows-go-once-its-client-has-the-answer-and-its-time-is-past.md) for a
+creation's rows on Cluster, and [decision 0223](../0223-a-disk-that-is-really-full.md) for a prune in batches. Decides the
 open question A request without a sender. Changed by
-[decision 0248](archive/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md): a creation's client keeps its
+[decision 0248](0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md): a creation's client keeps its
 Cluster id for at least two of Cluster's polls of replies and a second, so that another client of the request reads
 the answer first. A request under a reply's sender and request id that carries another message is answered `Reused`
 while the reply is kept, by [decision 0269](0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md).
 Changed by [decision 0285](0285-a-batch-of-expire-skips-the-replies-a-step-holds.md): a batch of `expire` skips the replies a step holds, and `expire` repeats its batches until a
-batch deletes nothing. Changed by [decision 0288](0288-a-batch-of-prune-skips-the-rows-another-batch-holds.md): a batch of `prune` skips the rows another batch holds, and `prune` repeats its batches until a batch deletes nothing. Changed by [decision 0289](0289-expire-deletes-what-work-that-ended-was-given.md): `expire` also deletes the replies and the answers kept for work that has ended.
+batch deletes nothing. Changed by [decision 0288](../0288-a-batch-of-prune-skips-the-rows-another-batch-holds.md): a batch of `prune` skips the rows another batch holds, and `prune` repeats its batches until a batch deletes nothing. Changed by [decision 0289](0289-expire-deletes-what-work-that-ended-was-given.md): `expire` also deletes the replies and the answers kept for work that has ended.
 
 ## Context
 
@@ -21,14 +21,14 @@ every reply and every row of the log. A step deletes its own entity's replies pa
 those of entities that take no step.
 
 Effect 4.1.3 adds a retention of completed requests to Cluster, `MessageStorage.deleteProcessed` and
-`MessageRetention.make` ([`cluster.md`](../cluster.md#the-decisions-it-bears-on)). It deletes every request of an
+`MessageRetention.make` ([`cluster.md`](../../cluster.md#the-decisions-it-bears-on)). It deletes every request of an
 entity type whose final reply is older than a time, whatever the work that asked. The runtime keeps an operation's
-request ids while its work holds ([decision 0169](archive/0169-on-cluster-an-operations-request-ids-are-kept-under-its-work-and-deleted-with-it.md)),
+request ids while its work holds ([decision 0169](0169-on-cluster-an-operations-request-ids-are-kept-under-its-work-and-deleted-with-it.md)),
 and a caller's rows until its client has the answer (decision 0171). The door's entity type holds both kinds of
 rows.
 
 A program that has no sender has the sender `null`, and every `create` and `send` of it still passes `sender: null`
-([decision 0196](0196-the-quick-start-is-an-example-the-readme-shows-whole.md)).
+([decision 0196](../0196-the-quick-start-is-an-example-the-readme-shows-whole.md)).
 
 ## Decision
 
@@ -63,7 +63,7 @@ A program that has no sender has the sender `null`, and every `create` and `send
   contend for the same rows. Where two runners give different `sweep` options, the singleton's holder sweeps by its
   own. The singleton is named `@fgaudo/effect-tea-persistent/<program>/sweep`.
 - **A topic no consumer is stored for keeps no rows under a sweep.** A prune drops such a topic whole
-  ([decision 0152](archive/0152-the-consumers-of-a-topic-are-declared-at-deploy.md)). A deployment that wants the
+  ([decision 0152](0152-the-consumers-of-a-topic-are-declared-at-deploy.md)). A deployment that wants the
   history of a topic declares its consumer before the topic's first step, or launches with `prune: false`.
 - **`prune` and `expire` delete in batches.** Each deletes at most a batch of rows in one transaction, and repeats
   until a batch deletes fewer. The count it gives is the sum of its batches. A batch keeps what decision 0039 and
@@ -74,7 +74,7 @@ A program that has no sender has the sender `null`, and every `create` and `send
 - **On Cluster, a creation's rows go once its client has the answer.** The client keeps the Cluster id of a
   creation in `given_requests`, with the time it keeps it, as a `keep` of 0 does, and `expire` deletes the rows under
   it. A retry of the creation then reaches the door again, and the machine answers `Created` from the entity's row
-  ([decision 0017](archive/0017-creation-in-the-machine.md)).
+  ([decision 0017](0017-creation-in-the-machine.md)).
 - **The runtime calls neither `deleteProcessed` nor `MessageRetention`.** Neither can spare an operation's request
   ids kept under its work, nor a caller's rows its client has not read.
 - **`forget` stays an operator's call.** A consumer that stalls still holds the log under any sweep, and
@@ -85,14 +85,14 @@ A program that has no sender has the sender `null`, and every `create` and `send
 - That only the boundary knows how long its callers retry for: **only reasoned**, as decision 0125 says.
 - That a sweep frees what the steps leave and changes no answer, since no reply is read past its time and no row a
   stored consumer has not read is pruned: **tested**, by the tests of `expire` and `prune` in
-  [`src/storage.test.ts`](../../src/storage.test.ts), and past a batch by the tests `a prune drops past a batch,
+  [`src/storage.test.ts`](../../../src/storage.test.ts), and past a batch by the tests `a prune drops past a batch,
   counts every row, and keeps what a cursor holds` and `expire deletes past a batch, counts every row, and on Cluster
-  takes the ids of every batch`. The sweep is tested in [`src/runtime.test.ts`](../../src/runtime.test.ts), by `the
+  takes the ids of every batch`. The sweep is tested in [`src/runtime.test.ts`](../../../src/runtime.test.ts), by `the
   sweep expires and prunes at its interval, and one that fails is warned of and leaves the next`, and on Cluster in
-  [`src/cluster.test.ts`](../../src/cluster.test.ts), by `on Cluster the sweep runs as a singleton, and takes the
+  [`src/cluster.test.ts`](../../../src/cluster.test.ts), by `on Cluster the sweep runs as a singleton, and takes the
   replies and Cluster rows past their time`.
 - That a prune in batches needs no more room on a full volume than one prune: **seen**, in
-  [`spikes/full-volume.test.ts`](../../spikes/full-volume.test.ts), on the CI's volume of 32 MB. The first batch
+  [`spikes/full-volume.test.ts`](../../../spikes/full-volume.test.ts), on the CI's volume of 32 MB. The first batch
   fails on the full volume, as one prune did. Once 1 MB is freed, the batches take about 824 KB of it, where one
   prune took 892 KB. So the batches serve the writer's time and not the room, and the procedure of decision 0223
   stands as it was: the operator frees room first, then forgets and prunes.
@@ -102,7 +102,7 @@ A program that has no sender has the sender `null`, and every `create` and `send
   for its data, only for its cost.
 - That a retry of a creation whose Cluster rows are gone is answered `Created`: **tested**, by the test `a caller’s
   creation leaves its Cluster rows to expire, and a retry after is answered Created` in
-  [`src/cluster.test.ts`](../../src/cluster.test.ts).
+  [`src/cluster.test.ts`](../../../src/cluster.test.ts).
 
 ## Alternatives
 

@@ -1,7 +1,7 @@
 # 0248. On Cluster, a caller's rows are kept for every client's poll of replies
 
 **Status:** accepted, 2026-11-10. Changes
-[decision 0245](../0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md), whose creation's client kept
+[decision 0245](0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md), whose creation's client kept
 its Cluster id until the time it had the answer, and
 [decision 0171](0171-on-cluster-a-callers-rows-go-once-its-client-has-the-answer-and-its-time-is-past.md),
 whose message's client kept its Cluster id until its `keep` was past, however short.

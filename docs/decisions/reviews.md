@@ -5451,7 +5451,7 @@ one declaration, and most of it was not read.
 
 - **Two callers of one request, sent before it is answered, have its message applied twice on one process under a
   short `keep`.** The notes are [decision 0125](archive/0125-a-callers-reply-is-kept-as-long-as-its-boundary-says.md),
-  with [decision 0245](0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md), against
+  with [decision 0245](archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md), against
   [decision 0248](archive/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md).
   - The premise that fell: decision 0125 counts a reply's time from the step that answers, so that a message that
     waits loses none of its time. It rests, without saying so, on a retry read no later than its caller sent it. A
@@ -5516,7 +5516,7 @@ one declaration, and most of it was not read.
 - Decision 0124, a boundary exists in every deployment and authenticates: no later note makes it false. A program
   whose sender is `null` ([decision 0180](0180-a-program-leaves-out-what-it-does-not-have.md)) has a boundary that
   authenticates nothing the runtime sees, and
-  [decision 0269](0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md) says what holds of it.
+  [decision 0269](archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md) says what holds of it.
 - Decision 0124, a sender as fine as an identity keeps request ids apart: false for a program whose sender is `null`,
   since decision 0180. Decision 0269 says so, and answers `Reused` to another message under a used id. Two callers
   that send the same message under one id are still one request.
@@ -5669,7 +5669,7 @@ were not read.
 1. **Reproduced: `check` dies whole on a migration of the flags that throws, where it should name the entity as a
    `Load`.**
    - The notes: [decision 0247](0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md) and
-     [decision 0269](0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md).
+     [decision 0269](archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md).
    - The premise that fell: decision 0247 tells a row the program's readings die on from what the runtime throws,
      since the storage runs the migrations and the schema inside a guard. Decision 0269 added the kind `flags` to
      `Migration`. `entity` of `src/storage/entities.ts:157` runs `up('flags', row.version)` outside the guard. The
@@ -6870,7 +6870,7 @@ None.
   and under `bound` 1, every deviation, with the guard and without it. A probe of `drained` showed `a` never
   registered before the drain in those runs. So the forms that reproduce the findings hold the stop at `AfterReply`.
 - That a caller's `Receive` skipped by
-  [decision 0282](0282-a-callers-message-offered-before-its-answer-is-answered-by-it.md) holds a drain or `settled`:
+  [decision 0282](archive/0282-a-callers-message-offered-before-its-answer-is-answered-by-it.md) holds a drain or `settled`:
   `steps` gives the permit back and lowers `pending` in the same `ensuring` as for a step applied
   (`src/runtime/loop.ts:726`), so `drained` and `quiet` see it done. By reading, and by the tests of decision 0282,
   which `bun test` runs.
@@ -7343,7 +7343,7 @@ The code read is `src/rehearse.ts` whole, and `receive`, `requestKey`, `messageK
    `Reused`, where the runtime gives the stored reply.** The two notes are
    [decision 0200](0200-a-rehearsal-sends-under-a-request-id-the-test-names.md), whose reply is kept for the whole
    rehearsal, a deploy included, and
-   [decision 0269](0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md), which compares a retry with
+   [decision 0269](archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md), which compares a retry with
    what the request carried. Decision 0269 has the runtime read what was carried through the migrations of `inbound`
    from the version that wrote it. The rehearsal keeps what was carried as the version before encoded it, in `keep`
    at `src/rehearse.ts:295`, and the machine compares that text with the retry's at `src/machine.ts:975`. So decision
@@ -7382,7 +7382,7 @@ The code read is `src/rehearse.ts` whole, and `receive`, `requestKey`, `messageK
      receiver is given the stored reason as the migration reads it`.
 
    A `Rejected` of `init` that the world keeps in `answers`
-   ([decision 0253](0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)) is kept the same
+   ([decision 0253](archive/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)) is kept the same
    way, which was read and not run. A fix could begin at `Kept` of `src/rehearse.ts`. It would keep the encoded reason
    with its version, and read it through the migrations of the program deployed when a retry or a run is given it.
    `docs/design.md` says under Rehearsing that a rehearsed deploy exercises no migration, of the state and of the

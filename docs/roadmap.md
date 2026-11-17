@@ -31,8 +31,18 @@ it leaves this file, and what it decided goes into the design, a decision or an 
        src/cluster.test.ts src/storage.test.ts` passed, 153 tests with those under `slow`. Not reached: the rules of
        decisions 0165, 0166, 0168 and 0170 on the door's client, which area 11 reads with the callers, and the second
        client on the runner that holds the shard, an open question no test runs.
-    2. The tables of replies: `effecttea_replies`, `effecttea_answers` and `effecttea_waiting`. Notes 0245, 0253,
-       0265, 0269, 0282, 0285 and 0289.
+    2. Done, the tables of replies: `effecttea_replies`, `effecttea_answers` and `effecttea_waiting`. Notes 0245,
+       0253, 0265, 0269, 0282, 0285 and 0289, now in `archive/`. Its session read them whole with the code of
+       `src/storage/entities.ts`, and the archived notes the code cites on these tables, 0021, 0065, 0069 and 0125, of
+       which only 0125 lists premises. `docs/design.md` now says, under The public surface, that what a caller may
+       leave out comes last, and under What the storage writes how an answer is kept, how `expire` takes what a work
+       that ended was given, how a batch skips a reply a step holds, and how a wait is written. It says under Fibers
+       and locks how the loop skips a `Receive` already answered, and under A door and its step what a caller's key
+       holds on Cluster. The one premise that a note said read in its own code, that an operation's request is one
+       text across a deploy, is now `tested` by `an operation's request is one text whatever the receiver's schema of
+       its sender`, in `src/machine.test.ts`. The area found no new bug: bugs 3, 13, 49 and 94 hold its tables and are
+       fixed, and its premises `open` are open questions already. Not reached: the premises of decision 0167 on
+       `Resumed`, which area 11 reads with the door's client.
     3. The tables of an entity: `effecttea_entities`, `effecttea_entity_keys` and `effecttea_mailbox`. Notes 0185,
        0205, 0247 and 0260. Decision 0247 is `check`, which reads the entities' rows as an activation would.
     4. Done, the tables of versions: `effecttea_versions` and `effecttea_runner_versions`. No note outside the archive
@@ -74,14 +84,17 @@ it leaves this file, and what it decided goes into the design, a decision or an 
   - Done, area 4 first, so that a small area set the form of `docs/premises.md` and `docs/rejected.md`. Each says
     how an entry is written, and `the form of the list of premises` in `src/form.test.ts` checks the premises.
   - Done, area 1, on 2026-11-17, the second area moved, which archived the first notes.
-  - Next, area 2, then the areas in the order of the list. A session of an area starts from
+  - Done, area 2, on 2026-11-17.
+  - Next, area 3, then the areas in the order of the list. A session of an area starts from
     `bun scripts/premise-pairs.ts --tables`, or from the declarations of the module of its area, and lists the
     archived notes its code cites. It checks first that each note of its list keeps its state, and moves a note that
-    does not to the area that keeps it, as area 4 moved decision 0247 to area 3. Area 2 begins in
-    [`src/storage/entities.ts`](../src/storage/entities.ts): `write`, which a step runs and which deletes the replies,
-    the answers and the waits of an ended work, `reply`, `answer` and `keepAnswer`, `expire` and `ended`, which sweep,
-    and `waitingOf`. `waiters` of `onClusterOf` in [`src/storage/cluster.ts`](../src/storage/cluster.ts) reads
-    `effecttea_waiting` and cites no note.
+    does not to the area that keeps it, as area 4 moved decision 0247 to area 3. Area 3 begins in
+    [`src/storage/entities.ts`](../src/storage/entities.ts): `write`, which writes the three tables of an entity,
+    `entity`, which loads them, and `entities`, `onHold`, `within`, `interruptedWithin`, `due`, `suspensions` and
+    `stepsOf`, which read them. `entities`, `onHold`, `interruptedWithin`, `suspensions` and `stepsOf` cite no note.
+    `keepSent` of `onClusterOf` in [`src/storage/cluster.ts`](../src/storage/cluster.ts), `renamed` of
+    [`src/storage/tables.ts`](../src/storage/tables.ts) and `reindex` of
+    [`src/storage/projections.ts`](../src/storage/projections.ts) read them too.
     A session moves its notes by `bun scripts/archive-notes.ts <numbers>`, which runs `git mv` into `archive/` and
     rewrites every relative link to the notes and in them, and then runs `bun run links`. An area that finds no note
     outside the archive still writes its premises and its alternatives, as area 4 did.
@@ -149,7 +162,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     should fail before a fix is pushed first on a branch of its own, `claude/<name>`, without the fix, so that `main`
     stays green. The fix is then committed on that branch and pushed, and the branch is fast-forwarded into `main` once
     its CI passes. A note written on such a branch takes the next free number of `main` when it is merged.
-  - Done, on 2026-11-12, bug 13, `expire`: [decision 0285](decisions/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md).
+  - Done, on 2026-11-12, bug 13, `expire`: [decision 0285](decisions/archive/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md).
     Its case in the test of the pool is `bug13`. Its `gate` locks the row of one reply, and not a table, since a
     message's step reads its reply before its transaction, and a table locked would stop the step there.
   - Done, on 2026-11-12, bug 80, the trigger of the publications:
@@ -168,7 +181,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
        batch that waits for a reply's row. `forgetUnder` of [`src/storage/cluster.ts`](../src/storage/cluster.ts),
        which runs only on Cluster, stays an open question.
     2. Done, on 2026-11-12, bug 3, a reply to another entity's operation that stays for ever, fixed by
-       [decision 0289](decisions/0289-expire-deletes-what-work-that-ended-was-given.md): `expire` deletes the replies
+       [decision 0289](decisions/archive/0289-expire-deletes-what-work-that-ended-was-given.md): `expire` deletes the replies
        and the answers kept for work that has ended. The maintainer chose the sweep over a lock of the asker's key.
   - Done, on 2026-11-12, the pool's gate. The test runs each history on SQLite first, records the tables each call of
     the pair writes, and draws the gate among those both write, as decision 0283 says. Both calls waited at the lock

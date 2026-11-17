@@ -365,7 +365,7 @@ with a requirement that no example has yet.
 
 - **A caller's span left linked after its `Receive` is skipped.** `ask` of `src/runtime/callers.ts` records a
   caller's `Receive` with its caller, then reads the span and sets the link
-  ([decision 0282](decisions/0282-a-callers-message-offered-before-its-answer-is-answered-by-it.md)). A step that replies to the key
+  ([decision 0282](decisions/archive/0282-a-callers-message-offered-before-its-answer-is-answered-by-it.md)). A step that replies to the key
   between the two deletes no link, since none is set yet. The `Receive` is then skipped, so nothing deletes the link,
   and a later request of the same key, past its `keep`, would be linked to the old span until the entity unloads. It
   costs tracing, and changes nothing applied. The second reading of the premise review noticed it on 2026-11-12.
@@ -440,7 +440,7 @@ with a requirement that no example has yet.
   reading, on 2026-11-12, and wrote no test.
   - A test that holds the first step at its commit, by the points of the crash table, moves `TestClock` past the
     `keep`, and counts `applied`, would decide it.
-  - The fix of bug 94, [decision 0282](decisions/0282-a-callers-message-offered-before-its-answer-is-answered-by-it.md),
+  - The fix of bug 94, [decision 0282](decisions/archive/0282-a-callers-message-offered-before-its-answer-is-answered-by-it.md),
     holds a retry sent before the answer, under any `keep`, and leaves out a retry sent after the answer and
     stepped past its `keep`, which is what this question is left with.
 
@@ -634,7 +634,7 @@ with a requirement that no example has yet.
   - whether the resume reconciles the stored operations with the program, as an activation does.
 - **An operation's kept answer on Cluster across a crash, and under two runs at once.** An answer no entity stores is
   kept for the operation that was given it, and the door's step answers the request again with it
-  ([decision 0253](decisions/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)). A
+  ([decision 0253](decisions/archive/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)). A
   test with a Cluster the test plays holds the door's step. No test runs an operation on Cluster that is given the
   answer, crashes, and runs again. The rule also reads the kept answer outside the receiver's lock, since the runs of
   one incarnation are one after the other. A crash forks the stop of its entity's operations and does not wait for
@@ -706,19 +706,19 @@ with a requirement that no example has yet.
   of the storage keep their guard where it is not read again, on a pool of PostgreSQL
   ([decision 0222](decisions/0222-postgresql-with-many-connections.md)). The batched `expire` deletes a reply a step
   wrote again with a new time
-  ([decision 0245](decisions/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)), and `reindex`
+  ([decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)), and `reindex`
   writes the projection of a state over the row a step committed
   ([decision 0070](decisions/archive/0070-reindex-writes-a-row-only-over-its-state.md)). They are bugs 13 and 25 of
   the [roadmap](roadmap.md), each with a test of `src/postgres.test.ts` that no run has reached. Bug 25 is fixed by
   [decision 0284](decisions/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md), whose rule is that a statement that writes or deletes a row on a condition
   reads the condition from a row it has locked. Bug 13 is fixed by
-  [decision 0285](decisions/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md), whose batch skips the
+  [decision 0285](decisions/archive/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md), whose batch skips the
   replies a step holds, and bug 80 by
   [decision 0286](decisions/0286-the-trigger-of-the-outbox-locks-the-publications-in-order.md), whose trigger locks
   the publications in order, and bug 78 by
   [decision 0287](decisions/0287-a-reading-of-the-log-gives-each-partition-up-to-its-first-head.md), whose reading of the log gives each partition up to
   its first head. Bug 49 is fixed by decision 0285 too, and bug 3 by
-  [decision 0289](decisions/0289-expire-deletes-what-work-that-ended-was-given.md), whose `expire` deletes what work that ended was given. The other bugs are later cases of that rule, each with a note of its own. What is left would
+  [decision 0289](decisions/archive/0289-expire-deletes-what-work-that-ended-was-given.md), whose `expire` deletes what work that ended was given. The other bugs are later cases of that rule, each with a note of its own. What is left would
   be decided by:
   - the tests run against the CI's server, from the reviewers' branches;
   - a reading of every statement of `src/storage/` whose guard stands in a subquery or in an `INSERT … SELECT`, for
@@ -831,7 +831,7 @@ with a requirement that no example has yet.
   - a test of `src/runtime.test.ts` that crashes a receiver with its operation's finalizer held, while an operation of
     another entity sends to it, and that sees the message applied once the finalizer ends.
 - **A `Reused` reset by two clients on Cluster.** A caller's client resets a `Reused` that Cluster saved, and sends
-  the request once more ([decision 0269](decisions/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)).
+  the request once more ([decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)).
   Two clients of one request id and one other message may meet as bug 91 of [`docs/bugs.md`](bugs.md) says, where
   one client's reset drops the keep of the answer the other's send kept. The premise review of area 13 noticed it
   and did not check it. It would be decided by:
@@ -886,7 +886,7 @@ with a requirement that no example has yet.
     finalizer then crashes it, and its operations run beside the next holder's.
 - **A wait whose operation, run again, sends elsewhere.** A step that answers an operation `Suspended` stores its
   wait, and `suspended` lists it while the run that sent holds
-  ([decision 0265](decisions/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md)).
+  ([decision 0265](decisions/archive/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md)).
   An operation run again after a crash keeps its incarnation, and may send to another entity than the first time,
   since what it sends is its own effect's. Its wait stays listed under the first receiver until that receiver's
   suspension ends, and on Cluster that resumption tells its entity `Resumed`, which wakes nothing. No test reaches
@@ -1167,7 +1167,7 @@ with a requirement that no example has yet.
 
 - **A rehearsal's crash and an operation that sends another message after it.** A run of an operation after a crash
   that sends another message under a name it used is given the first message's reply, and the receiver holds the
-  first message alone ([decision 0269](decisions/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)).
+  first message alone ([decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)).
   An operation that reports what it sent in its completion then says what the receiver does not hold, with nothing
   reported. A rehearsal runs the operation again at a crash, so a test is where this is found at the least cost. A
   rehearsal that failed the test would refuse what the runtime allows. It would be decided by:

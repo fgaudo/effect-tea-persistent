@@ -2137,6 +2137,24 @@ describe('the operations a suspended entity answers', () => {
 })
 
 describe('who a request belongs to', () => {
+  // An answer kept for an operation is found by its request's text after a deploy of either program, so the text
+  // holds nothing a version writes (decision 0253).
+  test("an operation's request is one text whatever the receiver's schema of its sender", () => {
+    const base = tiny((message) => message, () => ({}))
+    const other = {
+      ...base,
+      schemas: { ...base.schemas, sender: Schema.Record(Schema.String, Schema.String) },
+    } as unknown as Program<Tiny>
+    const asked = {
+      _tag: 'Operation',
+      entity: { name: 'Booking', id: 'b1' },
+      key: { name: 'hold' },
+      incarnation: 3,
+      name: 'seats',
+    } as const as Request<null>
+    expect(Machine.requestKey(other, asked)).toBe(Machine.requestKey(base, asked))
+  })
+
   test('the same request id from different senders is different requests, each answered its own reply', () => {
     const machine = checked((message) => (message === 'no' ? reject : message), () => ({}))
     const first = handled(machine, { _tag: 'Receive', request: by('k'), message: 'no' })

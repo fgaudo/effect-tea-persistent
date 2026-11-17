@@ -70,7 +70,7 @@ family gets a fix of its own.
 - F, B, E and G are fixed. Family F is decided by
   [decision 0251](decisions/0251-a-retry-and-a-passivation-are-a-millisecond-at-least.md), family E by
   [decision 0252](decisions/0252-the-waker-activates-an-entity-a-crash-took-out-after-the-retry.md), family B by
-  [decision 0253](decisions/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md), and
+  [decision 0253](decisions/archive/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md), and
   family G, a check of the project that holds less than its note says, by
   [decision 0254](decisions/0254-a-check-of-the-project-runs-against-the-case-it-refuses.md). What each left
   unverified is an [open question](open-questions.md#running): A sender and Cluster's round at the least retry, The
@@ -104,8 +104,8 @@ family gets a fix of its own.
    todo `a rolling deploy to a newer version drains the at-most-once operation under way on the older runner`, in
    `src/cluster.test.ts`, expects `done` and gets `unknown`. Its fix is a choice of the design, which the
    [open question](open-questions.md#running) A drain across a deploy of a newer version on Cluster lists.
-3. **Fixed by [decision 0289](decisions/0289-expire-deletes-what-work-that-ended-was-given.md)**, whose `expire` deletes the replies and the answers kept for work that has ended, which two steps at once on a pool leave.
-4. **Fixed by [decision 0269](decisions/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)**, whose caller's request carries its message, and a reused id with another is answered `Reused`.
+3. **Fixed by [decision 0289](decisions/archive/0289-expire-deletes-what-work-that-ended-was-given.md)**, whose `expire` deletes the replies and the answers kept for work that has ended, which two steps at once on a pool leave.
+4. **Fixed by [decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)**, whose caller's request carries its message, and a reused id with another is answered `Reused`.
 5. **Reasoned: a rehearsal may apply a retry twice after a deploy that changes how the sender is written.** The
    rehearsal keys a reply by the request's text, and the runtime finds a request by its id
    ([decisions 0065](decisions/archive/0065-the-machine-holds-no-replies.md),
@@ -125,14 +125,14 @@ family gets a fix of its own.
    [open question](open-questions.md#running) A resume whose program drops a droppable operation kept while
    suspended.
 8. **Fixed by [decision 0270](decisions/0270-a-childs-name-is-never-an-own-tag.md)**, which refuses an own tag that may be a child's, and tries a child's wrapper first.
-9. **Fixed by [decision 0253](decisions/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)**, which keeps an operation's `Rejected` of `init` and its `NotFound` for its work.
+9. **Fixed by [decision 0253](decisions/archive/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)**, which keeps an operation's `Rejected` of `init` and its `NotFound` for its work.
 10. **Fixed by [decision 0291](decisions/archive/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md)**, whose door answers a creation the program dies on `Died`, which the creator's client resets and gives as the creator's defect, so that an operation's sender is suspended.
 11. **Fixed by [decision 0290](decisions/archive/0290-on-cluster-an-operators-client-keeps-the-id-the-doors-answer-carries.md)**, whose operator's client keeps the Cluster id its door's answer carries, so that a step or `expire` deletes Cluster's rows of the event.
 12. **Noticed, not checked: a defect's cause holding U+0000 may reach Cluster's tables unescaped.**
     ([decision 0205](decisions/0205-a-defects-cause-is-written-as-text-every-database-holds.md)). It matters once
     Cluster runs on PostgreSQL. Verified by reading what Cluster stores of a defect: the
     [open question](open-questions.md#running) A cause holding U+0000 in Cluster's tables.
-13. **Fixed by [decision 0285](decisions/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md)**, under which a batch of `expire` locks the replies it selects and skips those a step holds, so that on a pool it never deletes a reply a step wrote again with a new time. Reproduced first by the test of a contract of the pool on the CI's server.
+13. **Fixed by [decision 0285](decisions/archive/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md)**, under which a batch of `expire` locks the replies it selects and skips those a step holds, so that on a pool it never deletes a reply a step wrote again with a new time. Reproduced first by the test of a contract of the pool on the CI's server.
 14. **Fixed by [decision 0252](decisions/0252-the-waker-activates-an-entity-a-crash-took-out-after-the-retry.md)**, whose waker activates an entity a crash took out.
 15. **Reproduced: an entity created under a name a rename left draws the idempotency keys of the renamed entity
     of the same id.** A renamed entity keeps the keys of its old name
@@ -254,7 +254,7 @@ family gets a fix of its own.
 46. **Fixed by [decision 0254](decisions/0254-a-check-of-the-project-runs-against-the-case-it-refuses.md)**, whose check refuses a file only tests import whose name `bun test` runs.
 47. **Fixed by [decision 0254](decisions/0254-a-check-of-the-project-runs-against-the-case-it-refuses.md)**, whose check of the workflow reads every key of a job, and refuses one it does not read.
 48. **Fixed by [decision 0254](decisions/0254-a-check-of-the-project-runs-against-the-case-it-refuses.md)**, whose check refuses a file of the tests that reaches the databases and that `test:postgres` does not run.
-49. **Fixed by [decision 0285](decisions/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md)**, whose batch waits for no reply's row. Its case `bug49` of the test of the pool deadlocked on the CI against a batch that waits, at `10b3ac9` of `claude/bug49-mutated`.
+49. **Fixed by [decision 0285](decisions/archive/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md)**, whose batch waits for no reply's row. Its case `bug49` of the test of the pool deadlocked on the CI against a batch that waits, at `10b3ac9` of `claude/bug49-mutated`.
 50. **Fixed by [decision 0278](decisions/0278-on-a-full-volume-the-callers-stop-before-room-is-freed.md)**, under which the callers stop before an operator frees room on a full volume.
 51. **Fixed by [decision 0279](decisions/0279-createtables-dies-within-a-transaction-of-its-client.md)**, under which `createTables` dies within a transaction of its client.
 52. **Fixed by [decision 0254](decisions/0254-a-check-of-the-project-runs-against-the-case-it-refuses.md)**, which pins a seed in each explored test whose comment names an interleaving, and runs it against the rule taken out.
@@ -275,7 +275,7 @@ family gets a fix of its own.
     partition, the cursor with no consumer stands for it, and `pruneBatch` takes it as the floor
     ([decisions 0039](decisions/archive/0039-a-consumer-of-the-outbox-keeps-its-cursor.md),
     [0137](decisions/archive/0137-the-log-is-ordered-within-a-partition.md),
-    [0245](decisions/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)). The test `FAILING: an
+    [0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)). The test `FAILING: an
     ack of an older runner after a forget drops no row the stored consumer has not read`, in `src/cluster.test.ts`,
     on `claude/premise-pairs-first-ee0216` at `dd63071`. The fix begins at `ack` or `pruneBatch` of
     `src/storage/log.ts`, as for bug 23. The [open question](open-questions.md#storage-and-reading) The consumers of
@@ -304,7 +304,7 @@ family gets a fix of its own.
 59. **Reproduced: on Cluster, a caller that stops waiting keeps its rows in Cluster's tables for ever.** A client
     keeps its id only once it is given the answer
     ([decision 0171](decisions/archive/0171-on-cluster-a-callers-rows-go-once-its-client-has-the-answer-and-its-time-is-past.md)),
-    and the sweep of [decision 0245](decisions/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)
+    and the sweep of [decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)
     deletes only under ids kept, though the guide says the rows go once `keep` is past. A retry of that request id
     is answered from Cluster's saved reply for ever. The test `FAILING: a caller that stops waiting leaves its
     Cluster rows to go once its time is past`, in `src/cluster.test.ts`, on `claude/premise-pairs-messages-2-a90d4b`
@@ -327,7 +327,7 @@ family gets a fix of its own.
     `claude/premise-pairs-versions-1-e03c02` at `d13fa1c`, both in `src/cluster.test.ts`. The fix begins at
     `answerCodec` and `creationCodec` of `src/cluster.ts`. The [open question](open-questions.md#running) What a
     newer version answers an older one on Cluster.
-63. **Fixed by [decision 0265](decisions/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md)**, whose waits are stored, and read on every runner.
+63. **Fixed by [decision 0265](decisions/archive/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md)**, whose waits are stored, and read on every runner.
 64. **Fixed by [decision 0273](decisions/0273-the-partition-of-an-entity-is-the-librarys-own-hash.md)**, whose partition is the library's own hash, and whose round and waker log an entity stored under another.
 65. **Fixed by [decision 0274](decisions/0274-an-entity-is-not-loaded-while-the-stop-of-its-former-run-is-running.md)**, whose run of a crashed entity sends nothing, and whose shard lost waits for every stop of its entities.
 66. **Fixed by [decision 0261](decisions/0261-the-drain-reaches-a-deployment-still-activating.md)**, whose drain reaches a deployment still activating.
@@ -367,7 +367,7 @@ family gets a fix of its own.
     or at the deploy, which would keep the name for the life of the runner once its door is registered. The
     [open question](open-questions.md#running) A deploy that fails after its door is registered.
 71. **Fixed by [decision 0251](decisions/0251-a-retry-and-a-passivation-are-a-millisecond-at-least.md)**, which refuses a `retry` and a `passivate` of 0.
-72. **Fixed by [decision 0265](decisions/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md)**, whose waits are stored, and listed after a restart.
+72. **Fixed by [decision 0265](decisions/archive/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md)**, whose waits are stored, and listed after a restart.
 73. **Reproduced: on Cluster, a door's step never warns of a large state.** The runtime warns of a step that writes
     more than `warn.characters`
     ([decision 0135](decisions/archive/0135-a-large-state-is-split-by-the-program-and-the-runtime-warns-of-it.md)),
@@ -487,12 +487,12 @@ family gets a fix of its own.
     operators' events on Cluster.
 92. Fixed by [decision 0275](decisions/0275-on-cluster-a-doors-commit-tells-the-readings-itself.md).
 93. **Fixed by [decision 0281](decisions/0281-a-rehearsals-time-is-a-whole-millisecond.md)**, whose rehearsal refuses a duration and a start time between two milliseconds.
-94. **Fixed by [decision 0282](decisions/0282-a-callers-message-offered-before-its-answer-is-answered-by-it.md)**, whose caller's message offered before its request is answered is answered by that answer, and not applied.
+94. **Fixed by [decision 0282](decisions/archive/0282-a-callers-message-offered-before-its-answer-is-answered-by-it.md)**, whose caller's message offered before its request is answered is answered by that answer, and not applied.
 95. **Reproduced: `check` dies whole on a migration of the flags that throws, where it should name the entity as a
     `Load`.** [Decision 0247](decisions/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)
     tells a row the program's readings die on from what the runtime throws, since the storage runs the migrations and
     the schema inside a guard.
-    [Decision 0269](decisions/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md) added the kind
+    [Decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md) added the kind
     `flags` to `Migration`, and `entity` of `src/storage/entities.ts` runs the migrations of the flags outside the
     guard. So a migration of the flags of version 2 that throws on the flags version 1 stored fails the whole `check`,
     which lists no entity, while a migration of the state that throws gives a `Load` of the entity. A deploy dies on
@@ -687,7 +687,7 @@ family gets a fix of its own.
     `Reused`, where the runtime gives the stored reply.** A rehearsal keeps a named request's reply for the whole
     rehearsal, a deploy included
     ([decision 0200](decisions/0200-a-rehearsal-sends-under-a-request-id-the-test-names.md)).
-    [Decision 0269](decisions/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md) compares a retry
+    [Decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md) compares a retry
     with what the request carried, and the runtime reads what was carried through the migrations of `inbound` from
     the version that wrote it. The rehearsal keeps what was carried as the version before encoded it, in `keep` of
     `src/rehearse.ts`, and the machine compares that text with the retry's. So decision 0200's rule rests on a premise
@@ -714,7 +714,7 @@ family gets a fix of its own.
     reason is given the reason as the migration writes it` gives `{ limit: 10 }` where the runtime gives
     `{ limit: 1000 }`. `FAILING: a run after a crash and a deploy of the receiver is given the stored reason as the
     migration reads it` gives `SoldOut` where the runtime gives `SalesClosed`. A `Rejected` of `init` that a world
-    keeps in `answers` ([decision 0253](decisions/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md))
+    keeps in `answers` ([decision 0253](decisions/archive/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md))
     is kept the same way, read and not run. The fix begins at `Kept` of `src/rehearse.ts`, which would keep the encoded
     reason with its version, and read it through the migrations of the program deployed when a retry or a run is
     given it.

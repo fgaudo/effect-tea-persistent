@@ -56,7 +56,7 @@ The list is written area by area, by the step The rules move from the notes into
   in [decision 0169](decisions/archive/0169-on-cluster-an-operations-request-ids-are-kept-under-its-work-and-deleted-with-it.md)
   and [decision 0171](decisions/archive/0171-on-cluster-a-callers-rows-go-once-its-client-has-the-answer-and-its-time-is-past.md),
   before a release held it, and again in
-  [decision 0245](decisions/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md). It deletes by
+  [decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md). It deletes by
   entity type and time, so it spares neither an operation's request ids kept under its work, nor a caller's rows its
   client has not read. Reopen if: Cluster's retention takes the requests to spare.
 - **`MessageStorage.clearReplies` or `Sharding.reset` to forget a request.** Weighed in decisions 0090, 0169 and 0171.
@@ -126,3 +126,87 @@ The list is written area by area, by the step The rules move from the notes into
 - **`Died` for an operation's creation alone, and the wait for a fix kept for a caller's.** Weighed in decision 0291.
   It keeps bug 58 for a caller, and a mark of Cluster's in the test of a contract. Reopen if: a caller on one
   process comes to wait for a fix too.
+
+## The tables of replies
+
+- **A default `keep` of a day.** Weighed, 2026-11-10, in
+  [decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md). It ends the growth
+  of the replies without a change to every call, but a retry after a day is applied twice without the boundary having
+  chosen it. Reopen if: a protocol of retries comes to be known to the library.
+- **A sweep left off by default.** Weighed in decision 0245. A deployment whose operator does not know of it grows as
+  before. Reopen if: a sweep comes to change what a step answers.
+- **Every runner of Cluster sweeps.** Weighed in decision 0245. It is simpler, but the runners contend for the same
+  rows, and `expire` is one statement over a whole program. Reopen if: Cluster's singletons cost more than the
+  contention.
+- **`create`'s flags left positional, and written `null`.** Weighed in decision 0245, where a Fable 5.2 agent advised
+  it, and the maintainer chose to move the flags into the request. Reopen if: the request of `create` comes to hold
+  nothing a caller may leave out.
+- **The rehearsal's sender left positional, left out only where it is `null`.** Weighed in decision 0245. A test that
+  names a request id would still write `null` before it. Reopen if: a rehearsal's `send` takes no request id.
+- **An operation's `create` left with its flags before the name.** Weighed in decision 0245. No operation then created
+  an entity whose flags are `null`, but a later change breaks every program that creates from an operation, so the
+  maintainer applied the rule before the first release. Reopen if: never, once a release holds the signature.
+- **The design narrows its promise on a run after a crash**, and says that a `Rejected` of `init` and a `NotFound` may
+  differ there. Weighed, 2026-11-11, in
+  [decision 0253](decisions/archive/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md). It
+  changes no code, but every program that creates or sends from an operation carries the rule, and an operation that
+  talks only to entities no longer acts once. Reopen if: the room of `effecttea_answers` costs more than the promise.
+- **A rejected id keeps a row at the receiver.** Weighed in decision 0253. A rejected creation would leave something,
+  and another creator could no longer create the id, which decision 0182 rejected. Reopen if: a rejected creation
+  comes to be stored.
+- **The answers kept in `effecttea_replies`.** Weighed in decision 0253. That table keys a reply by the request's text
+  alone, so an operation's creation and message under one name would share a row. Reopen if: the table of replies
+  comes to key its rows by the kind of request.
+- **The list of who waits read from the senders the process registered**, narrowed to the operations that run.
+  Weighed, 2026-11-11, in
+  [decision 0265](decisions/archive/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md),
+  which replaced decision 0114 on this point. On Cluster the runners would answer differently, and an operator would
+  lose, at each restart, that an entity waits for another. Reopen if: a wait comes to cost more than an operator's
+  view of it.
+- **A restarted process starts the operations of suspended entities.** Weighed in decision 0265. It would run the
+  program deployed against a state only `resume` may activate, could not reach an entity suspended on its activation,
+  and would run again the operation an entity died in. Reopen if: never, while a suspension waits for an operator.
+- **A wait of a run that ended deleted by the step that ends it.** Weighed in decision 0265. The reading already leaves
+  such a row out, and the suspension's end deletes it, so the deletion would be a second rule for the same rows.
+  Reopen if: such rows come to be many.
+- **The contract alone, for a request id reused for another message.** Weighed, 2026-11-12, in
+  [decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md). The design says that
+  a program whose sender is `null` keeps one space of request ids, but alone it keeps a silent loss for every caller
+  that breaks the rule by mistake. Reopen if: the room of what a request carries costs more than the check.
+- **A sender required wherever a program takes inbound messages.** Weighed in decision 0269. A sender written alike for
+  every caller, and two devices of one identity, would keep the loss, and a program with no identity would invent a
+  sender. Reopen if: no program without a sender takes messages.
+- **A hash of the message instead of its text.** Weighed in decision 0269. No migration reads a hash, so a retry
+  after a deploy that changes the message's form would be answered `Reused`. Reopen if: migrations come to be given
+  the value and not the JSON.
+- **`Reused` as the caller's defect.** Weighed in decision 0269. A defect is the code's, and a caller outside the
+  library causes `Reused`. Reopen if: a defect comes to name the caller's code.
+- **The check of what a request carries on an operation's requests too.** Weighed in decision 0269, as decision 0047
+  had. An operation's request never holds two intents, so the check would find only a run after a crash or a deploy
+  that built its message otherwise, and the operation would be answered `Reused` or die into the same mismatch at
+  each resume. Reopen if: two intents come to share an operation's request.
+- **A second caller joined to a caller still registered, with nothing offered.** Weighed, 2026-11-12, in
+  [decision 0282](decisions/archive/0282-a-callers-message-offered-before-its-answer-is-answered-by-it.md). It fails a retry
+  sent after the first caller gave up, as a Fable 5.2 agent reproduced, and a caller joined so would pass the bound of
+  callers' messages. Reopen if: a first `Receive` comes to leave its queue when its caller gives up.
+- **A reply kept for the runtime's reading for a least time beside its `keep`.** Weighed in decision 0282. It holds by
+  a margin, which a long mailbox outlasts. Reopen if: a mailbox comes to have a bound in time.
+- **A `keep` below a least one refused.** Weighed in decision 0282. A retry that waits behind a slow step outlasts any
+  least `keep`, and the tests of the sweep rely on a `keep` of 0. Reopen if: a step comes to have a bound in time.
+- **Effect's `Cache` to join callers.** Weighed in decision 0282. It shares lookups made at once, but the answer here
+  comes from the entity's step and its commit, and the process's map of callers is already the join. Reopen if: a
+  module of Effect joins waiters on an answer another fiber gives.
+- **The time in the outer `WHERE` of a batch's `DELETE`.** Weighed, 2026-11-12, in
+  [decision 0285](decisions/archive/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md). PostgreSQL reads that `WHERE`
+  again on the row committed, so it fixes the case too, but it keeps a guard where decision 0284 says a condition is
+  read from a row locked, and leaves the batch waiting for every step that holds a row. Reopen if: decision 0284's
+  rule changes.
+- **`FOR UPDATE` that waits, in a batch of `expire`.** Weighed in decision 0285. It reads the row committed too, and
+  makes a sweep wait for the steps, which bug 49 deadlocked. Reopen if: a batch comes to hold no row while it waits.
+- **The receiver locks the asker's key `FOR SHARE` before it stores a reply or an answer.** Weighed, 2026-11-12, in
+  [decision 0289](decisions/archive/0289-expire-deletes-what-work-that-ended-was-given.md). The row would go at once, but a
+  receiver's step would wait for an asker's, two entities that answer each other in one step would close a cycle,
+  and every step would lock every key it writes, in one order. Reopen if: a row left until the next sweep comes to
+  cost a wrong answer.
+- **A trigger, or a check deferred to the commit.** Weighed in decision 0289. Each reads the same snapshot, and splits
+  the dialects. Reopen if: both dialects come to give a check that reads what is committed at the commit.

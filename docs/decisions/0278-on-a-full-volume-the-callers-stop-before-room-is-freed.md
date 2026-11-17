@@ -17,7 +17,7 @@ their steps while the room is freed, on the CI's volume of 32 MB. In the job `po
 `78b4063`, the callers took the 1 MB freed within a second, with 95 and 50 steps of about 16 KB each. The forget
 then committed, and the prune failed with `database or disk is full`. That is bug 50 of the roadmap.
 
-A prune deletes 256 rows a batch ([decision 0245](0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)),
+A prune deletes 256 rows a batch ([decision 0245](archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)),
 which is about 4 MB of pages there, and a step needs about 16 KB. The Fable 5.2 agent's opinion judged that a smaller
 batch would not hold the case. A one-row batch fits only in what the WAL has left, which a step that failed may have
 used. No spike has tried it.

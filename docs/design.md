@@ -251,11 +251,11 @@ A message is one of two kinds, and the rule for a message that does not apply fo
   protocol retries for, and `keep` is required, since only the boundary knows that time. The reply is then kept for
   that time from the step that answers, and a retry after it is a new request, applied again. A retry sent before
   the answer is answered by it and is not applied, however short the `keep`
-  ([decision 0282](decisions/0282-a-callers-message-offered-before-its-answer-is-answered-by-it.md)). A `keep` of
+  ([decision 0282](decisions/archive/0282-a-callers-message-offered-before-its-answer-is-answered-by-it.md)). A `keep` of
   `'forever'` keeps the reply for ever. A step that stores a reply deletes its entity's replies past their time, and
   `Handle.expire` those of the whole program, which [the sweep](#the-sweep) runs at an interval
   ([decisions 0125](decisions/archive/0125-a-callers-reply-is-kept-as-long-as-its-boundary-says.md),
-  [0245](decisions/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)). A program whose sender is
+  [0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)). A program whose sender is
   `null` takes none, and its callers' requests leave the sender out. Request ids are their
   sender's: another entity's are
   stored under its address, apart from everyone else's
@@ -273,7 +273,7 @@ A message is one of two kinds, and the rule for a message that does not apply fo
   request, as `422` over HTTP. A program whose sender is `null` keeps one space of request ids for every caller, so
   its boundary gives request ids unique across its callers, as a UUID each. A request after a reply's `keep` is a
   new request, whatever it carries
-  ([decision 0269](decisions/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)).
+  ([decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)).
   `meta.from` says who sent it, read off the request, so that
   `update` decides who may do what. An inbound message may arrive in any state: a slow client, a retry, a second
   device, a malicious caller. One that does not apply is rejected.
@@ -297,12 +297,12 @@ behind.
 An entity is created by a request of its own, with its flags, answered `Created` once and `AlreadyExists`
 after, or `Rejected` where its program's `init` rejects the flags, as the paragraph after this one says. The flags
 are stored with the entity, and a caller's retry of the creation that carries other flags is answered `Reused`, as
-a message is ([decision 0269](decisions/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)). A
+a message is ([decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)). A
 message to an entity that does not exist is answered `NotFound`, and creates nothing
 ([decision 0012](decisions/archive/0012-creation-is-a-request-of-its-own.md),
 [decision 0017](decisions/archive/0017-creation-in-the-machine.md)). A caller gives the flags in the request, as
 `create(id, { flags, requestId, sender })`, and a program whose flags are `null` leaves them out
-([decision 0245](decisions/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)). A creation and a message may share a request id,
+([decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)). A creation and a message may share a request id,
 and each is answered apart ([decision 0050](decisions/archive/0050-a-creation-is-answered-apart-from-a-message.md)). `init`
 sees no sender, so the program does not decide who may create an entity. The boundary decides it, or an entity
 does: the entity's `update` rejects the request, or keeps work whose operation calls `create`. A defect at creation
@@ -448,7 +448,7 @@ impossible, so that no program has to remember attempt numbers.
 
 An entity sends a message to another from an operation, with `send(receiver, id, message, name)`, and creates one
 with `create(receiver, id, name, flags)`, whose flags come last and are left out where the receiver's flags are
-`null` ([decision 0245](decisions/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)). The runtime gives
+`null` ([decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)). The runtime gives
 each run of an operation its own `Entities`, so the request is that run's — its entity, key and incarnation — under
 the name, whatever the operation's delivery, and no operation can send under another's
 ([decision 0060](decisions/archive/0060-send-and-create-take-no-key.md)): an operation that sends twice under one name to
@@ -457,12 +457,12 @@ the same requests, and gets the receiver's stored replies, kept while the work t
 ([decision 0021](decisions/archive/0021-a-reply-is-kept-while-the-work-that-asked-holds.md)). An answer no entity
 stores is kept for the operation the same way: a creation `init` rejected, and a message's `NotFound`. A run after a
 crash is given the kept answer, though another creator has made the entity since, and its message is not applied
-([decision 0253](decisions/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)). What an operation's
+([decision 0253](decisions/archive/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)). What an operation's
 request carries is not compared, since the runtime makes the request and no two intents share it. A run after a crash
 that builds another message, or other flags, under a name is given the reply of the first one, which alone the
 receiver holds. So an operation whose completion reports what it sent builds the message from its stored value and
 the replies it was given, never from what it reads again
-([decision 0269](decisions/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)). While the receiver is
+([decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)). While the receiver is
 suspended, `send` waits for its resumption, and an operation that reaches a program not deployed yet waits for
 its deploy ([decision 0045](decisions/archive/0045-an-operation-waits-for-a-program-not-deployed-yet.md)): each is woken by
 what it waits for, and nothing looks again on a clock
@@ -582,7 +582,7 @@ kind of stored value: `state`, `flags`, `operation`, `inbound`, `internal`, `rej
 and a kind left out is unchanged. `flags` reads the flags stored with the request that created an entity, which a
 caller's retry of the creation is compared with, and `inbound` reads the message of a stored reply too. Both are
 read as the migrations write them, and not decoded
-([decision 0269](decisions/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)). It works on the JSON, which every schema encodes to
+([decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)). It works on the JSON, which every schema encodes to
 ([decision 0030](decisions/archive/0030-a-schema-encodes-to-json.md)), so the types and schemas of the version before do
 not live on in the code.
 
@@ -762,7 +762,7 @@ An operator finds the suspended entities with `suspended`, the longest suspended
 the cause, since when, and the operations of other entities that wait for its resumption. The step that answers an
 operation `Suspended` stores its wait, and the step that takes the entity out of its suspension deletes the waits.
 So the list is read from storage, on any runner and after a restart, and holds a wait while the run that sent it
-holds ([decision 0265](decisions/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md)).
+holds ([decision 0265](decisions/archive/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md)).
 The cause is stored as text, as [what the storage writes](#what-the-storage-writes) says. Nobody is told on a clock: a sender waits as long as it takes, and a deployment that wants an alarm reads the list. `resume` and `discard` say
 what they did: `Resumed` or `Discarded`; `NotDiscarded`, for an entity that died on an internal message, in an
 operation or on its activation; `StillSuspended`, with the new cause, when the program deployed dies on the stored
@@ -1035,7 +1035,7 @@ stalled consumer holds, and room for the steps the runtime takes of its own: the
 and the steps a crash took out. Then the operator deploys without the consumer, forgets it, prunes, and lets the
 callers in again. The runtime keeps no room of its own: it does not hold the volume, and a file of reserved room is
 the operator's to keep and drop ([decision 0223](decisions/0223-a-disk-that-is-really-full.md),
-[decision 0245](decisions/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md),
+[decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md),
 [decision 0278](decisions/0278-on-a-full-volume-the-callers-stop-before-room-is-freed.md)).
 
 ### The sweep
@@ -1052,20 +1052,20 @@ A sweep changes no answer. It deletes only the replies past their `keep`, the re
 of another entity that has ended, and the rows of the log that every stored consumer has read. The step of the work
 that ends deletes those replies and answers itself, and a sweep takes those it leaves where it runs beside the step
 that stores them, on a pool of PostgreSQL
-([decision 0289](decisions/0289-expire-deletes-what-work-that-ended-was-given.md)). A topic no consumer is stored for keeps no rows under a sweep, so a deployment that wants a
+([decision 0289](decisions/archive/0289-expire-deletes-what-work-that-ended-was-given.md)). A topic no consumer is stored for keeps no rows under a sweep, so a deployment that wants a
 topic's history declares its consumer before the topic's first step, or sweeps with `prune: false`. `forget` stays
 an operator's call. SQLite gives no room back to the volume once rows are deleted, so a sweep bounds the growth of
 the file and shrinks nothing.
 
 `prune` and `expire` delete in batches of 256 rows, read in the order of an index, and repeat until a batch deletes
 nothing. A batch skips the rows a step or another batch holds
-([decisions 0285](decisions/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md),
+([decisions 0285](decisions/archive/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md),
 [0288](decisions/0288-a-batch-of-prune-skips-the-rows-another-batch-holds.md)). Each batch is a transaction of its own. A short transaction holds SQLite's one writer for less time, so a
 sweep does not stall the steps. The count each gives is the sum of its batches. A batch of `prune` reads the cursors
 in its own transaction, and a batch of `expire` on Cluster deletes Cluster's rows under each id it takes. The runtime
 calls neither Cluster's `deleteProcessed` nor its `MessageRetention`, since neither spares an operation's request
 ids kept under its work, nor a caller's rows its client has not read
-([decision 0245](decisions/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)).
+([decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)).
 
 ### What a step publishes
 
@@ -1118,9 +1118,9 @@ time passes, and when the process dies:
   again, and the reply is kept through a restart and a deploy. Without one, each send is a new request
   ([decision 0200](decisions/0200-a-rehearsal-sends-under-a-request-id-the-test-names.md)). A second send under the same
   sender and request id that carries another message is answered `Reused`, and is not applied
-  ([decision 0269](decisions/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)). A program whose sender is
+  ([decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)). A program whose sender is
   `null` may leave the sender out, and the request with it, as `send(message)`
-  ([decision 0245](decisions/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md));
+  ([decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md));
 - `pending(key)` finds the work under way under one of the program's keys, with its idempotency key and its
   value, which a test asserts as it asserts a command in effect-tea. A key with a parameter takes it too:
   `pending('charge', 'line-7')`. It fails the test when there is none, and `underWay(key)` gives null instead;
@@ -1174,7 +1174,7 @@ machine, with one time and one process for all of them
   without `restart` and `deploy`, and with `run`. A world runs one program under each name, as a process does, so a
   creation by another program under a name the world runs fails the test. The flags come last, and a program whose
   flags are `null` leaves them out, as the start of `rehearse` does
-  ([decision 0245](decisions/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md));
+  ([decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md));
 - `run(pending)` runs the operation's runner, with `Entities` provided by the world and the other services by the
   scenario, and completes the operation with its message, as `answer` does. A run asks for every service of its
   program's runners, since a key may hold any of the program's operations. A test provides a service it does not
@@ -1184,7 +1184,7 @@ machine, with one time and one process for all of them
   returns. The world keeps the reply under the run's request while the work that asked is stored, so a run after a
   restart is given the stored reply. A receiver that does not exist answers `NotFound`, and `create` creates an
   entity in the world. A `NotFound` and a creation `init` rejects are kept for the run's work too, as the runtime
-  keeps them ([decision 0253](decisions/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)).
+  keeps them ([decision 0253](decisions/archive/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)).
   A `create` through a reference fails the test where the world runs no program of its name, since a reference
   brings no code to run ([decision 0183](decisions/0183-a-receiver-is-named-by-a-reference.md));
 - `run(pending, { crash: true })`, or `run(key, { crash: true })`, runs the runner to its end, drops its message,
@@ -1486,6 +1486,12 @@ The surface is four entries of the package `@fgaudo/effect-tea-persistent`
 A process on one machine imports neither Cluster nor the checks of a test, and a browser reaches no module of Node
 through `./program`. A test of the form of `src/` checks both.
 
+What a caller may leave out of a call comes last: the call's last argument, or an object that is its last argument.
+TypeScript allows no optional parameter before a required one, and Effect's own calls end with their options too. So
+a request leaves out a sender that is `null`, and `create` leaves out flags that are `null`, as
+`create(id, { flags, requestId, sender })` and `create(receiver, id, name, flags)` do
+([decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)).
+
 The library gives no map of an answer to a status of a protocol, since the status is the boundary's choice, and a
 boundary may not speak HTTP. A boundary matches on the `_tag` of `Creation`, `Answer` and `Operated`, with one
 entry for each tag that the compiler checks, so that a tag the library adds fails to compile in the boundary.
@@ -1511,8 +1517,36 @@ names, or in the one that stores it, if that work has already ended: only the st
 
 An answer no entity stores, given to another entity's operation, lies in a table of its own, `effecttea_answers`, and
 is deleted as a reply to another entity is. A row is keyed by the receiver, the request's text, and whether the
-request was a creation or a message, since an operation may give both one name
-([decision 0253](decisions/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)).
+request was a creation or a message, since an operation may give both one name. The answer is kept before the
+operation is given it: on one process `create` and `send` of `src/runtime/callers.ts` keep it in a transaction of
+their own, and on Cluster the door's step keeps it in the door's transaction, so that Cluster saves the answer and the
+runtime keeps it in one commit. An operation's request holds the sender's address, key, incarnation and name, and
+nothing a version of either program writes, so a kept answer is found by its text across a deploy, and its column
+`version` says only how the reason is read. A rename moves the answers with the receiver's and the sender's other
+rows ([decision 0253](decisions/archive/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)).
+
+On a pool of PostgreSQL the receiver's step that stores a reply or an answer, and the asker's step that ends the
+work, may run at once, and each reads the other's row only once it is committed. Both then leave the row. `expire`
+deletes it: after its batches of the replies past their time, it deletes in batches the replies and the answers whose
+asker's key, in the incarnation the row names, is not stored. A batch first selects such rows and locks them,
+skipping those a step holds, then deletes the rows locked on the same condition, read from a snapshot taken once they
+are locked. The condition is an absence, which no lock can hold. It needs none, since an incarnation is never drawn
+again for a key, and the entity's row that counts the incarnations is never deleted, so a key absent from what is
+committed stays absent ([decision 0289](decisions/archive/0289-expire-deletes-what-work-that-ended-was-given.md)).
+
+A batch of `expire` of the replies past their time locks the rows it selects, by `FOR UPDATE SKIP LOCKED` on
+PostgreSQL and by nothing on SQLite, where one transaction writes at a time. The clause is
+`lockingTheConditionSkipping` of [`src/storage/held.ts`](../src/storage/held.ts). A reply that a step answering a
+retry holds, and writes again with a new time, is left to a later batch, and a reply committed after the batch's
+snapshot is read again on the row committed. So no batch deletes a reply under the new time of its retry. The batch of
+Cluster's ids in `effecttea_given_requests` takes no lock, since Cluster runs on one file of SQLite
+([decision 0285](decisions/archive/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md)).
+
+A wait of an operation for a resumption lies in `effecttea_waiting`, one row for each run and name, keyed by the
+receiver, the sender's entity, key, parameter and incarnation, and the name. The step that takes the entity out of its
+suspension deletes its waits before it writes its own, and a wait answered twice is written once. On Cluster the door
+reads the waiting entities before the step, and tells each `Resumed` from that transaction
+([decision 0265](decisions/archive/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md)).
 
 The machine holds no reply. A message that arrives is given the reply stored under its request, which the runtime
 reads by the request just before the step, where no other event of the entity is applied; an activation reads
@@ -1583,6 +1617,15 @@ one at most. Effect yields a fiber after a count of operations, and a step whose
 operations. A loop with nothing to do starts its wait at once
 ([decision 0134](decisions/archive/0134-an-entitys-loop-yields-between-two-steps.md)).
 
+A caller's `Receive` is recorded under its request's key, in `offers` of the loaded entity, as its caller is
+registered, with nothing between the two that yields, so that no reply falls between them. A step's `Replied` marks
+every `Receive` recorded under its key, in `answered`, and takes the key out. The loop skips the step of a marked
+`Receive`, since its caller was registered before the offer and the reply already reached it, gives its permit back,
+and counts it as done. So a retry offered before its request is answered is answered by that answer and not applied,
+under any `keep`, a caller that gave up after its offer included. Only a caller's request is recorded, since an
+operation's reply is kept while its work holds, with no time
+([decision 0282](decisions/archive/0282-a-callers-message-offered-before-its-answer-is-answered-by-it.md)).
+
 ### Effect Cluster inside the runtime
 
 #### A door and its step
@@ -1596,6 +1639,12 @@ operations. A loop with nothing to do starts its wait at once
 - A request is keyed by the version that keyed it and its `requestKey`. Cluster answers a retry within a version, and
   the runtime's replies answer one across versions
   ([decision 0085](decisions/archive/0085-on-cluster-a-request-is-keyed-and-answered-as-on-one-process.md)).
+  A caller's request is keyed with the text of the message it carries too, so that Cluster answers from its saved
+  reply only a retry of the same message, and another message reaches the door, which answers it `Reused`. An
+  operation's request keeps the key of its run and name alone, so that a run after a crash is answered from the reply
+  saved. A `Reused` Cluster saved is no reply: the caller's client resets it and sends the request once more, and a
+  creator's client resets it before it sends, since the reply it was compared with may be past its time at the retry
+  ([decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)).
 - Everything a step answers is a success of the RPC, as text
   ([decision 0160](decisions/archive/0160-on-cluster-a-door-answers-as-text-and-a-creation-the-program-dies-on-waits-for-a-fix.md)).
   A creation the program dies on stores nothing, and is answered `Died` with its cause. The creator's client resets
@@ -1650,7 +1699,7 @@ A runner learns of another runner's commit from the file: while a reading of the
   poll covers the reply's commit, and the second a read that failed, which Cluster logs at the level `Debug`
   ([decision 0248](decisions/archive/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md)).
 - A creation's client keeps its id for the least time, and a retry after its rows go is answered `Created` from the
-  entity's row ([decision 0245](decisions/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)).
+  entity's row ([decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)).
 - The runtime's own reply, in `effecttea_replies`, is still deleted past its `keep`, and only Cluster's rows wait
   for the least time. So a retry of a message under the same request id, within the least time of a shorter `keep`,
   is given the reply Cluster saved, and is not applied again.

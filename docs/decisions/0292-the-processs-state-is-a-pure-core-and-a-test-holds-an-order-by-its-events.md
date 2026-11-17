@@ -122,7 +122,7 @@ which no transaction holds. So `Tx` modules would take out few pins, and leave t
   snapshot of decision 0185. The other nine are not listed yet. The first part of the step lists all eighteen.
 - **The bookkeeping stays out of Effect's `Tx` modules.** [Decision 0177](archive/0177-the-runtimes-bookkeeping-stays-in-synchronous-steps.md)
   stays, and its reason that `suspended` reads the list of who waits fell with
-  [decision 0265](0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md). This note's
+  [decision 0265](archive/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md). This note's
   reason replaces it: the core keeps the rule by its form, with no primitive and no model of Effect's scheduler.
 
 ## What it rests on

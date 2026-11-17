@@ -45,7 +45,7 @@ sends, and not after the answer, so a retry runs `init` again, once for each cal
   process stores, since `render` of the text gives the text again. A resume runs the operation again, whose client
   resets the `Died` and sends the creation again.
 - **A `Died` is not kept for an operation's work**, in `effecttea_answers`, as a `Rejected` is
-  ([decision 0253](../0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)). One process
+  ([decision 0253](0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)). One process
   keeps nothing of a defect, and a resume after a fix must create the entity. The door keeps the operation's request
   id before `init` runs, as for any creation, so that the work's end deletes Cluster's rows of it
   ([decision 0169](0169-on-cluster-an-operations-request-ids-are-kept-under-its-work-and-deleted-with-it.md)).

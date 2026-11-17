@@ -198,3 +198,157 @@ rows, and under A door and its step, of `design.md`.
   creation the program dies on reaches Cluster with its U+0000 escaped`, in `src/cluster.test.ts`.
 - That `Effect.uninterruptibleMask` keeps the read of an answer's id and its keep whole while the wait for the answer
   can be interrupted: **documented** by its JSDoc at Effect 4.1.3, `@stability stable`.
+
+## The tables of replies
+
+The table `effecttea_replies` holds the replies of a step: a caller's, kept for its `keep`, and another entity's
+operation's, kept while the work that asked holds. `effecttea_answers` holds the answers no entity stores, a
+creation `init` rejected and a message's `NotFound`, kept for an operation's work. `effecttea_waiting` holds the
+operations that wait for a suspended entity's resumption. `write`, `reply`, `answer`, `keepAnswer`, `expire`, `ended`
+and `waitingOf` of [`src/storage/entities.ts`](../src/storage/entities.ts) write and read them, with `waiters` of
+`onClusterOf` in [`src/storage/cluster.ts`](../src/storage/cluster.ts). The rules are under Messages, Entities that
+talk, Defects, The sweep, What the storage writes and Fibers and locks, of `design.md`.
+
+- That only the boundary knows how long its callers retry for, so that `keep` is required and has no default:
+  **chosen** by [decision 0125](decisions/archive/0125-a-callers-reply-is-kept-as-long-as-its-boundary-says.md), and
+  again by [decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md). A boundary
+  that gives a `keep` shorter than its callers' retries has a message applied twice.
+- That the runtime's clock and the boundary's agree well enough for a `keep` counted on the runtime's clock: **open**.
+  A skew between the two shortens or lengthens the window by that skew. It is the
+  [open question](open-questions.md#running) A boundary's clock against the runtime's, for a reply's `keep`.
+- That the machine counts a caller's time from the step that answers, and gives another entity's reply none:
+  **tested** by `how long a reply is kept (decision 0125)`, in `src/machine.test.ts`.
+- That a reply is read before its time only, and that a step and `expire` delete what is past it, of the entity and of
+  the program alone: **tested** by `how long a caller’s reply is kept (decision 0125)`, in `src/storage.test.ts`.
+- That a retry within `keep` is answered from storage, one after it is applied again, and a `keep` that is no count is
+  the caller's defect: **tested** by `a retry within the keep its boundary gives is answered from storage, and one
+  after it is applied again` and by `a keep that is neither a whole number of millis nor forever is the caller’s
+  defect, and reaches no entity`, in `src/runtime.test.ts`.
+- That a sweep frees what the steps leave and changes no answer: **tested** by `expire deletes past a batch, counts
+  every row, and on Cluster takes the ids of every batch`, in `src/storage.test.ts`, by `the sweep expires and prunes
+  at its interval, and one that fails is warned of and leaves the next`, in `src/runtime.test.ts`, and on Cluster by
+  `on Cluster the sweep runs as a singleton, and takes the replies and Cluster rows past their time`, in
+  `src/cluster.test.ts`.
+- That a sweep in batches needs no more room on a full volume than one statement: **seen** by
+  [`spikes/full-volume.test.ts`](../spikes/full-volume.test.ts), on the CI's volume of 32 MB, where the batches of a
+  prune took about 824 KB of a freed megabyte and one prune 892 KB. So the batches serve the writer's time and not the
+  room, and an operator frees room first on a disk that is really full.
+- That a singleton of Cluster has one active owner, the runner that holds its shard: **documented** by the JSDoc of
+  the module `cluster/Singleton.ts` at Effect 4.1.3, `@stability unstable`. The sweep on Cluster rests on it for its
+  cost alone, since two runners that sweep at once delete the same rows past their time.
+- That PostgreSQL skips a row another transaction locks under `SKIP LOCKED`, rather than waiting for it, and reads the
+  `WHERE` of a `SELECT … FOR UPDATE` again on a row committed after the statement's snapshot: **documented** by the
+  locking clause of `SELECT` of PostgreSQL 17, the version of the CI's server. A batch of `expire` rests on both.
+- That a batch of `expire` beside a step that answers a retry again, on a pool, keeps the reply the step wrote with its
+  new time: **tested** by the examples of bug 13 in `two calls held at a statement on a pool answer as one order of
+  them`, in `src/contract.test.ts`, in the job `postgres` of the CI.
+- That the clause of the lock changes nothing on SQLite and on PGlite, and that the sweep ends: **tested** by `expire
+  deletes past a batch, counts every row, and on Cluster takes the ids of every batch`, in `src/storage.test.ts`.
+- That a sweep skips a reply a step holds rather than waiting for the step: **chosen** by
+  [decision 0285](decisions/archive/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md). A reply skipped is deleted by a
+  later sweep, or by the step itself.
+- That a batch which waits for no reply's row closes no deadlock with a step that deletes its entity's replies:
+  **tested** by the case `bug49` of `two calls held at a statement on a pool answer as one order of them`, in
+  `src/contract.test.ts`, in the job `postgres` of the CI, which deadlocked against a batch that waits. It is bug 49
+  of [`bugs.md`](bugs.md).
+- That a statement of PostgreSQL at `READ COMMITTED` reads a snapshot taken as it starts: **documented** by the
+  section Transaction Isolation of PostgreSQL 17. The second statement of a batch of `ended` rests on it, to read the
+  sender's key as committed once the rows are locked.
+- That two steps at once on a pool, the receiver's that stores a reply or an answer and the asker's that ends the work,
+  leave the row, and that a sweep beside them waits for neither and deletes it after: **tested** by the four tests of
+  `a reply to work that ends while its receiver stores it`, in `src/postgres.test.ts`, in the job `postgres` of the CI.
+- That `expire` deletes what a work that ended was given, past a batch, and keeps what a work that holds was given:
+  **tested** by `expire deletes the replies and the answers kept for work that has ended, and keeps those of work that
+  holds`, in `src/storage.test.ts`, on SQLite and PGlite.
+- That an incarnation is never drawn again for one key of one entity: **tested** by `a key that leaves loses its row,
+  and comes back in an incarnation no run of it had`, in `src/machine.test.ts`. The deletion of what a work that ended
+  was given rests on it, since the key it finds absent stays absent.
+- That an entity's row, which holds the count of its incarnations, is never deleted: **tested** by `no statement of
+  src deletes the row of an entity`, in `src/form.test.ts`.
+- That an asker's key is committed before its request reaches the receiver: **tested** by `an operation’s request
+  reaches its receiver only once the step that started the operation is committed`, in
+  `src/runtime/callers.test.ts`. Where it fell, a receiver's step and the sweep would delete a reply the work still
+  waits for.
+- That a row left until the next sweep costs no wrong answer, since no reader looks for a reply or an answer of work
+  that has ended: **chosen** by the maintainer, in
+  [decision 0289](decisions/archive/0289-expire-deletes-what-work-that-ended-was-given.md).
+- That one process gives a run after a crash the kept rejection and the kept `NotFound`, and that the work's end
+  deletes the answer: **tested** by `an at-least-once operation run again after a crash acts once, though init
+  rejected its creation` and by `an at-least-once operation run again after a crash acts once, though its message
+  found no entity`, in `src/runtime.test.ts`.
+- That a door's step answers a delivery again with the kept answer, after another creator made the entity: **tested**
+  by `an operation’s request a door answered Rejected or NotFound is answered so again, though its entity exists`, in
+  `src/runtime/doors.test.ts`, with a Cluster the test plays.
+- That Cluster's client delivers an operation's request to the door again after a crash, so that the door's step reads
+  the kept answer: **open**. No test runs a crash between two runs of an operation on Cluster. It is the
+  [open question](open-questions.md#running) An operation's kept answer on Cluster across a crash, and under two runs
+  at once.
+- That only the operation's own runs read or write its answers, one run after the other, so that a kept answer is read
+  outside the receiver's lock: **open**, in the same open question. Decision 0274 keeps two runs of one incarnation
+  apart on one runner and across an orderly move of a shard, and a runner that lost its lease is left.
+- That a rehearsal gives a run after a crash the same kept answers: **tested** by `answers a run after a crash as the
+  first, where init rejected its creation or its message found no entity`, in `src/rehearse.test.ts`.
+- That an operation's request is one text whatever the version of either program, so that its kept answer is found
+  across a deploy: **tested** by `an operation's request is one text whatever the receiver's schema of its sender`, in
+  `src/machine.test.ts`.
+- That a message or flags of one value encode to one text, whatever order its fields were given in, and that a retry
+  decoded from the same request encodes to the same text: **tested** by the tests of `what a request carries encodes
+  to one text (decision 0269)`, in `src/machine.test.ts`, which also see that an equal set built in another order is
+  another text.
+- That Cluster answers a request under a primary key it saved from the saved reply, and saves no envelope of it for the
+  door, whatever message the request carries: **tested** by `another message under a caller's request id reaches the
+  door, which answers it Reused`, in `src/cluster.test.ts`. A caller's primary key holds the message's text by it.
+- That a second client's reset of a `Reused` may drop the keep of the answer another client's send kept: **open**. It
+  is the [open question](open-questions.md#running) A `Reused` reset by two clients on Cluster, and a case of bug 91
+  of [`bugs.md`](bugs.md).
+- That a run of an operation after a crash which sends another message under the same name is given the first
+  message's reply, and the receiver holds the first message alone: **tested** by the tests of `a run after a crash that
+  sends another message under an operation's request`, in `src/machine.test.ts`, by `an at-least-once operation run
+  again after a crash that sends another message under a name is given the first reply`, in `src/runtime.test.ts`,
+  and by `answers a run after a crash that builds another message or other flags with the first one's reply`, in
+  `src/rehearse.test.ts`.
+- That two callers under one request id with two messages at once are given their own answers: **tested** by `two
+  callers under one request id with two messages at once are answered Accepted and Reused`, in `src/runtime.test.ts`.
+- That a retry after a deploy is compared with what the caller's request carried, read through the migrations:
+  **tested** by `a retry after a deploy is compared with what the caller's request carried, read through the
+  migrations`, in `src/runtime.test.ts`, on each storage.
+- That a request after a reply's `keep` is a new request, whatever it carries: **tested** by `another message under a
+  caller's request id after the reply's keep is a new request, and is applied`, in `src/runtime.test.ts`.
+- That a boundary which decodes the same request off the wire under the new version gets the message the migration
+  writes: **chosen** by [decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md).
+  The library cannot check a boundary.
+- That the room a reply's row takes for its message is worth the check of what a request carries: **chosen** by the
+  maintainer, on 2026-11-11. A caller's row is kept for its `keep` alone, so the room is bounded by what callers send
+  within their keeps.
+- That two callers of one request at once under a `keep` of 0 have the message applied once, and that a skipped
+  `Receive` gives its permit back and is counted as done: **tested** by `two callers of one request at once under a
+  keep of 0 have its message applied once`, in `src/runtime.test.ts`.
+- That a retry sent after its first caller gave up, with the first `Receive` queued behind another message, is
+  answered and applied once: **tested** by `a retry after a caller gave up behind another message is answered by the
+  first offer, and applied once`, in `src/runtime.test.ts`.
+- That a retry offered before the answer is not stepped: **tested** by `a message that waits behind another is given
+  its time as its step begins, and a retry before the answer is answered by it`, in `src/runtime.test.ts`.
+- That every reply to a caller's request on one process goes through a step's `Replied`: **tested** for the reply of a
+  step by `two callers of one request at once under a keep of 0 have its message applied once`, in
+  `src/runtime.test.ts`. A reply given by an operator's resume to a retry in flight is **open**, the
+  [open question](open-questions.md#running) A retry in flight when an operator resumes the entity.
+- That a retry sent after the answer, within its `keep` but stepped past it, is given the reply: **open**. It is the
+  [open question](open-questions.md#running) A retry that waits in the runtime past its reply's `keep`.
+- That a step answering an operation `Suspended` writes its wait, that a caller's request writes none, that an
+  operation queued when the entity suspends writes one, and that the resumption says the waits go: **tested** by the
+  tests of `the operations a suspended entity answers`, in `src/machine.test.ts`. The wait is written by the step that
+  answers, in the step's one transaction, so no resumption commits between the answer and the wait.
+- That the storage lists the waits whose run holds, stores a wait answered twice once, leaves out a run restarted or
+  ended, and deletes every wait when the suspension ends: **tested** by `a suspended entity lists the stored waits
+  whose run holds, and its resumption deletes them`, in `src/storage.test.ts`, on SQLite and on PGlite.
+- That the operation of a suspended sender is listed after a restart: **tested** by `after a restart, a suspended
+  entity lists the operation of a suspended sender that waits for it`, in `src/runtime.test.ts`.
+- That an operator on any runner of Cluster sees the operation of another runner that waits: **tested** by `an
+  operator on any runner sees the operation of another runner that waits for a resumption`, in `src/cluster.test.ts`,
+  under `bun run test:slow`.
+- That an operator should see who waits whatever process answers, at the cost of a write per wait: **chosen** by the
+  maintainer, in
+  [decision 0265](decisions/archive/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md).
+- That a wait whose operation, run again under the same incarnation, sends to another entity misleads no operator:
+  **open**. The wait stays listed under the first receiver until its suspension ends. It is the
+  [open question](open-questions.md#running) A wait whose operation, run again, sends elsewhere.

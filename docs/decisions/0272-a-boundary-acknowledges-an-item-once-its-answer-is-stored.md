@@ -17,7 +17,7 @@ Decision 0127 has the boundary read a stream, call `send` for each item, and ack
   ([decision 0147](archive/0147-an-entity-holds-a-bounded-number-of-callers-messages.md)).
 - `NotFound`, for an entity that does not exist.
 - `Reused`, for a request id that a request with another message holds
-  ([decision 0269](0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)).
+  ([decision 0269](archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)).
 
 The source never gives an acknowledged item again. So an item acknowledged on one of these answers is lost, and
 nothing reports it. This is bug 60 of the roadmap. The contract of `send` already says that a caller sends again
@@ -81,7 +81,7 @@ on, sent again after the discard, is a new request, and the entity dies on it ag
   [`src/machine.test.ts`](../../src/machine.test.ts), and on the runtime by `a discard alone does not get the feed
   past a reading its meter dies on`, in [`examples/stream/feed.test.ts`](../../examples/stream/feed.test.ts).
 - That another message under a request id answered before is answered `Reused`, and applies nothing: **tested** by the
-  tests of [decision 0269](0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md), and for a stream by `a
+  tests of [decision 0269](archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md), and for a stream by `a
   reading under an offset given before to another reading stops the feed, unacknowledged`, in
   [`examples/stream/feed.test.ts`](../../examples/stream/feed.test.ts).
 - That a source gives an item again until it is acknowledged: **chosen** by the note, as the source the rule is for.

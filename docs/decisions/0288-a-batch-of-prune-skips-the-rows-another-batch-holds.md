@@ -2,9 +2,9 @@
 
 **Status:** accepted, 2026-11-12, as the fix of bug 111 of [`docs/bugs.md`](../bugs.md), a case of the rule of
 [decision 0284](0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md). It changes
-[decision 0245](0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md): `prune` repeats its batches
+[decision 0245](archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md): `prune` repeats its batches
 until a batch deletes nothing, as `expire` does under
-[decision 0285](0285-a-batch-of-expire-skips-the-replies-a-step-holds.md).
+[decision 0285](archive/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md).
 
 ## Context
 
