@@ -4,7 +4,7 @@
 [open question](../../open-questions.md#storage-and-reading) of a number over many entities. Changes
 [decision 0032](0032-a-projection-is-a-row.md), whose read model answers only with rows. PostgreSQL adds a sum
 exactly, and a sum whose magnitudes pass the largest double is its caller's defect, since
-[decision 0209](../0209-a-sum-is-refused-past-the-largest-double-alike-on-both-dialects.md).
+[decision 0209](0209-a-sum-is-refused-past-the-largest-double-alike-on-both-dialects.md).
 
 ## Context
 

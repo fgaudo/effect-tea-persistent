@@ -1,7 +1,7 @@
 # 0285. A batch of `expire` locks the replies it selects, and skips those a step holds
 
 **Status:** accepted, 2026-11-12, as the fix of bug 13 of [`docs/bugs.md`](../../bugs.md), a case of the rule of
-[decision 0284](../0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md). Its test is the test of the pool of
+[decision 0284](0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md). Its test is the test of the pool of
 [decision 0283](../0283-a-contract-runs-one-set-of-calls-on-every-backend.md). It changes
 [decision 0245](0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md): `expire` repeats its batches
 until a batch deletes nothing, and not until a batch deletes fewer than a batch.

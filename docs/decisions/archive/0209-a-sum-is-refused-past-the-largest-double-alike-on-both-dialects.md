@@ -1,14 +1,14 @@
 # 0209. A sum is exact on PostgreSQL, and is refused alike on both dialects past the largest double
 
-**Status:** accepted, 2026-11-09. Changes [decision 0148](archive/0148-a-count-and-a-sum-are-read-in-one-statement.md),
+**Status:** accepted, 2026-11-09. Changes [decision 0148](0148-a-count-and-a-sum-are-read-in-one-statement.md),
 whose sum is a double that `TOTAL` adds. Its refusal is changed by [decision 0277](0277-a-sum-is-refused-by-a-count-of-its-magnitudes-both-dialects-make-alike.md), which refuses a sum by a
 count of its magnitudes in units of 2^980, since the total of magnitudes read as a double is refused apart at the edge.
 
 ## Context
 
 `sum` added the numbers of an index with `TOTAL` on SQLite, and with `SUM` over `DOUBLE PRECISION` on PostgreSQL
-([decision 0157](archive/0157-the-storage-speaks-sqlite-and-postgresql.md)). The test
-`every backend answers every call alike` of [`src/contract.test.ts`](../../src/contract.test.ts) runs the same calls
+([decision 0157](0157-the-storage-speaks-sqlite-and-postgresql.md)). The test
+`every backend answers every call alike` of [`src/contract.test.ts`](../../../src/contract.test.ts) runs the same calls
 on a database of each dialect, and found two answers that differ.
 
 - **The last digits.** Over the amounts `1`, `0.1` and `-1`, SQLite gave `0.1` and PostgreSQL
@@ -48,7 +48,7 @@ on a database of each dialect, and found two answers that differ.
   string to a number.
 - That both dialects refuse the same sums, and give totals within the bound: **tested**, by
   `every backend answers every call alike`, and by `a sum whose magnitudes pass the largest double is its caller's
-  defect` in [`src/storage.test.ts`](../../src/storage.test.ts), which fails against the code before the change.
+  defect` in [`src/storage.test.ts`](../../../src/storage.test.ts), which fails against the code before the change.
 
 ## Alternatives
 

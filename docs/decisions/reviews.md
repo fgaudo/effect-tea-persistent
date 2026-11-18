@@ -6390,8 +6390,8 @@ couples it to decisions 0138 to 0140.
    beyond 2^53 with the exact digits of its double. So -2^63 is stored as `-9223372036854775808`, which SQLite's
    `json_extract` reads as its least integer. Before that note, the digits `JSON.stringify` writes,
    `-9223372036854776000`, were read as a real.
-   [Decision 0209](0209-a-sum-is-refused-past-the-largest-double-alike-on-both-dialects.md) added the magnitudes of a
-   sum with `ABS`, and [decision 0277](0277-a-sum-is-refused-by-a-count-of-its-magnitudes-both-dialects-make-alike.md)
+   [Decision 0209](archive/0209-a-sum-is-refused-past-the-largest-double-alike-on-both-dialects.md) added the magnitudes of a
+   sum with `ABS`, and [decision 0277](archive/0277-a-sum-is-refused-by-a-count-of-its-magnitudes-both-dialects-make-alike.md)
    keeps `ABS` in its count of units, at `src/storage/projections.ts:404`. SQLite's `abs()` throws `integer overflow`
    on -9223372036854775808, as SQLite's page on its core functions says, so the statement fails. On PostgreSQL the
    same value is a `NUMERIC`, and the sum is answered. The premise that fell is decision 0209's, kept by decision

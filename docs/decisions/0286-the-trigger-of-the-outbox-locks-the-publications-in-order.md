@@ -1,7 +1,7 @@
 # 0286. The trigger of the outbox locks the publications of a statement's rows in order, once for each statement
 
 **Status:** accepted, 2026-11-12, as the fix of bug 80 of [`docs/bugs.md`](../bugs.md), a case of the rule of
-[decision 0284](0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md). It changes the trigger of
+[decision 0284](archive/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md). It changes the trigger of
 PostgreSQL of [decision 0154](archive/0154-a-steps-projection-is-stored-once-in-the-outbox.md), as
 [decision 0157](archive/0157-the-storage-speaks-sqlite-and-postgresql.md) wrote it: the trigger runs once for each
 statement, and not once for each row. Its premise that no pair of the test of a contract reaches the case fell on

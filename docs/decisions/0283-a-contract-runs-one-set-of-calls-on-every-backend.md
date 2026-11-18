@@ -134,7 +134,7 @@ Since [decision 0291](archive/0291-on-cluster-a-creation-the-program-dies-on-is-
   is bug 25 of [`docs/bugs.md`](../bugs.md): a `reindex` beside a message wrote the projection of the state before the
   message over the row its step committed. Its case, as fast-check shrank it, is pinned on the table of projections,
   where it fails at its first run against the code before
-  [decision 0284](0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md), which fixes it. A pinned case names its table, since the place of a table among the
+  [decision 0284](archive/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md), which fixes it. A pinned case names its table, since the place of a table among the
   library's may change.
 
 ## What it rests on

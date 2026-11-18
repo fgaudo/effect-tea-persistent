@@ -1,7 +1,7 @@
 # 0289. `expire` deletes the replies and the answers kept for work that has ended
 
 **Status:** accepted, 2026-11-12, as the fix of bug 3 of [`docs/bugs.md`](../../bugs.md), a case of the rule of
-[decision 0284](../0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md). It changes
+[decision 0284](0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md). It changes
 [decision 0245](0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md): `expire` also deletes the
 replies and the answers whose asker's work has ended. It completes
 [decision 0021](0021-a-reply-is-kept-while-the-work-that-asked-holds.md) and

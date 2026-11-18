@@ -258,3 +258,47 @@ The list is written area by area, by the step The rules move from the notes into
 - **A reason the operator gives to a discard.** Weighed in decision 0260. It would need a schema on the operator's path
   and in Cluster's request `Discard`, and it can be added later without changing the rule. Reopen if: a sender needs
   to tell a discard from a bare `reject`.
+
+## The tables of projections and of the log
+
+- **`NaN` read as a number no row holds, on both dialects.** Weighed, 2026-11-09, in
+  [decision 0207](decisions/archive/0207-a-criterion-is-a-scalar-both-dialects-compare-alike.md). A caller who passes `NaN`
+  most likely divided by zero, and an answer of nothing hides the bug. Reopen if: a caller comes to need a criterion
+  that holds no row.
+- **The check of a criterion in the handle, beside `counted`.** Weighed in decision 0207. It would hold the same rule
+  twice, since the storage checks the comparison and the cursor already, and no test of the storage would reach it.
+  Reopen if: a storage of another kind comes to skip the check.
+- **A total that is `Infinity`.** Weighed, 2026-11-09, in
+  [decision 0209](decisions/archive/0209-a-sum-is-refused-past-the-largest-double-alike-on-both-dialects.md). JSON writes it as
+  `null`, so a boundary would answer a total nobody summed, and it is no criterion either. Reopen if: JSON comes to
+  hold an infinity.
+- **A sum added by the process.** Weighed in decision 0209. Reading every number to add it exactly reads the whole
+  read model, which one statement avoids. Reopen if: a sum comes to need more than a statement gives.
+- **Doubles on both dialects, compared within a bound.** Weighed in decision 0209. PostgreSQL's total would depend on
+  the order of its rows, and its overflow would fail the statement. Reopen if: PostgreSQL comes to add doubles in a
+  set order without failing.
+- **SQLite scales its numbers by a quarter.** Weighed, 2026-11-12, in
+  [decision 0277](decisions/archive/0277-a-sum-is-refused-by-a-count-of-its-magnitudes-both-dialects-make-alike.md), from an
+  opinion of a Fable 5.2 agent. Some sums near the edge are still read apart, and numbers under the least normal double
+  lose their low bits. Reopen if: SQLite comes to have an exact type of decimals.
+- **A sum refused once its total of magnitudes reaches 2^1023.** Weighed in decision 0277. The same rounding stands at
+  the new threshold, and half the range is lost. Reopen if: never, while the count of units holds.
+- **The dialects allowed to differ at the edge of a sum.** Weighed in decision 0277. A caller of SQLite and a caller of
+  PostgreSQL would meet a refusal at different sums. Reopen if: one dialect is dropped.
+- **The guard of `reindex` in the outer `WHERE` alone.** Weighed, 2026-11-12, in
+  [decision 0284](decisions/archive/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md). `INSERT … ON CONFLICT DO
+  UPDATE` reads no `WHERE` again, so it fixes neither bug 25 nor bug 80. Reopen if: PostgreSQL comes to read it again.
+- **`reindex` at `REPEATABLE READ`.** Weighed in decision 0284. The statement fails on a serialization error where a
+  step committed, and `reindex` dies. Reopen if: `reindex` comes to retry its statements.
+- **An advisory lock of the program for `reindex`.** Weighed in decision 0284. It is a second way of locking beside the
+  rows', and orders a `reindex` against every step of the program, not against the one entity whose row it writes.
+  Reopen if: the locks of rows come to cost more than a lock of the program.
+- **The entity's row locked for every statement of the family.** Weighed in decision 0284. A reply is not always its
+  entity's own, so the row locked is the row the condition is about. Reopen if: every condition comes to be about
+  its entity's row.
+- **A reading of the log in one `snapshot`.** Weighed, 2026-11-12, in
+  [decision 0287](decisions/archive/0287-a-reading-of-the-log-gives-each-partition-up-to-its-first-head.md). Inside a
+  transaction a caller left open, `snapshot` keeps the caller's level, so a `fetch` within a transaction at `READ
+  COMMITTED` would skip rows still. Reopen if: a reading comes to set its own level inside a caller's transaction.
+- **A lock of the heads by a reading of the log.** Weighed in decision 0287. Every step of a partition would wait for a
+  reading, where leaving rows out makes no one wait. Reopen if: a reading comes to need every row committed.

@@ -1,7 +1,7 @@
 # 0277. A sum is refused by a count of its magnitudes that both dialects make alike
 
 **Status:** accepted, 2026-11-12, with the step The bugs the premise review found, fixed by family, of the
-[roadmap](../roadmap.md), as the fix of bug 40. It changes
+[roadmap](../../roadmap.md), as the fix of bug 40. It changes
 [decision 0209](0209-a-sum-is-refused-past-the-largest-double-alike-on-both-dialects.md): a sum is no longer refused
 by its total of magnitudes read as a double, but by a count of those magnitudes in units of 2^980, which both
 dialects compute exactly. The maintainer chose it on 2026-11-12, after an opinion of a Fable 5.2 agent.
@@ -47,11 +47,11 @@ still read apart, and it loses the low bits of the numbers under the least norma
 ## What it rests on
 
 - That both dialects give the same units and the same refusal at the bound: **tested**, by `a sum is answered one
-  unit under the bound of its magnitudes, and refused at it` in [`src/storage.test.ts`](../../src/storage.test.ts), on
+  unit under the bound of its magnitudes, and refused at it` in [`src/storage.test.ts`](../../../src/storage.test.ts), on
   SQLite and on PGlite, which fails against the code before the change. Its cases cut fractions of a unit, and mix
   signs. On a server of PostgreSQL, it runs in the job of PostgreSQL of the push of `main` that takes this note.
 - That the amounts of bug 40 are refused alike: **tested**, by `a sum whose exact total of magnitudes reads back as
-  the largest double is answered alike on both dialects` in [`src/contract.test.ts`](../../src/contract.test.ts),
+  the largest double is answered alike on both dialects` in [`src/contract.test.ts`](../../../src/contract.test.ts),
   which failed before the change.
 - That a cast of a `jsonb` number to `DOUBLE PRECISION` gives the double JavaScript wrote: **tested**, by the cases at
   the bound above, whose units differ by one where the double differs.

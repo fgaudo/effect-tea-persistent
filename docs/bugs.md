@@ -64,7 +64,7 @@ family gets a fix of its own.
 - D, a rule that holds only of one transaction at a time: bugs 3, 13, 25, 49, 78, 80 and 111. Its test is the same step:
   a test of rows of two entities runs on the CI's PostgreSQL with a pool too, with the two steps held at their
   statements. Bugs 13 and 25 are one form, a statement whose condition PostgreSQL reads from its snapshot and does
-  not read again on the row it then writes. Its rule is [decision 0284](decisions/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md): a statement that writes
+  not read again on the row it then writes. Its rule is [decision 0284](decisions/archive/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md): a statement that writes
   or deletes a row on a condition reads the condition from a row it has locked. Bugs 25, 13, 80, 78 and 111 are
   its first cases, fixed. Bug 49 is fixed by the note of bug 13, and bug 3 by decision 0289.
 - F, B, E and G are fixed. Family F is decided by
@@ -192,7 +192,7 @@ family gets a fix of its own.
     `src/cluster.test.ts`, on `claude/premise-review-schemas-2-b06280` at `3e592de`. The fix begins at `forget`
     of `src/storage/log.ts`, or at `enlisted` of `src/runtime.ts`. The
     [open question](open-questions.md#storage-and-reading) The consumers of several runners on Cluster.
-25. **Fixed by [decision 0284](decisions/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md)**, under which `reindex` locks the entity's row it reads the state from, so that on a pool it reads the state a step committed while it waited. Reproduced first by the test of a contract of the pool on the CI's server.
+25. **Fixed by [decision 0284](decisions/archive/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md)**, under which `reindex` locks the entity's row it reads the state from, so that on a pool it reads the state a step committed while it waited. Reproduced first by the test of a contract of the pool on the CI's server.
 26. **Fixed by [decision 0256](decisions/0256-a-call-that-waits-for-a-step-is-refused-within-a-transaction.md)**, which refuses a call that runs a step or waits for one within a transaction of the client.
 27. **Reasoned: on Cluster, the ids a process of the old code keeps under a renamed name stay for ever in
     Cluster's tables.** A process with no runner address deploys any program
@@ -245,7 +245,7 @@ family gets a fix of its own.
     ([decisions 0163](decisions/archive/0163-on-cluster-a-reading-that-waits-learns-of-another-runners-commit-from-the-file.md),
     [0184](decisions/0184-consume-runs-a-reader-of-a-consumer.md)). The
     [open question](open-questions.md#storage-and-reading) A reader with no time that misses a commit.
-40. **Fixed by [decision 0277](decisions/0277-a-sum-is-refused-by-a-count-of-its-magnitudes-both-dialects-make-alike.md)**, which refuses a sum by a count of its magnitudes in units of 2^980 that both dialects make alike.
+40. **Fixed by [decision 0277](decisions/archive/0277-a-sum-is-refused-by-a-count-of-its-magnitudes-both-dialects-make-alike.md)**, which refuses a sum by a count of its magnitudes in units of 2^980 that both dialects make alike.
 41. **Fixed by [decision 0263](decisions/0263-a-launch-dies-where-a-schema-further-on-the-search-path-holds-the-tables.md)**, whose launch dies, and makes nothing, where a schema further on the `search_path` holds the tables.
 42. **Fixed by [decision 0266](decisions/0266-a-timer-that-catches-up-fires-with-a-due-time-that-grows.md)**, whose key fires again at one time only with a later due time, so a timer catches up.
 43. **Fixed by [decision 0254](decisions/0254-a-check-of-the-project-runs-against-the-case-it-refuses.md)**, which pins seed 661 and runs it against the lock dropped by any user.
@@ -418,7 +418,7 @@ family gets a fix of its own.
     program names. The fix begins at `reindex` of `src/storage/projections.ts`, which would refuse to run while its
     version is outranked, or write only where the stored row's version is not newer than its own. The
     [open question](open-questions.md#storage-and-reading) A reindex on Cluster.
-78. **Fixed by [decision 0287](decisions/0287-a-reading-of-the-log-gives-each-partition-up-to-its-first-head.md)**, whose reading of the log gives of each partition only the rows up to the head its first statement read, so that on a pool a step that commits between its statements makes it skip no row. Reproduced first by rows written by hand between the reading's statements.
+78. **Fixed by [decision 0287](decisions/archive/0287-a-reading-of-the-log-gives-each-partition-up-to-its-first-head.md)**, whose reading of the log gives of each partition only the rows up to the head its first statement read, so that on a pool a step that commits between its statements makes it skip no row. Reproduced first by rows written by hand between the reading's statements.
 79. **Fixed by `docs/design.md`**, under Databases, which says of the four readings of one snapshot what decisions
     0185 and 0222 decide: inside a caller's transaction each reads at the caller's level.
 80. **Fixed by [decision 0286](decisions/0286-the-trigger-of-the-outbox-locks-the-publications-in-order.md)**, whose trigger of the outbox runs once for each statement and locks the publications of its rows in the order of their keys before it reads whether a row names one. Reproduced first by a test of `src/postgres.test.ts` on the CI's server, which drops the two rows of a publication in two transactions at once. The pool's test of a contract holds it too, by its examples `bug80` (decision 0283).
@@ -538,9 +538,9 @@ family gets a fix of its own.
     it.** [Decision 0146](decisions/archive/0146-an-integer-beyond-2-53-is-written-with-its-exact-digits.md) writes an
     integer beyond 2^53 with the exact digits of its double, so -2^63 is stored as `-9223372036854775808`. SQLite's
     `json_extract` reads those digits as its least integer, where it read the digits `JSON.stringify` writes as a real.
-    [Decision 0209](decisions/0209-a-sum-is-refused-past-the-largest-double-alike-on-both-dialects.md) adds the
+    [Decision 0209](decisions/archive/0209-a-sum-is-refused-past-the-largest-double-alike-on-both-dialects.md) adds the
     magnitudes of a sum with `ABS`, and
-    [decision 0277](decisions/0277-a-sum-is-refused-by-a-count-of-its-magnitudes-both-dialects-make-alike.md) keeps
+    [decision 0277](decisions/archive/0277-a-sum-is-refused-by-a-count-of-its-magnitudes-both-dialects-make-alike.md) keeps
     `ABS` in its count of units, at `src/storage/projections.ts:404`. SQLite's `abs()` throws `integer overflow` on its
     least integer, so the statement fails. On PostgreSQL the same value is a `NUMERIC`, and the sum is answered. The
     premise that fell is decision 0209's, kept by decision 0277: both dialects refuse the same sums. A count, a

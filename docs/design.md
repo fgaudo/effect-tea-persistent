@@ -826,7 +826,7 @@ null, a boolean, a finite number or a string that is text a database holds, and 
 row passed as `after`. Anything else is the caller's defect, for `query`, `count`, `sum` and `countBy`. SQLite finds
 no row under `NaN`, where PostgreSQL holds it a number past every other, and PostgreSQL takes no U+0000 in a
 parameter of text, so each dialect would answer the same call otherwise
-([decision 0207](decisions/0207-a-criterion-is-a-scalar-both-dialects-compare-alike.md)).
+([decision 0207](decisions/archive/0207-a-criterion-is-a-scalar-both-dialects-compare-alike.md)).
 
 A query pages after the last row it gave. Each row found carries `indexes`, the value of each index as its row
 stores it, which is what the query compared. A caller passes the last row of a page as `after`, and is given the
@@ -846,11 +846,15 @@ index and the least id of such a row. Both read the rows as they stand while `re
 A sum is also the caller's defect when the numbers it adds, taken without their sign, may add up past the largest
 double. Each number without its sign is counted in units of 2^980, cut to an integer, and the sum is refused once
 those units and the count of numbers reach 2^44. Both dialects compute that count exactly, so both refuse the same
-sums, and below the bound no partial total overflows, in whatever order the rows are added
-([decision 0277](decisions/0277-a-sum-is-refused-by-a-count-of-its-magnitudes-both-dialects-make-alike.md)). PostgreSQL adds the
+sums, and below the bound no partial total overflows, in whatever order the rows are added. So the top of the range
+is refused: `sum` over one row of `Number.MAX_VALUE` is the caller's defect. PostgreSQL counts no unit for a magnitude
+under 1e290, which counts none on SQLite either, and tests the magnitude before it multiplies, since a product under
+the least double fails its statement. 2^-980 is bound as a parameter, since a decimal of it written in the statement
+would not be read back exactly
+([decision 0277](decisions/archive/0277-a-sum-is-refused-by-a-count-of-its-magnitudes-both-dialects-make-alike.md)). PostgreSQL adds the
 numbers exactly and rounds the total once. SQLite adds doubles with a compensated sum. So the two dialects may give
 totals that differ in the last digits, by a few units of the last place of the total without signs
-([decision 0209](decisions/0209-a-sum-is-refused-past-the-largest-double-alike-on-both-dialects.md)).
+([decision 0209](decisions/archive/0209-a-sum-is-refused-past-the-largest-double-alike-on-both-dialects.md)).
 
 A count per value of an index is read in one statement too. `countBy` takes an index, the criteria a query takes
 and a limit, and gives each value the index holds among the entities that match, with how many hold it, so every
@@ -879,7 +883,11 @@ value come last. A page reads only the rows it gives, however late in the order 
 `reindex` writes every row again from the stored states, which is what an index added or changed
 by a new version of the program needs. It runs while entities step, and writes a row only if the state it was
 computed from is still the one stored, in one statement: a step that committed since keeps the row it wrote
-([decision 0070](decisions/archive/0070-reindex-writes-a-row-only-over-its-state.md)). An entity whose row the program
+([decision 0070](decisions/archive/0070-reindex-writes-a-row-only-over-its-state.md)). The statement locks the
+entity's row it reads the state from, so that on a pool of PostgreSQL it waits for a step that holds the entity, and
+reads the state committed. A step takes its entity's row before its projection, and `reindex` takes them in the same
+order, so no cycle of locks comes of it. A `reindex` that locks first makes the step wait for one statement of one
+row ([decision 0284](decisions/archive/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md)). An entity whose row the program
 cannot compute keeps the row it had: its state is one no version reads, or a migration, a schema, `project` or an
 index dies on it. `reindex` writes the rest, and gives how many it wrote and the entities it passed over, each with
 the cause. What the runtime throws, a corrupted row's included, still fails the whole call
@@ -934,7 +942,17 @@ never reused. A step draws its `seq` once, by moving the head of its partition, 
 the head's row until it commits. Every row the step writes, one per topic, takes that `seq`, so a step takes one
 lock however many topics it is written in, and a topic's `seq`s have gaps where a step was written in other topics
 only. So the steps of one partition commit in the order of their `seq`, and the steps of different partitions
-do not wait for each other. The rows of one entity therefore come in the order its steps committed. A row of one
+do not wait for each other. The rows of one entity therefore come in the order its steps committed.
+
+A reading of the log is several statements: the heads of the partitions, the position of the first row past each
+cursor, then its pages. On a pool of PostgreSQL at `READ COMMITTED` each reads a snapshot of its own, so a step that
+commits between two of them, followed by the next step of its partition, would give the second row before the
+first, and an ack of the second would pass the first for ever. So a reading keeps the head of each partition behind
+as its first statement read it, and leaves out of each page a row whose `seq` passes that head, or whose partition
+was not behind. A row up to the head committed before the heads were read, since a step holds its partition's head
+until it commits. The reading takes no lock, and runs at the level of its caller. It may give fewer rows than its
+limit while rows past a head are committed, and a consumer reads them at its next `fetch`
+([decision 0287](decisions/archive/0287-a-reading-of-the-log-gives-each-partition-up-to-its-first-head.md)). A row of one
 entity written before a row of another may come after it, as on Kafka. A consumer that needs an effect after its
 cause in another entity waits for the cause, or reads the cause's projection, which a row holds whole.
 
@@ -1533,6 +1551,17 @@ runtime keeps it in one commit. An operation's request holds the sender's addres
 nothing a version of either program writes, so a kept answer is found by its text across a deploy, and its column
 `version` says only how the reason is read. A rename moves the answers with the receiver's and the sender's other
 rows ([decision 0253](decisions/archive/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)).
+
+A statement of the storage that writes or deletes a row on a condition reads the condition from a row it has
+locked. On a pool of PostgreSQL the statement then waits for the transaction that holds the row, and reads the
+condition again on the row committed, where a condition read from the statement's snapshot would be one a concurrent
+commit has moved past. On SQLite one transaction writes at a time, so the rule holds already. The clause is
+`lockingTheCondition` of [`src/storage/held.ts`](../src/storage/held.ts), `FOR UPDATE` on PostgreSQL and nothing on
+SQLite, beside `lockingTheConditionSkipping`, so that the rule is in one place. The row locked is the row the
+condition is about, since a reply is not always its entity's own
+([decision 0284](decisions/archive/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md)). Its cases are
+`reindex`, the batches of `expire` and of `prune`, the trigger of the outbox and the reading of the log, below and
+under [the order of the log](#the-order-of-the-log).
 
 On a pool of PostgreSQL the receiver's step that stores a reply or an answer, and the asker's step that ends the
 work, may run at once, and each reads the other's row only once it is committed. Both then leave the row. `expire`

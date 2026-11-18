@@ -62,8 +62,20 @@ it leaves this file, and what it decided goes into the design, a decision or an 
        `disableFatalDefects`, and what a deploy costs where every runner of the newest version stops. The area found
        no bug. Not reached: the lease of a shard of decision 0175, which area 9 reads, and the parts of decisions
        0156 and 0157 that do not write `effecttea_versions`.
-    5. The tables of projections and of the log: `effecttea_projections`, `effecttea_log` and `effecttea_heads`.
-       Notes 0207, 0209, 0277, 0284 and 0287.
+    5. Done, the tables of projections and of the log: `effecttea_projections`, `effecttea_log` and
+       `effecttea_heads`. Notes 0207, 0209, 0277, 0284 and 0287, now in `archive/`. Each keeps the state of the area.
+       Decision 0284 is the rule of family D, and its general rule is now said under What the storage writes of
+       `docs/design.md`; its cases of the other tables are in areas 2, 6 and 7. Its session read the notes whole with
+       `src/storage/projections.ts`, `published` and `heads` of `src/storage/log.ts` and `partitioned`, and the
+       archived notes the code cites on these tables, 0032, 0070, 0121, 0122, 0137, 0138, 0140, 0143, 0145, 0146, 0148
+       and 0150. `docs/design.md` now says how `reindex` locks its entity's row, how a reading of the log leaves out a
+       row past the head it read, and what a sum refuses at the top of the range. A premise of decision 0122 that the
+       note said read in the code, that `reindex` passes over an index that dies, is now `tested` by `reindex passes
+       over a state an index dies on, names it, and writes the rest`, in `src/storage.test.ts`. The area found no
+       bug. Four premises rest on an order of the code that no test fails without, and are the open question Orders
+       of the storage no test holds. Not reached: the premises of `Hash.string` and of the partition of an entity,
+       which area 9 reads, and those of the consumers and the outbox in decisions 0150, 0153 and 0154, which area 7
+       reads.
     6. The table `effecttea_publications`. Note 0286.
     7. The tables of the outbox: `effecttea_outbox`, `effecttea_consumers` and `effecttea_cursors`. Notes 0184, 0224
        and 0288.
@@ -96,15 +108,15 @@ it leaves this file, and what it decided goes into the design, a decision or an 
   - Done, area 1, on 2026-11-17, the second area moved, which archived the first notes.
   - Done, area 2, on 2026-11-17.
   - Done, area 3, on 2026-11-18.
-  - Next, area 5, then the areas in the order of the list. A session of an area starts from
+  - Done, area 5, on 2026-11-18.
+  - Next, area 6, then the areas in the order of the list. A session of an area starts from
     `bun scripts/premise-pairs.ts --tables`, or from the declarations of the module of its area, and lists the
     archived notes its code cites. It checks first that each note of its list keeps its state, and moves a note that
-    does not to the area that keeps it, as area 4 moved decision 0247 to area 3. Area 5 begins in
-    [`src/storage/projections.ts`](../src/storage/projections.ts): `reindex`, which writes `effecttea_projections`,
-    and `query`, `count`, `sum`, `countBy` and `projected`, which read it. `count` and `projected` cite no note. The
-    log's tables are written by `write` of [`src/storage/entities.ts`](../src/storage/entities.ts), which moves the
-    head of the step's partition, and by `partitioned` of [`src/storage/tables.ts`](../src/storage/tables.ts).
-    `heads` of `logOf` in [`src/storage/log.ts`](../src/storage/log.ts) reads `effecttea_heads` and cites no note.
+    does not to the area that keeps it, as area 4 moved decision 0247 to area 3. Area 6 begins in
+    [`src/storage/tables.ts`](../src/storage/tables.ts): the table `effecttea_publications` and the trigger of the
+    outbox that drops a publication with the last row that names it, which `text` holds. `write` of
+    [`src/storage/entities.ts`](../src/storage/entities.ts) writes a step's publication, and `published` and
+    `consumers` of [`src/storage/log.ts`](../src/storage/log.ts) read it.
     A session moves its notes by `bun scripts/archive-notes.ts <numbers>`, which runs `git mv` into `archive/` and
     rewrites every relative link to the notes and in them, and then runs `bun run links`. An area that finds no note
     outside the archive still writes its premises and its alternatives, as area 4 did.
@@ -147,7 +159,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
   on one process, PostgreSQL with a pool on the CI's server, and Cluster with two runners on one file. Its note is
   [decision 0283](decisions/0283-a-contract-runs-one-set-of-calls-on-every-backend.md), `proposed`, rewritten in place
   while the step is under way and taken by the commit that takes the step out of this file. The rule of family D is
-  [decision 0284](decisions/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md), accepted. The maintainer
+  [decision 0284](decisions/archive/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md), accepted. The maintainer
   chose on 2026-11-12 to run this step beside the second reading of the premise review, and on 2026-11-13 to take it
   before the two steps on deploys below and the step of the process's pure core. Bugs 2, 3, 10, 11 and 12 are cases
   of it.
@@ -178,7 +190,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
   - Done, on 2026-11-12, bug 80, the trigger of the publications:
     [decision 0286](decisions/0286-the-trigger-of-the-outbox-locks-the-publications-in-order.md). No pair of the pool
     reaches it, so a scenario of `src/postgres.test.ts` holds it, as the note says.
-  - Done, on 2026-11-12, bug 78, the reading of the log: [decision 0287](decisions/0287-a-reading-of-the-log-gives-each-partition-up-to-its-first-head.md).
+  - Done, on 2026-11-12, bug 78, the reading of the log: [decision 0287](decisions/archive/0287-a-reading-of-the-log-gives-each-partition-up-to-its-first-head.md).
   - Done, on 2026-11-12, bug 111, a deadlock of two prunes at once that the pool found:
     [decision 0288](decisions/0288-a-batch-of-prune-skips-the-rows-another-batch-holds.md).
   - Done, the other cases of the rule of decision 0284, one at a time, since each changes `src/storage/` and pins its

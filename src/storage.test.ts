@@ -1656,6 +1656,26 @@ test('reindex writes an index that is an integer beyond 2^53 with its exact digi
       expect(stored).toEqual([{ indexes: '{"rank":1152921504606846976}' }])
     }).pipe(Effect.orDie)))
 
+// An index is computed as `project` is, inside the guard of the program's code, so one that dies on a state leaves
+// that entity's row and names it, as a `project` that dies does (decision 0122).
+test('reindex passes over a state an index dies on, names it, and writes the rest', () =>
+  database((sql) =>
+    Effect.gen(function*() {
+      const store = storage(ranked, sql)
+      for (const [id, last] of [['a', '1'], ['b', 'no json'], ['c', '3']] as const) {
+        yield* store.write(id, created({ entity: { state: { last }, creation, flags: null }, shown: { projection: '0', indexes: { rank: 0 } } }), 0)
+      }
+      const reindexed = yield* store.reindex
+      expect(reindexed.written).toBe(2)
+      expect(reindexed.failed.map(({ id }) => id)).toEqual(['b'])
+      expect(reindexed.failed[0]?.cause).toContain('SyntaxError')
+      expect((yield* store.query({ limit: all })).map(({ id, indexes }) => [id, indexes.rank])).toEqual([
+        ['a', 1],
+        ['b', 0],
+        ['c', 3],
+      ])
+    }).pipe(Effect.orDie)))
+
 // Each statement of a page takes what the ones before it left of the limit, and a row found carries null for an
 // index it lacks, as the query reads it (decisions 0143, 0145).
 test('a page gives at most its limit across its statements, and null for an index a row lacks', () =>

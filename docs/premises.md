@@ -416,3 +416,151 @@ program before its deploy and What the storage writes, of `design.md`.
   rejection's reason is `null` for a bare `reject` of every program.
 - That a sender need not tell a discard from a bare `reject`: **chosen** by the maintainer, in
   [decision 0260](decisions/archive/0260-a-discard-of-a-message-an-operation-sent-stores-a-rejection.md).
+
+## The tables of projections and of the log
+
+The table `effecttea_projections` is the read model: one row for each entity, its projection and the value of each
+index. `effecttea_log` holds the number of partitions of the log, and `effecttea_heads` the head of each partition,
+whose `seq` a step draws. `reindex`, `query`, `count`, `sum`, `countBy` and `projected` of
+[`src/storage/projections.ts`](../src/storage/projections.ts) write and read the read model, with `write` of
+[`src/storage/entities.ts`](../src/storage/entities.ts). `write` moves the head of the step's partition, `published`
+and `heads` of [`src/storage/log.ts`](../src/storage/log.ts) read the heads, and `partitioned` of
+[`src/storage/tables.ts`](../src/storage/tables.ts) stores the number of partitions. The rules are under Reading,
+The order of the log and What the storage writes, of `design.md`.
+
+- That SQLite finds no row under a criterion of `NaN` where PostgreSQL finds rows, and that PostgreSQL fails a
+  statement whose parameter of text holds U+0000 where SQLite answers it: **seen**, in the reproduction of the bug and
+  in a probe of both dialects, as
+  [decision 0207](decisions/archive/0207-a-criterion-is-a-scalar-both-dialects-compare-alike.md) was taken. The refusal of a
+  lone surrogate rests on no premise of how it compares.
+- That every criterion and cursor of `query`, `count`, `sum` and `countBy` passes through `criteria` or `cursorOf`:
+  **tested** by `a criterion or a cursor that is no scalar a query compares is its caller’s defect, on both dialects`,
+  in `src/storage.test.ts`.
+- That SQLite compares the value of `json_extract` with a parameter in the order its `ORDER BY` sorts them, `NULL`
+  first, then numbers, then text, and that `NULL` sorts first ascending and last descending: **documented** by
+  SQLite's pages on datatypes and on `SELECT`, and **tested** by `a query pages past the last row it gave, through ties
+  and nulls, in either order`, in `src/storage.test.ts`, which also holds that the indexes a row stores are those a
+  query compares.
+- That `json_extract` gives JSON's `true` as 1, so that a boolean index and a boolean of a cursor compare as 1 or 0:
+  **seen**, as [decision 0143](decisions/archive/0143-a-query-pages-after-the-last-row-it-gave.md) was taken, and
+  **tested** by `a query pages past the last row it gave, through ties and nulls, in either order`, in
+  `src/storage.test.ts`.
+- That SQLite searches each statement of a page as a range of the index, and sorts in none of them: **seen** by
+  [`spikes/sqlite-page-statements-plan.test.ts`](../spikes/sqlite-page-statements-plan.test.ts), which reads the plan
+  of each on the table the storage creates. That such a statement stops after the rows it gives under its limit is
+  **documented** by SQLite's page on the query planner, and no spike counts the rows SQLite visits.
+- That `-Infinity` is bound as a real, and every value an index stores but `null` is greater: **seen** by the same
+  spike, and **documented** by SQLite's page on datatypes.
+- That SQLite reads the digits `JSON.stringify` writes of an integer beyond 2^53 as another number, and the exact
+  digits of the double as the same number: **seen** by
+  [`spikes/sqlite-json-integer-digits.test.ts`](../spikes/sqlite-json-integer-digits.test.ts), and **documented** by
+  SQLite's pages on datatypes and on JSON. That `BigInt` gives the exact integer a double holds is **documented** by
+  ECMAScript.
+- That a page past a cursor of such a value, and a criterion `=` on it, find the row once: **tested** by `a query pages
+  past, and finds by its value, a row whose index is an integer beyond 2^53`, in `src/storage.test.ts`, and the write of
+  such an index by `reindex writes an index that is an integer beyond 2^53 with its exact digits`, in the same file.
+- That one statement reads the rows as one snapshot, so that a step that commits meanwhile is counted wholly or not
+  at all by `count`, `sum` and `countBy`: **documented** by SQLite's page on isolation, and by the section Transaction
+  Isolation of PostgreSQL 17 for a statement at `READ COMMITTED`.
+- That `json_type` gives `true`, `false`, `integer`, `real`, `text` and `null`, and SQL's NULL for a path the row
+  lacks, and that `TOTAL` gives `0.0` over no row: **documented** by SQLite's pages on its JSON functions and its
+  aggregates, and **tested** by the tests of `a count and a sum over the entities that match (decision 0148)` and of
+  `a count per value of an index (decision 0150)`, in `src/storage.test.ts`, at the SQLite 3.53.4 that Bun 1.4.4
+  holds.
+- That a count, a count per value and a sum compare as a query does: **tested** by `a count, a count per value and a
+  sum read the rows a query finds`, in `src/storage.test.ts`.
+- That no caller sums an index of strings on purpose, so that a string in a sum is the caller's defect: **chosen** by
+  [decision 0148](decisions/archive/0148-a-count-and-a-sum-are-read-in-one-statement.md). A caller that wants the rows
+  holding a string counts them with a criterion.
+- That `TOTAL` gives a double and adds an integer beyond SQLite's without failing: **documented** by SQLite's page on
+  its aggregates, and **tested** by `a count finds the rows a query finds, and a sum adds their numbers and leaves out
+  the rest`, in `src/storage.test.ts`. The rule rests on no compensation of `TOTAL`, since the test of the dialects
+  allows the difference a plain sum of doubles makes.
+- That `SUM` over `NUMERIC` does not fail on a total past the largest double, and that a cast of a number of `jsonb` to
+  `NUMERIC` gives the decimal JSON wrote, exactly: **documented** by PostgreSQL's pages on numeric types and on JSON
+  types, and **seen** on PGlite 0.5.15. That `Number` reads the text of a decimal as the nearest double is
+  **documented** by ECMAScript.
+- That both dialects give totals within a few units of the last place of the total of magnitudes: **tested** by
+  `every backend answers every call alike`, in `src/contract.test.ts`.
+- That both dialects give the same units of 2^980 and the same refusal at the bound of a sum: **tested** by `a sum is
+  answered one unit under the bound of its magnitudes, and refused at it`, in `src/storage.test.ts`, on SQLite and
+  PGlite, by `a sum whose magnitudes pass the largest double is its caller’s defect`, in the same file, and by `a sum
+  whose exact total of magnitudes reads back as the largest double is answered alike on both dialects`, in
+  `src/contract.test.ts`. A cast of a number of `jsonb` to `DOUBLE PRECISION` gives the double JavaScript wrote by the
+  first test, whose units differ by one where the double does.
+- That SQLite's cast of a real to an integer cuts toward zero: **documented** by SQLite's page on `CAST` expressions.
+- That a sum of integers under 2^53 is exact in doubles, a multiplication by 2^-980 of a double of at least 1e290 is
+  exact, and each addition rounds by at most half an ulp of its result: **documented** by IEEE 754. That no partial
+  total of `TOTAL` overflows below the bound, by a margin of `numbers × (2^980 − 2^970)`, rests on them, since SQLite
+  does not document the order of its additions, and is **seen** by the cases of the test at the bound.
+- That PostgreSQL fails a statement on a product under the least double, so that the statement tests the magnitude
+  before it multiplies: **seen** on PGlite, as
+  [decision 0277](decisions/archive/0277-a-sum-is-refused-by-a-count-of-its-magnitudes-both-dialects-make-alike.md) was taken,
+  and run by the case of `Number.MIN_VALUE` of `a sum is answered one unit under the bound of its magnitudes, and
+  refused at it`, in `src/storage.test.ts`.
+- That refusing the top `numbers × 2^980` of the range costs a caller nothing that matters: **chosen** by the
+  maintainer, in decision 0277.
+- That `reindex` beside a message on a pool leaves the projection the message's step wrote, and that PostgreSQL accepts
+  `FOR UPDATE` in the `SELECT` of an `INSERT … ON CONFLICT` and reads its `WHERE` again on the row committed: **tested**
+  by the examples of bug 25 in `two calls held at a statement on a pool answer as one order of them`, in
+  `src/contract.test.ts`, in the job `postgres` of the CI.
+- That `reindex` leaves no row a step has moved past, on one process: **tested** by `reindex leaves no row a step has
+  moved past, under prioritized schedules`, in `src/runtime.test.ts`, and on a state of the same text at another
+  version by `reindex skips an entity that a step wrote since, though its state has the same text at another version`,
+  in `src/storage.test.ts`.
+- That a step takes its entity's row before it writes its projection, so that `reindex`, which locks in the same
+  order, closes no cycle of locks: **open**. The order is the one of the statements of `write`, and no test fails
+  where it is reversed. It is the [open question](open-questions.md#storage-and-reading) Orders of the storage no test
+  holds.
+- That a statement locking the condition, rather than a guard in the outer `WHERE`, `REPEATABLE READ` or an advisory
+  lock, is the rule to keep: **chosen** by the maintainer, in
+  [decision 0284](decisions/archive/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md).
+- That what the program computes of a row, a migration, the state's schema, `project`, an index and the projection's
+  encoding, runs inside the guard that tells its throws from the runtime's: **tested** by `reindex passes over a state a
+  migration or the schema dies on, and fails on a text that is no JSON` and by `reindex passes over a state an index
+  dies on, names it, and writes the rest`, in `src/storage.test.ts`, and by `reindex leaves the row of an entity whose
+  state the new project dies on, names it, and writes the rest`, in `src/runtime.test.ts`. That the projection's
+  encoding dying is passed over alike is **open**, in the same open question.
+- That a read with a new program whose `project` dies is answered from the row, without a defect: **tested** by `a
+  read answers from the row, with a new program whose project dies on the state`, in `src/runtime.test.ts`.
+- That every event which changes an entity's state writes its row of the read model in the same transaction, and
+  that a caller is answered only once its step has committed, so that a read after the answer finds the row: **open**.
+  The test that checked the first after random events and crashes is gone, and the tests that read after a `send`
+  pass either way. It is the [open question](open-questions.md#storage-and-reading) Orders of the storage no test
+  holds.
+- That a row locked by an update stays locked until its transaction ends, so that the steps of a partition commit in
+  the order of their `seq`: **documented** by the chapter Explicit Locking of PostgreSQL 17, and **tested** by `two
+  writers of one partition commit in the order of their seq, the second waiting for the first`, in
+  `src/postgres.test.ts`, in the job `postgres` of the CI. On SQLite every transaction commits one at a time.
+- That a step draws its `seq` by an update of its partition's head, in its own transaction, so that a row up to the
+  head a reading read committed before the reading: **tested** by `two writers of one partition commit in the order of
+  their seq, the second waiting for the first`, in `src/postgres.test.ts`, whose second writer waits for the first's
+  head.
+- That SQLite runs `INSERT … ON CONFLICT DO UPDATE … RETURNING`, which writes a partition's head at its first step and
+  moves it at the next: **documented** by SQLite from 3.35, and **tested** by `the entities of one partition share its
+  sequence, in the order their steps committed`, in `src/runtime.test.ts`.
+- That a reading of the log gives every row of a partition before one it gives, where steps commit between its
+  statements or its pages: **tested** by `a reading of the log gives no row of a partition past a row of it that
+  committed between its statements` and by `a reading of the log gives no row of a partition past a row of it that
+  committed between two pages`, in `src/storage.test.ts`, and on a server by `a reading of the log gives no row of a
+  partition past one it skipped`, in `src/postgres.test.ts`.
+- That a consumer that reads and acks a row of one partition still reads a row of another partition committed after
+  it with a lower `position`: **tested** by `a row that commits after one a consumer has read is read then, from its
+  partition’s cursor`, in `src/storage.test.ts`.
+- That `position` rises with `seq` within a partition on a pool of PostgreSQL, so that a reading may start a partition
+  from the lowest `seq` past its cursor: **open**. On SQLite `AUTOINCREMENT` gives each row a rowid larger than any
+  before it, **documented** by SQLite. It is the [open question](open-questions.md#storage-and-reading) Orders of the
+  storage no test holds.
+- That a consumer can act on the order of one entity's rows without an order across entities: **chosen** by
+  [decision 0137](decisions/archive/0137-the-log-is-ordered-within-a-partition.md), on what consumers of Kafka are
+  promised.
+- That a topic is a pure function of the projection, so that two steps that leave the same projection select the same,
+  and that a consumer acts on the value of its topic and not on the projection: **chosen** by
+  [decision 0138](decisions/archive/0138-the-log-publishes-topics.md) and
+  [decision 0140](decisions/archive/0140-a-row-of-a-topic-gives-its-value.md). The library checks no purity, of a topic
+  as of `project`.
+- That rows sharing a `seq` keep the order of each topic within a partition, and that a topic is read through the
+  projection's migrations and the selector of the program deployed: **tested** by `each topic is read alone, through
+  the projection's migrations, and a step's rows share its seq`, in `src/storage.test.ts`.
+- That a launch with another number of partitions than the database's dies, and names both: **tested** by `a launch
+  with another number of partitions than the database’s fails, and names both`, in `src/runtime.test.ts`.

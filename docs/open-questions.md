@@ -284,6 +284,26 @@ with a requirement that no example has yet.
   2026-11-18. It would be decided by:
   - a test of `src/postgres.test.ts` that holds a step between two of its statements, at a point of the test of the
     pool, while `inspect` reads the entity, and finds the step read whole or not at all.
+- **Orders of the storage no test holds.** Four premises of the read model and the log rest on an order of the code
+  that no test fails without. A step takes its entity's row before it writes its projection, so that `reindex`, which
+  locks in the same order, closes no cycle of locks
+  ([decision 0284](decisions/archive/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md)). Every event
+  that changes a state writes its row of the read model in the same transaction, and a caller is answered only once
+  its step has committed, so that a read after the answer finds the row
+  ([decision 0121](decisions/archive/0121-a-read-answers-from-the-row-of-the-read-model.md)); the test that checked the
+  first after random events and crashes is gone. On a pool of PostgreSQL, `position` rises with `seq` within a
+  partition, so that a reading may start a partition from the lowest `seq` past its cursor
+  ([decision 0137](decisions/archive/0137-the-log-is-ordered-within-a-partition.md)). And `reindex` passes over an
+  entity whose projection's encoding dies, as it passes over one whose `project` dies
+  ([decision 0122](decisions/archive/0122-reindex-leaves-a-row-it-cannot-compute-and-names-its-entity.md)). The move of
+  area 5 of the step The rules move from the notes into documents kept true, of the [roadmap](roadmap.md), found them
+  on 2026-11-18. It would be decided by:
+  - a test of `src/postgres.test.ts` that holds a step after the update of its entity's row while `reindex` runs, and
+    one that runs `reindex` against a step whose statements are reversed, which deadlocks;
+  - a test of invariants, of the roadmap, that checks after each history that every row of the read model is the
+    projection of the stored state, and a test that reads after an answer while the commit is held;
+  - a test of `src/postgres.test.ts` with two writers of two partitions that reads `position` against `seq`;
+  - a test of `src/storage.test.ts` whose projection's schema refuses to encode a state.
 
 ## Running
 
@@ -720,13 +740,13 @@ with a requirement that no example has yet.
   writes the projection of a state over the row a step committed
   ([decision 0070](decisions/archive/0070-reindex-writes-a-row-only-over-its-state.md)). They are bugs 13 and 25 of
   the [roadmap](roadmap.md), each with a test of `src/postgres.test.ts` that no run has reached. Bug 25 is fixed by
-  [decision 0284](decisions/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md), whose rule is that a statement that writes or deletes a row on a condition
+  [decision 0284](decisions/archive/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md), whose rule is that a statement that writes or deletes a row on a condition
   reads the condition from a row it has locked. Bug 13 is fixed by
   [decision 0285](decisions/archive/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md), whose batch skips the
   replies a step holds, and bug 80 by
   [decision 0286](decisions/0286-the-trigger-of-the-outbox-locks-the-publications-in-order.md), whose trigger locks
   the publications in order, and bug 78 by
-  [decision 0287](decisions/0287-a-reading-of-the-log-gives-each-partition-up-to-its-first-head.md), whose reading of the log gives each partition up to
+  [decision 0287](decisions/archive/0287-a-reading-of-the-log-gives-each-partition-up-to-its-first-head.md), whose reading of the log gives each partition up to
   its first head. Bug 49 is fixed by decision 0285 too, and bug 3 by
   [decision 0289](decisions/archive/0289-expire-deletes-what-work-that-ended-was-given.md), whose `expire` deletes what work that ended was given. The other bugs are later cases of that rule, each with a note of its own. What is left would
   be decided by:
