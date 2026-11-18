@@ -76,7 +76,15 @@ it leaves this file, and what it decided goes into the design, a decision or an 
        of the storage no test holds. Not reached: the premises of `Hash.string` and of the partition of an entity,
        which area 9 reads, and those of the consumers and the outbox in decisions 0150, 0153 and 0154, which area 7
        reads.
-    6. The table `effecttea_publications`. Note 0286.
+    6. Done, the table `effecttea_publications`. Note 0286, now in `archive/`, which keeps the state of the area: its
+       trigger drops a publication with the last row that names it. Its session read it whole with the trigger of
+       `text`, `write`, `published` and `consumers`, and the archived notes the code cites on this table, 0038, 0138,
+       0154 and 0157. `docs/design.md` now says, under What the storage writes, how the trigger drops a publication on
+       each dialect and why it locks the publications in order. The note's premise that no pair of the test of a
+       contract reaches the case had fallen, and is now `tested` by the examples of bug 80, and the comment of the test
+       of `src/postgres.test.ts` that said it no longer does. The area found no bug. Not reached: the rename of a
+       program's publications by `renamed`, which area 17 reads, and the time `consumers` reads of a publication, of
+       decision 0224, which area 7 reads.
     7. The tables of the outbox: `effecttea_outbox`, `effecttea_consumers` and `effecttea_cursors`. Notes 0184, 0224
        and 0288.
     8. The locks of the process, `locks` of `src/runtime/process.ts`. Notes 0246 and 0274.
@@ -109,14 +117,15 @@ it leaves this file, and what it decided goes into the design, a decision or an 
   - Done, area 2, on 2026-11-17.
   - Done, area 3, on 2026-11-18.
   - Done, area 5, on 2026-11-18.
-  - Next, area 6, then the areas in the order of the list. A session of an area starts from
+  - Done, area 6, on 2026-11-18.
+  - Next, area 7, then the areas in the order of the list. A session of an area starts from
     `bun scripts/premise-pairs.ts --tables`, or from the declarations of the module of its area, and lists the
     archived notes its code cites. It checks first that each note of its list keeps its state, and moves a note that
-    does not to the area that keeps it, as area 4 moved decision 0247 to area 3. Area 6 begins in
-    [`src/storage/tables.ts`](../src/storage/tables.ts): the table `effecttea_publications` and the trigger of the
-    outbox that drops a publication with the last row that names it, which `text` holds. `write` of
-    [`src/storage/entities.ts`](../src/storage/entities.ts) writes a step's publication, and `published` and
-    `consumers` of [`src/storage/log.ts`](../src/storage/log.ts) read it.
+    does not to the area that keeps it, as area 4 moved decision 0247 to area 3. Area 7 begins in
+    [`src/storage/log.ts`](../src/storage/log.ts): `pruneBatch`, which drops the rows of the outbox, and `declare`,
+    `ack`, `forget` and `consumers`, which write and read the consumers and their cursors. `write` of
+    [`src/storage/entities.ts`](../src/storage/entities.ts) inserts a step's rows of the outbox, and `renamed` of
+    [`src/storage/tables.ts`](../src/storage/tables.ts) moves the consumers of a name.
     A session moves its notes by `bun scripts/archive-notes.ts <numbers>`, which runs `git mv` into `archive/` and
     rewrites every relative link to the notes and in them, and then runs `bun run links`. An area that finds no note
     outside the archive still writes its premises and its alternatives, as area 4 did.
@@ -188,7 +197,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     Its case in the test of the pool is `bug13`. Its `gate` locks the row of one reply, and not a table, since a
     message's step reads its reply before its transaction, and a table locked would stop the step there.
   - Done, on 2026-11-12, bug 80, the trigger of the publications:
-    [decision 0286](decisions/0286-the-trigger-of-the-outbox-locks-the-publications-in-order.md). No pair of the pool
+    [decision 0286](decisions/archive/0286-the-trigger-of-the-outbox-locks-the-publications-in-order.md). No pair of the pool
     reaches it, so a scenario of `src/postgres.test.ts` holds it, as the note says.
   - Done, on 2026-11-12, bug 78, the reading of the log: [decision 0287](decisions/archive/0287-a-reading-of-the-log-gives-each-partition-up-to-its-first-head.md).
   - Done, on 2026-11-12, bug 111, a deadlock of two prunes at once that the pool found:

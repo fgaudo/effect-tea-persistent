@@ -564,3 +564,49 @@ The order of the log and What the storage writes, of `design.md`.
   the projection's migrations, and a step's rows share its seq`, in `src/storage.test.ts`.
 - That a launch with another number of partitions than the database's dies, and names both: **tested** by `a launch
   with another number of partitions than the database’s fails, and names both`, in `src/runtime.test.ts`.
+
+## The table of publications
+
+The table `effecttea_publications` holds what a step that publishes left: the message it handled, the projection and
+the step's time, once however many topics the step is written in, keyed by the program, the partition and the `seq`
+the step drew. Each row of `effecttea_outbox` names one. `write` of
+[`src/storage/entities.ts`](../src/storage/entities.ts) writes a step's publication, `published` and `consumers` of
+[`src/storage/log.ts`](../src/storage/log.ts) read it, and the trigger of the outbox that `text` of
+[`src/storage/tables.ts`](../src/storage/tables.ts) makes drops it with the last row that names it. The rules are
+under Topics and What the storage writes, of `design.md`.
+
+- That a publication is kept while a row of the outbox names it, and dropped with the last, by one statement that drops
+  several rows of it as by statements apart, on both dialects: **tested** by `a step's publication is stored once, and
+  dropped with the last topic that names it`, in `src/storage.test.ts`, on SQLite and PGlite, whose first prune drops
+  both rows of a publication in one statement.
+- That two transactions that each drop one row of a publication, the second while the first is open, leave no
+  publication once both commit, on two publications in opposite orders: **tested** by `a publication goes with the last
+  row that names it, though two transactions drop its rows at once`, in `src/postgres.test.ts`, in the job `postgres`
+  of the CI. It fails against the trigger once for each row.
+- That two prunes at once whose views of the log differ by an ack leave no publication that no row names: **tested** by
+  the examples of bug 80 in `two calls held at a statement on a pool answer as one order of them`, in
+  `src/contract.test.ts`, in the job `postgres` of the CI, which counts the publications left.
+- That a statement of a function of PL/pgSQL at `READ COMMITTED` reads a snapshot of its own, taken when the statement
+  begins, so that the trigger's second statement sees the rows a transaction that held the lock dropped:
+  **documented** by the section Function Volatility Categories of PostgreSQL 17, the version of the CI's server,
+  which says that a `VOLATILE` function, the default, takes a new snapshot at each of its queries.
+- That `ORDER BY` with `FOR UPDATE` locks the rows in the order of the sort: **documented** by the locking clause of
+  `SELECT` of PostgreSQL 17, which says the sort is applied before the rows are locked.
+- That the transition table of a trigger once for each statement holds every row the statement dropped:
+  **documented** by `CREATE TRIGGER` of PostgreSQL 17, and **tested** by `a step's publication is stored once, and
+  dropped with the last topic that names it`, in `src/storage.test.ts`, on PGlite.
+- That the trigger's function finds its tables through the client's `search_path`: **tested** by `on PostgreSQL every
+  object the runtime makes is in the schema its client’s search_path names`, in `src/storage.test.ts`.
+- That a batch of `prune` and the publications its trigger drops commit together: **documented** by the JSDoc of
+  `SqlClient.withTransaction` at Effect 4.1.3, which says that every statement in it runs in one transaction. A
+  trigger runs inside the statement that fires it, so the transaction is a guard where a database would run it
+  apart.
+- That a step writes its publication only with a row of the outbox, so that no publication is written that no row
+  names: **tested** by `a step is written in each topic whose selection changed, with the projection, and a creation in
+  every topic`, in `src/machine.test.ts`, whose step that changes no topic publishes nothing.
+- That a page of a topic, read with its publications, is a range of the index of the topic and a search of the key of
+  the publications for each row, and that the trigger of SQLite finds whether a row names a publication by the index
+  `effecttea_outbox_publication`: **tested** by `a consumer reads from its cursors through indexes, and never scans the
+  log`, in `src/runtime.test.ts`, which reads the plans SQLite chooses.
+- That a step written in five topics writes its projection once in the outbox: **seen** by `a step written in five
+  topics writes the projection once`, in [`spikes/large-states.test.ts`](../spikes/large-states.test.ts).

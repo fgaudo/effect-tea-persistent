@@ -1563,6 +1563,23 @@ condition is about, since a reply is not always its entity's own
 `reindex`, the batches of `expire` and of `prune`, the trigger of the outbox and the reading of the log, below and
 under [the order of the log](#the-order-of-the-log).
 
+A step's publication goes with the last row of the outbox that names it. A trigger of `effecttea_outbox` drops it,
+in the statement that drops the row, so that no statement that drops rows of the outbox leaves a publication no
+topic reads ([decision 0154](decisions/archive/0154-a-steps-projection-is-stored-once-in-the-outbox.md)). A step
+writes a publication only where it writes a row of the outbox, so every publication is named by a row when it is
+written. On SQLite the trigger runs once for each row dropped, and drops the row's publication where no other row
+names it. One transaction writes at a time there, so no other transaction holds a row of the publication. On
+PostgreSQL the trigger runs once for each statement, on the rows the statement dropped. It first locks the
+publications of those rows, `FOR UPDATE`, in the order of their keys. It then drops, in a statement of its own, each
+of those publications that no row of the outbox names. On a pool, a statement that dropped another row of a
+publication waits for the transaction that holds the publication's lock, and its second statement reads a snapshot
+taken after the lock, which sees that transaction's rows gone. The order of the keys keeps two statements from
+locking two publications in opposite orders. A trigger once for each row read the other transaction's row as still
+there, so two transactions that each dropped one row of a publication kept the publication for ever
+([decision 0286](decisions/archive/0286-the-trigger-of-the-outbox-locks-the-publications-in-order.md)). A batch of
+`prune` runs in a transaction of its own, so that the rows it drops and the publications its trigger drops commit
+together.
+
 On a pool of PostgreSQL the receiver's step that stores a reply or an answer, and the asker's step that ends the
 work, may run at once, and each reads the other's row only once it is committed. Both then leave the row. `expire`
 deletes it: after its batches of the replies past their time, it deletes in batches the replies and the answers whose

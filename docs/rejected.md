@@ -302,3 +302,35 @@ The list is written area by area, by the step The rules move from the notes into
   COMMITTED` would skip rows still. Reopen if: a reading comes to set its own level inside a caller's transaction.
 - **A lock of the heads by a reading of the log.** Weighed in decision 0287. Every step of a partition would wait for a
   reading, where leaving rows out makes no one wait. Reopen if: a reading comes to need every row committed.
+
+## The table of publications
+
+- **A row of the outbox that stores the projection, once for each topic.** Weighed, 2026-11-06, in
+  [decision 0154](decisions/archive/0154-a-steps-projection-is-stored-once-in-the-outbox.md), and seen by
+  `spikes/large-states.test.ts`. A step written in five topics wrote its projection five times, and took half as long
+  again at 5 MB. Reopen if: a topic comes to store a value of its own, apart from the projection.
+- **The first topic's row stores the projection, and the others name it.** Weighed in decision 0154. It needs no
+  table, and a prune of the first topic before the others would drop what they still read. Reopen if: every topic
+  comes to be pruned at once.
+- **A count, in the publication, of the rows that name it.** Weighed in decision 0154. The prune would write the
+  publication again at every row it drops, where the index of the outbox costs a few bytes for each row. Reopen if:
+  the index comes to cost more than a write of the publication.
+- **A second statement of `prune` that drops the publications no row names.** Weighed in decision 0154. It needs the
+  keys of the rows dropped, given back to the process and sent again, and a later statement that drops rows of the
+  outbox would have to keep the rule too, where the trigger keeps it in the schema. Reopen if: a database the
+  storage speaks comes to hold no trigger.
+- **A publication keyed by a hash of its projection.** Weighed in decision 0154. A step writes in a topic because
+  what the topic selects changed, so two steps that leave the same projection are rare, and the key would cost a
+  hash of the projection at every step. Reopen if: steps that leave the same projection come to be common.
+- **A structure of Effect in place of the table.** Weighed in decision 0154. `eventlog/SqlEventJournal` stores an event
+  once and orders it in a second table, as the publications do, and is a journal of clients that sync with a server,
+  with no topics, partitions or cursors. Cluster's `SqlMessageStorage` has no topics either. Reopen if: a module of
+  Effect comes to hold topics and cursors of a log.
+- **The trigger once for each row, with `FOR UPDATE` on the row's publication.** Weighed, 2026-11-12, in
+  [decision 0286](decisions/archive/0286-the-trigger-of-the-outbox-locks-the-publications-in-order.md). Two statements
+  would lock two publications in the order each drops its rows, which no clause orders, and PostgreSQL ends opposite
+  orders as a deadlock. Ordering the rows in `prune` first does not order the trigger's locks. Reopen if: PostgreSQL
+  comes to run a row trigger in an order a clause sets.
+- **An advisory lock of the program in `prune`.** Weighed in decision 0286. It orders every prune of a program, and is
+  a second way of locking beside the rows', as decision 0284 says of `reindex`. Reopen if: the locks of rows come to
+  cost more than a lock of the program.

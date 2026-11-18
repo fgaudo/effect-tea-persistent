@@ -744,7 +744,7 @@ with a requirement that no example has yet.
   reads the condition from a row it has locked. Bug 13 is fixed by
   [decision 0285](decisions/archive/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md), whose batch skips the
   replies a step holds, and bug 80 by
-  [decision 0286](decisions/0286-the-trigger-of-the-outbox-locks-the-publications-in-order.md), whose trigger locks
+  [decision 0286](decisions/archive/0286-the-trigger-of-the-outbox-locks-the-publications-in-order.md), whose trigger locks
   the publications in order, and bug 78 by
   [decision 0287](decisions/archive/0287-a-reading-of-the-log-gives-each-partition-up-to-its-first-head.md), whose reading of the log gives each partition up to
   its first head. Bug 49 is fixed by decision 0285 too, and bug 3 by

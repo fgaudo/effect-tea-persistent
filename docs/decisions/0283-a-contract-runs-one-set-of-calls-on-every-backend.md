@@ -80,7 +80,7 @@ Since [decision 0291](archive/0291-on-cluster-a-creation-the-program-dies-on-is-
   13 of a hundred runs. Then each request of the pair is sent again, and every entity is read.
 - **A statement that drops rows of the outbox is recorded as writing the publications too**, since the trigger of
   the outbox drops them, and no statement the recording sees names them
-  ([decision 0286](0286-the-trigger-of-the-outbox-locks-the-publications-in-order.md)).
+  ([decision 0286](archive/0286-the-trigger-of-the-outbox-locks-the-publications-in-order.md)).
 - **On the pool, `item` publishes two topics, `label` and `amount`, and is deployed with a consumer of each.** The
   calls of a history are also an ack of a consumer, through the partitions of the run's entities, and a prune. A
   call of the pair may be an ack followed by a prune, so that two prunes at once see the log otherwise by an ack. An

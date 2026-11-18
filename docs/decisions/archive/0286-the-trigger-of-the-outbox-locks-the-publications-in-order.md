@@ -1,18 +1,18 @@
 # 0286. The trigger of the outbox locks the publications of a statement's rows in order, once for each statement
 
-**Status:** accepted, 2026-11-12, as the fix of bug 80 of [`docs/bugs.md`](../bugs.md), a case of the rule of
-[decision 0284](archive/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md). It changes the trigger of
-PostgreSQL of [decision 0154](archive/0154-a-steps-projection-is-stored-once-in-the-outbox.md), as
-[decision 0157](archive/0157-the-storage-speaks-sqlite-and-postgresql.md) wrote it: the trigger runs once for each
+**Status:** accepted, 2026-11-12, as the fix of bug 80 of [`docs/bugs.md`](../../bugs.md), a case of the rule of
+[decision 0284](0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md). It changes the trigger of
+PostgreSQL of [decision 0154](0154-a-steps-projection-is-stored-once-in-the-outbox.md), as
+[decision 0157](0157-the-storage-speaks-sqlite-and-postgresql.md) wrote it: the trigger runs once for each
 statement, and not once for each row. Its premise that no pair of the test of a contract reaches the case fell on
-2026-11-13: the pool of [decision 0283](0283-a-contract-runs-one-set-of-calls-on-every-backend.md) reaches it, with an
+2026-11-13: the pool of [decision 0283](../0283-a-contract-runs-one-set-of-calls-on-every-backend.md) reaches it, with an
 ack between two prunes, and its examples `bug80` fail against the trigger before this note.
 
 ## Context
 
 A publication goes with the last row of the outbox that names it, by a trigger of the statement that drops the row
 (decision 0154). On PostgreSQL the trigger ran once for each row dropped, and read whether another row still named
-the row's publication. On a pool at `READ COMMITTED` ([decision 0222](0222-postgresql-with-many-connections.md)), two
+the row's publication. On a pool at `READ COMMITTED` ([decision 0222](../0222-postgresql-with-many-connections.md)), two
 transactions may drop the two rows of one publication at once: two batches of `prune` whose snapshots differ by a
 deploy that declares a consumer and by an ack select different rows. Each trigger then sees the other's row, which
 its transaction has not committed the deletion of, and both keep the publication. No row names it afterwards, so no
@@ -33,18 +33,18 @@ prune drops it.
 - **SQLite's trigger is left as it is.** One transaction writes at a time there.
 - **The schema of the first release is changed in place**, since no release has been published and the first
   migration is the schema of the first release
-  ([decision 0216](0216-the-tables-are-made-by-effects-migrator.md)).
+  ([decision 0216](../0216-the-tables-are-made-by-effects-migrator.md)).
 
 ## What it rests on
 
 - That two transactions that each drop one row of a publication, the second while the first is open, leave no
   publication once both commit, on two publications in opposite orders: **tested**, by `a publication goes with the
   last row that names it, though two transactions drop its rows at once` of
-  [`src/postgres.test.ts`](../../src/postgres.test.ts), in the job `postgres` of the CI. It fails against the trigger
+  [`src/postgres.test.ts`](../../../src/postgres.test.ts), in the job `postgres` of the CI. It fails against the trigger
   before this note.
 - That the trigger keeps a publication while another row names it, and drops it with its last row, on PGlite: **tested**,
   by `a consumer is a name within its topic, and a prune drops in each topic what its consumers read` and the tests of
-  the search path of [`src/storage.test.ts`](../../src/storage.test.ts).
+  the search path of [`src/storage.test.ts`](../../../src/storage.test.ts).
 - That a statement of a function of PL/pgSQL at `READ COMMITTED` reads a snapshot of its own, taken when it begins:
   **documented**, in the section on the volatility of functions of PostgreSQL 17, the version of the CI's server: a
   `VOLATILE` function, the default, takes a new snapshot at each of its queries. The first premise tests it too.
