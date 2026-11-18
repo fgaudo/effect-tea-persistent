@@ -111,7 +111,9 @@ This repository is a design and its pure core, not a library yet: read [`README.
 - A premise about a dependency is looked up first in the documentation of the version pinned, for Effect its JSDoc
   in `node_modules/effect/src`: found, it is documented; not found, the note says so. A rule that loses data in
   silence if a behaviour not promised changes does not rest on it alone, where a guard of the library's is cheap;
-  otherwise the premise goes in `docs/open-questions.md`.
+  otherwise the premise goes in `docs/open-questions.md`. The official repository of Effect 4 is
+  [`github.com/Effect-TS/effect`](https://github.com/Effect-TS/effect). The repository `effect-smol` no longer
+  follows Effect 4's releases, so a source of Effect read outside `node_modules` is read there.
 - A spike is a test in `spikes/`, run by `bun run test:spikes` at the pinned version, and by a job of the CI of its
   own on every push. `bun test` runs no spike, as `bunfig.toml` says
   ([decision 0250](docs/decisions/0250-bun-test-holds-its-budget-by-samples-and-runs-of-their-own.md)). A premise about what a dependency does
