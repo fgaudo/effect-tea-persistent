@@ -7,6 +7,8 @@ This repository is a design and its pure core, not a library yet: read [`README.
 
 - All code, comments, identifiers, commit messages and `.md` files are in **English**.
 - A commit made with an AI agent ends with an `Assisted-by: <model>` trailer, never `Co-Authored-By`.
+- Work is committed on `main`, with no branch first, even to run a job of the CI before the work reaches `main`. A
+  branch is only for a session that works beside another one.
 - A commit message stays short: a subject line of at most 72 characters in the imperative, and a body only
   where the diff cannot say it, four lines at most. Why a change was taken belongs in `docs/`, not in the message.
 - A commit's subject starts with the module or area it changes, then a concrete action:
@@ -93,6 +95,10 @@ This repository is a design and its pure core, not a library yet: read [`README.
   by the documentation of the version pinned. A reading of the code alone gives a lead, not a finding, and the
   session that holds the lead turns it into a test or drops it. A lead no test can reach yet goes in
   `docs/open-questions.md`, with what would decide it, and not in `docs/bugs.md` as a bug.
+- Everything a session or a review finds is written into the repository, never left in a report or in the chat
+  alone. Each finding, each lead not checked and each case not reached becomes a question of
+  `docs/open-questions.md` or a step of `docs/roadmap.md`, in the commit that handles the report. A note that a
+  review read in part, or did not read, is given to an area, a later session or a step.
 - A test of `src/form.test.ts` refuses the words `reasoned` and `not run` in the section `What it rests on` of every
   note numbered 0258 or above. The notes taken before keep their premises as written, and a review reads those
   first.
@@ -100,7 +106,9 @@ This repository is a design and its pure core, not a library yet: read [`README.
   `documented`, `seen`, `read`, `read in the source`, `chosen`, `failed` or `open`. A premise not checked yet is
   `open`, and says what would check it. It is never written `to be **tested**`, which a reader who scans the bold
   words reads as tested. A test of `src/form.test.ts` checks it for every note numbered 0259 or above, and the notes
-  taken before keep their premises as written.
+  taken before keep their premises as written. The state `read in the source` is for a dependency's source alone. A
+  premise about what the code of `src/` does when it runs is `tested`, by a test of the runtime or by a check of
+  `src/form.test.ts` that refuses the code that would break it.
 - A premise said `tested` names, in backticks, a test the repository keeps: the name of the test or of its group, a
   script of `package.json` run as `bun run <script>`, or the file of the tests. A test thrown away once it passed
   makes no premise tested. A premise names its test in its own bullet, and never only as `the same test`, so that a
@@ -108,6 +116,9 @@ This repository is a design and its pure core, not a library yet: read [`README.
   names one, and that every test a note names after `**tested** by` exists, in every note. A rename of a test
   fixes the name in the notes that cite it, as a rename fixes a link. A test that a later note takes out with the
   rule it held is listed by that check as retired, with the note that took it out.
+- A premise that says which dialects a test runs on is written from the helper the test is wrapped in. `database` of
+  `src/runtime.test_shared.ts` runs SQLite alone unless it is given dialects. `onBoth` runs SQLite and PostgreSQL,
+  and PostgreSQL is PGlite, or the server that `POSTGRES_URL` names in its place.
 - A premise about a dependency is looked up first in the documentation of the version pinned, for Effect its JSDoc
   in `node_modules/effect/src`: found, it is documented; not found, the note says so. A rule that loses data in
   silence if a behaviour not promised changes does not rest on it alone, where a guard of the library's is cheap;
@@ -186,7 +197,7 @@ This repository is a design and its pure core, not a library yet: read [`README.
   `bun run test:release` runs them all, and a release passes it. A step of the roadmap that changes the runtime
   or `src/testing.ts` passes `bun run test:release` before it is taken, since some rules of concurrency fail only
   past the first hundred seeds. A commit that changes the runtime or `src/testing.ts` first runs, under
-  `SCHEDULES=all`, the files of the tests of the modules it changes, and `bun run test:slow` where it changes what
+  `SCHEDULES=all`, the files of the tests of the modules it changes, then `bun run test:pins`, and `bun run test:slow` where it changes what
   Cluster runs, since `bun test` runs a sample and skips the tests under `slow`. A schedule under `bound` 1 is exhaustive within its bound under the release, which
   runs every deviation; any other run runs one in twenty, from the first, and the deviations listed under `pinned`,
   as `{ decision, choice }`. `bun test` and the release start from seed 0, so that each of their runs
