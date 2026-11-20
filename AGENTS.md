@@ -53,8 +53,8 @@ This repository is a design and its pure core, not a library yet: read [`README.
   [`docs/decisions/README.md`](docs/decisions/README.md) by what it decides, with the notes that changed it,
   updated by the commit that adds or changes a note. A question not decided yet goes in
   `docs/open-questions.md`, as the question in a few sentences and, as bullets, what would decide it; an
-  analysis longer than that is a spike. It leaves the file when a note decides it. A step of the roadmap leaves it when done.
-  The roadmap holds only the steps ahead: what a done step decided is in its notes, and is not retold there.
+  analysis longer than that is a spike. It leaves the file when a note decides it.
+- A step of the roadmap that is done leaves `docs/roadmap.md`, and what the step decided is in its notes.
 - A step under way is continued by a session that knows nothing of the session before it. So before a session
   proposes to move to the next part of a step, the repository says how to continue: the step in the roadmap names
   the parts done and the part next, and the step's `proposed` notes say what the parts done decided. What only the

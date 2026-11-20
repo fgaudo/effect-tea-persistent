@@ -5,7 +5,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
 
 ## Next
 
-- **The rules move from the notes into documents kept true.** Every rule a note outside the archive decides is said
+- **The rules move from the notes into documents kept true.** (Opus 5.5 · medium) Every rule a note outside the archive decides is said
   in `docs/design.md`, the README or `AGENTS.md`, every premise the code rests on today is a bullet of
   `docs/premises.md`, and every alternative a later proposal could bring again is an entry of `docs/rejected.md`.
   The notes then lie in [`archive/`](decisions/archive) as records of why. A reading of every pair of notes costs
@@ -162,7 +162,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
   - The step leaves this file when every note but those of steps under way lies in `archive/`, and the last part is
     done. Decision 0294 is taken by that commit, and is a record from then on.
 
-- **The tests of a contract on every backend.** It is the fourth kind of test of `AGENTS.md`, and the rule of
+- **The tests of a contract on every backend.** (Opus 5.5 · high) It is the fourth kind of test of `AGENTS.md`, and the rule of
   families C and D of [`docs/bugs.md`](bugs.md). One set of requests runs alike on each way the library runs, and the
   answers, the projections and what an operator reads must be the same on each. The ways are SQLite and PostgreSQL
   on one process, PostgreSQL with a pool on the CI's server, and Cluster with two runners on one file. Its note is
@@ -309,7 +309,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
       runtime on Cluster across machines, on PostgreSQL, below.
   - The step leaves this file when the parts above are done, and decision 0283 is taken, `accepted`, by that commit.
 
-- **A door that changes between two releases of the library, to verify and fix.** A release of the library that adds
+- **A door that changes between two releases of the library, to verify and fix.** (Fable 5.2 · high) A release of the library that adds
   an RPC to the door of a program on Cluster, or changes a payload, is not caught by the guard of the version
   ([decision 0159](decisions/archive/0159-on-cluster-an-older-version-serves-no-shard-once-a-newer-one-launches.md)).
   A runner of the older release that still holds a shard is given the newer request, and Cluster answers a payload
@@ -319,7 +319,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
   is a choice of the design, which the [open question](open-questions.md#running) A door that changes between two
   releases of the library lists.
 
-- **What a deploy may change of a program, against what is stored.** This step is the rule of family A of
+- **What a deploy may change of a program, against what is stored.** (Fable 5.2 · high) This step is the rule of family A of
   [`docs/bugs.md`](bugs.md). Four of the bugs the premise review found have
   one form: a deploy of a newer version changes a piece of the program, while what is stored was written by the
   older version. They are the delivery of an operation (bug 1), the way the sender is written (bug 5), a droppable
@@ -337,7 +337,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
   activation by a program compares each piece stored with the program: the same, changed in a way the table
   allows, which it converts, or changed otherwise, which suspends the entity with a defect that names the piece.
 
-- **Two entities' timers due at one time, in no order.** The design promises no order of two entities' timers due at
+- **Two entities' timers due at one time, in no order.** (Opus 5.5 · high) The design promises no order of two entities' timers due at
   one time, and a rehearsal fires them in the order of creation, which changes nothing a pure program shows. One
   entity's timers due at one time fire in the order of its stored work, which the runtime keeps where an entity's
   loop takes a `Fire`. A suspension closes a rehearsal's world, so that a scenario that catches a defect reads
@@ -353,7 +353,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
   of a contract on every backend, so it may run beside it. The step leaves this file when its tests pass,
   `docs/design.md` and `docs/glossary.md` say it, and decision 0293 is taken, `accepted`, by that commit.
 
-- **The process's state as a pure core, and the tests of an order.** The fields of `Process`, `Deployment` and
+- **The process's state as a pure core, and the tests of an order.** (Fable 5.2 · high) The fields of `Process`, `Deployment` and
   `Loaded` that another fiber reads move into a module that imports no `Effect`, as `src/machine.ts` is for an entity.
   The semantics of the process moves there too, and the rehearsal runs it as the runtime does.
   A transition takes a state and an event and gives a state and the commands to perform, and the shell performs it in
@@ -406,7 +406,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     The same commit changes the rules of `AGENTS.md` on two fields written in one step, on pinned seeds and on
     `bun run test:pins`.
 
-- **A test of invariants over generated histories.** It is the second kind of test of `AGENTS.md`, which the library
+- **A test of invariants over generated histories.** (Opus 5.5 · high) It is the second kind of test of `AGENTS.md`, which the library
   does not have yet. fast-check generates histories of commands: a message under a new request id or a retried one,
   an operation that completes or fails, time that passes, a crash and a restart, a deploy of a variant of the
   program, a resume and a discard. The variants of a deploy change one piece of a program at a time, as the table
@@ -436,14 +436,14 @@ it leaves this file, and what it decided goes into the design, a decision or an 
     An invariant of a process's state is then tested on the core, with no scheduler, and the layer on the runtime
     checks what the core does not hold: the database, the forks and the time.
 
-- **The tests pruned by the mutations.** Once the test of invariants exists, `scripts/mutate.ts` takes out each
+- **The tests pruned by the mutations.** (Opus 5.5 · high) Once the test of invariants exists, `scripts/mutate.ts` takes out each
   rule the notes decide, one at a time. A test of a scenario that fails only where a test of the four kinds of
   `AGENTS.md` fails too, under every mutation, goes, and its rule is said by the test that stays. A test that alone
   fails under a mutation stays. The step keeps the suite within its budget as the tests of the bugs come in.
 
 ## Later
 
-- **The release**, once there is code to publish. It is released as experimental while it depends
+- **The release** (Opus 5.5 · medium), once there is code to publish. It is released as experimental while it depends
   on Effect's unstable modules ([decision 0099](decisions/archive/0099-a-library-on-unstable-modules-is-released-as-experimental.md)).
   The release archives the notes the design has come to cover since the last archiving, as
   [`AGENTS.md`](../AGENTS.md) says. It passes `bun run test:release`, which runs every seed of the explored tests.
@@ -463,7 +463,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
   - a tutorial on the site, built step by step from regions of the examples;
   - a benchmark of the runtime, as the steps and the transactions a second, run in the CI.
 
-- **The runtime on Cluster across machines, on PostgreSQL**, once Cluster has a fence
+- **The runtime on Cluster across machines, on PostgreSQL** (Fable 5.2 · high), once Cluster has a fence
   ([Effect-TS/effect#10058](https://github.com/Effect-TS/effect/issues/10058)), or the runtime one of its own. Until
   then a step commits only where the commit checks the shard, which on Cluster is SQLite
   ([decision 0084](decisions/archive/0084-a-step-commits-only-where-the-commit-checks-the-shard.md)). A fence of the runtime's
@@ -474,7 +474,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
   hold a step by a probe, which a file of SQLite shared by two runners cannot hold
   ([decision 0283](decisions/0283-a-contract-runs-one-set-of-calls-on-every-backend.md)).
 
-- **An act of a rehearsal from several fibers**, postponed by the maintainer on 2026-11-13. Bug 112 of
+- **An act of a rehearsal from several fibers** (Opus 5.5 · high), postponed by the maintainer on 2026-11-13. Bug 112 of
   [`docs/bugs.md`](bugs.md) is a request id that two fibers of a scenario send at once, applied twice. Its test is a
   `test.failing` of `src/rehearse.test.ts`. The [open question](open-questions.md#programs) on a scenario of several
   fibers lists the other acts of the same form, none run, and the two fixes. The maintainer chose neither yet. The
@@ -490,7 +490,7 @@ it leaves this file, and what it decided goes into the design, a decision or an 
 
   The step begins at `receive` of `src/rehearse.ts`.
 
-- **Code written by hand where a module of Effect does the same**, of low priority. A review of `src/` against
+- **Code written by hand where a module of Effect does the same** (Opus 5.5 · high), of low priority. A review of `src/` against
   the rule of [`AGENTS.md`](../AGENTS.md) on Effect's modules found four places, on 2026-11-11:
   - The lock of each entity, `holding` in `src/runtime/process.ts`, keeps a `Map` of a semaphore and a count of its
     users, and deletes the entry when the last user lets go. `RcMap`, which is stable, shares a resource by key and
