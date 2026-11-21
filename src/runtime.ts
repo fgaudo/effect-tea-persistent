@@ -489,6 +489,10 @@ const operating = <T extends Types>(
 const failedInDatabase = (cause: Cause.Cause<never>) =>
   !Cause.hasInterrupts(cause) && SqlError.isSqlError(Cause.squash(cause))
 
+/** Logs a transaction that failed in the database and is tried again, with its cause. */
+const retried = (cause: Cause.Cause<never>) =>
+  Effect.logWarning('a transaction failed in the database; it is tried again after the retry', cause)
+
 /**
  * Runs the transaction `effect` again after `retry` while it fails in the database, as a deadlock fails it on
  * PostgreSQL. It records an operation's end, which only the operation's fiber holds, so a failure must not lose it.
@@ -498,7 +502,7 @@ const persisting = <A>(p: Process, effect: Effect.Effect<A>): Effect.Effect<A> =
   Effect.catchCauseIf(
     effect,
     failedInDatabase,
-    () => Effect.andThen(Effect.sleep(`${p.retry} millis`), persisting(p, effect)),
+    (cause) => Effect.andThen(retried(cause), Effect.andThen(Effect.sleep(`${p.retry} millis`), persisting(p, effect))),
   )
 
 /** The last output of a transaction that `pick` reads an answer from. */
@@ -637,7 +641,7 @@ const entitiesOf = (p: Process, entity: Address, key: Key, incarnation: number, 
       // A commit that failed may have committed, and the attempt sent again is then given the reply it stored.
       const attempted = d === undefined
         ? p.driver === undefined ? Effect.succeed(null) : Effect.flatMap(p.driver.deploy(program), attempt)
-        : Effect.catchCauseIf(attempt(d), failedInDatabase, () => Effect.succeed(null))
+        : Effect.catchCauseIf(attempt(d), failedInDatabase, (cause) => Effect.as(retried(cause), null))
       return Effect.flatMap(attempted, (answer) =>
         answer !== null
           ? Effect.succeed(answer)
@@ -692,7 +696,7 @@ const waking = <T extends Types>(p: Process, d: Deployment<T>): Effect.Effect<ne
             return true
           })),
         failedInDatabase,
-        () => Effect.succeed(false),
+        (cause) => Effect.as(retried(cause), false),
       )
       while (yield* fire) fired++
     }

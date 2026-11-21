@@ -995,8 +995,8 @@ is written once. A launch on a client of any other dialect is the launcher's def
   ([decision 0279](decisions/0279-createtables-dies-within-a-transaction-of-its-client.md)).
 - A transaction that fails in the database, as a deadlock fails it on PostgreSQL, is tried again at the launch's
   `retry`. A receiver's transaction is sent again by its sender, an operation's end by the operation's fiber, and a
-  timer's fire by the waker. A commit that failed may have committed, and the event tried again is then one the
-  machine ignores. A caller's transaction is not tried again, and the caller is given the failure as a defect.
+  timer's fire by the waker. Each is logged as a warning with its cause. A commit that failed may have committed,
+  and the event tried again is then one the machine ignores. A caller's transaction is not tried again, and the caller is given the failure as a defect.
 - Four readings run several statements in one transaction, begun at `REPEATABLE READ` on PostgreSQL where the
   transaction is the reading's own: a page of a query, `inspect`, `suspended`, and the reading of each entity by
   `check`. So a page gives a row once though a step moves it between its parts, and `inspect` reads a step whole or
