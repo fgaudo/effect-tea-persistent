@@ -448,7 +448,7 @@ describe('a call that waits for a step, within a transaction of a pool (decision
         { concurrency: 'unbounded' },
       )
       expect(exits.map(reasonOf)).toEqual(
-        Array.from({ length: transactions }, () => 'create runs within a transaction of the client of the runtime'),
+        Array.from({ length: transactions }, () => 'the call runs within a transaction of the client of the runtime'),
       )
       expect(yield* handle.create('free', { requestId: 'free', sender: null })).toEqual({ _tag: 'Created' })
       expect(yield* handle.query({ limit: 100 })).toHaveLength(1)

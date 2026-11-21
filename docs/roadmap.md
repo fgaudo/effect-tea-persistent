@@ -22,9 +22,12 @@ Each step names its model and effort, what it depends on, and how to tell it is 
      `spikes/full-volume.test.ts` and `spikes/full-database.test.ts` went with the consumers they freed room for.
    - Next: the runtime and the storage are 2,903 lines without tests, over the budget of 2,500. The maintainer
      chooses whether to cut further or to move the budget.
-   - Next: a push of `main` runs the CI's job `postgres`. Its new test of `READ COMMITTED` and its deadlock test,
-     rebuilt on a key of the outbox, have run on no server yet. No run has checked yet that the tests of two steps
-     and of two creations of `src/runtime.pool.test.ts` fail without the lock.
+   - Done on 2026-11-21 on the CI's server: the histories, the test of `READ COMMITTED` and the deadlock pass.
+   - Next: the four overlaps of `src/runtime.pool.test.ts` fail on the server since commit `f4669e6`, which first
+     ran them there. Each leaves the reply or the `NotFound` row after `expire`, as `{ after: 1 }` where the test
+     expects 0. The cause is not known. Only the CI's job `postgres` runs them, since no server runs here.
+   - Next: no run has checked yet that the tests of two steps and of two creations of `src/runtime.pool.test.ts`
+     fail without the lock.
    - It is done when the histories and the examples pass on the three, the runtime and the storage are under their
      budget without tests, and `bun test` runs within a minute.
 

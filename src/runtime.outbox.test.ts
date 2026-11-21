@@ -6,6 +6,7 @@ import { expect, test } from 'bun:test'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Schema from 'effect/Schema'
+import * as SchemaTransformation from 'effect/SchemaTransformation'
 import * as Scope from 'effect/Scope'
 import { SqlClient } from 'effect/sql'
 import { TestClock } from 'effect/testing'
@@ -45,12 +46,18 @@ const first = note((last) => last)
 
 const keep = 'forever' as const
 
+/** An integer of a row: `@effect/sql-pg` gives a `BIGINT` as a bigint, where SQLite and PGlite give a number. */
+const Integer = Schema.Union([
+  Schema.Number,
+  Schema.BigInt.pipe(Schema.decodeTo(Schema.Number, SchemaTransformation.transform({ decode: Number, encode: BigInt }))),
+])
+
 const Rows = Schema.Array(Schema.Struct({
   id: Schema.String,
-  step: Schema.Number,
+  step: Integer,
   kind: Schema.String,
-  version: Schema.Number,
-  written_at: Schema.Number,
+  version: Integer,
+  written_at: Integer,
   message: Schema.NullOr(Schema.String),
   projection: Schema.String,
 }))

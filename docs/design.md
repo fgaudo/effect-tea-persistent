@@ -827,7 +827,8 @@ other systems shows it to callers.
 No order holds across entities. The rows of one entity commit in the order of `step`, since a step locks its entity
 first. The library never deletes a row of the outbox. A reader deletes by key the rows it has handled, in the
 transaction of its own write, or deduplicates by `(name, id, step)`. A row's JSON is as the version in `version`
-wrote it, and the library gives a reader no migration of it.
+wrote it, and the library gives a reader no migration of it. On PostgreSQL `step`, `version` and `written_at` are `BIGINT`,
+which `@effect/sql-pg` gives a reader as a bigint, where SQLite and PGlite give a number.
 
 ## Testing
 
