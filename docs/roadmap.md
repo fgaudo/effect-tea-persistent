@@ -23,9 +23,9 @@ Each step names its model and effort, what it depends on, and how to tell it is 
    - Next: the runtime and the storage are 2,903 lines without tests, over the budget of 2,500. The maintainer
      chooses whether to cut further or to move the budget.
    - Done on 2026-11-21 on the CI's server: the histories, the test of `READ COMMITTED` and the deadlock pass.
-   - Next: the four overlaps of `src/runtime.pool.test.ts` fail on the server since commit `f4669e6`, which first
-     ran them there. Each leaves the reply or the `NotFound` row after `expire`, as `{ after: 1 }` where the test
-     expects 0. The cause is not known. Only the CI's job `postgres` runs them, since no server runs here.
+   - Done on 2026-11-21: the four overlaps of `src/runtime.pool.test.ts` pass on the server. The row is stored
+     under the receiver's name, so the receiver's `expire` deletes it, as the sweep of each program does. The
+     first test of the job `postgres` times out now and then, which is bug 113 of `docs/bugs.md`.
    - Next: no run has checked yet that the tests of two steps and of two creations of `src/runtime.pool.test.ts`
      fail without the lock.
    - It is done when the histories and the examples pass on the three, the runtime and the storage are under their
