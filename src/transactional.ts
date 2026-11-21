@@ -16,7 +16,7 @@ import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import * as Queue from 'effect/Queue'
 import type * as Scope from 'effect/Scope'
-import { SqlClient } from 'effect/sql'
+import { SqlClient, SqlError } from 'effect/sql'
 import * as Machine from './machine.ts'
 import {
   type Address,
@@ -457,10 +457,16 @@ const operate = <T extends Types>(p: Process, d: Deployment<T>, id: string, even
       return { _tag: 'StillSuspended', cause: Machine.render(after.stored.suspension.cause) }
     }))
 
+/** Whether `cause` is a statement or a commit that failed, which the storage gives as a defect of `SqlError`. */
+const failedInDatabase = (cause: Cause.Cause<never>) =>
+  !Cause.hasInterrupts(cause) && SqlError.isSqlError(Cause.squash(cause))
+
 /**
  * What one run of an operation sends with. Its request is the run's, with the name the operation gives, so a run
  * after a crash sends the same requests and is given the stored replies. A receiver that is suspended, or whose
- * program is not deployed yet, has no reply: the run sends again after `retry`, or sooner once an entity is resumed.
+ * program is not deployed yet, has no reply: the run sends again after `retry`, or sooner once an entity is resumed
+ * or a program deployed in this process. A transaction that failed in the database has no reply either, and the run
+ * sends again after `retry`. Only a defect of the sender's own then suspends it.
  */
 const entitiesOf = (p: Process, entity: Address, key: Key, incarnation: number, droppable: boolean) => {
   const used = new Set<string>()
@@ -483,7 +489,11 @@ const entitiesOf = (p: Process, entity: Address, key: Key, incarnation: number, 
       // The signal is taken before the attempt, so that a resumption between the answer and the wait ends the wait.
       const resumed = p.resumed
       const d = p.deployments.get(program)
-      return Effect.flatMap(d === undefined ? Effect.succeed(null) : attempt(d), (answer) =>
+      // A commit that failed may have committed, and the attempt sent again is then given the reply it stored.
+      const attempted = d === undefined
+        ? Effect.succeed(null)
+        : Effect.catchCauseIf(attempt(d), failedInDatabase, () => Effect.succeed(null))
+      return Effect.flatMap(attempted, (answer) =>
         answer !== null
           ? Effect.succeed(answer)
           : Effect.flatMap(

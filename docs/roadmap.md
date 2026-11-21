@@ -20,8 +20,8 @@ Each step names its model and effort, what it depends on, and how to tell it is 
    is written here with its reason.
    - Done on 2026-11-21: `create`, `send`, `read`, the timers, the operations, a suspension, `resume` and `discard`,
      on SQLite. `src/transactional.histories.test.ts` plays 1,000 histories, and 10,000 with `SCHEDULES=all`.
-   - Next, entities that talk, with a retry after a wait where a receiver is suspended.
-   - Then PostgreSQL: the lock of the entity's row, and a test of two transactions held at a statement for each
+     Entities that talk, on SQLite, with the tests of `src/transactional.talk.test.ts`.
+   - Next, PostgreSQL: the lock of the entity's row, and a test of two transactions held at a statement for each
      statement that reads another entity's rows.
    - Then `query`, `reindex`, the outbox as one table, `inspect`, `suspended` and the sweep.
    - Then the old runtime goes, with the integration of Cluster, the hold, the scheduler of the tests and every
@@ -55,8 +55,13 @@ Each step names its model and effort, what it depends on, and how to tell it is 
    - **The examples' tests run as they are** on the new runtime, by the preload of
      `spikes/transactional/examples.preload.ts`. `examples/subscription` has no test on a runtime, and every test of
      `examples/order` uses a parked piece or a reading of the read model, which the preload takes from the storage.
-   - Nothing yet tried a pool, or a receiver resumed while a sender waits. A call within a transaction of the
-     caller's client is not refused yet, as the old runtime refuses it.
+   - **A sender sees a resumption or a deploy of another process at its retry.** Only those of its own process end
+     the wait sooner. `docs/design.md` says a wait looks again on no clock, and says this when this step lands.
+   - A transaction of the receiver that dies with a `SqlError` has no reply yet, and its sender sends again at the
+     retry. On PostgreSQL a deadlock of two entities' transactions is such a failure, and the part on PostgreSQL
+     tests it so.
+   - Nothing yet tried a pool. A call within a transaction of the caller's client is not refused yet, as the old
+     runtime refuses it.
 
 5. **The rehearsal on the runtime's step.** (Opus 5.5 · high) It depends on step 4. The rehearsal of today is not
    a target of the histories: it fails a test at a defect, and has no `resume` and no `discard`. The maintainer chose
