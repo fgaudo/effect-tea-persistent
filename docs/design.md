@@ -1792,7 +1792,9 @@ A runner learns of another runner's commit from the file: while a reading of the
 ### How the machine and the runtime are tested
 
 The machine is tested with properties, under random orders of messages, completions, timers, crashes and
-defects ([`src/machine.test.ts`](../src/machine.test.ts)). The runtime is tested against it
+defects ([`src/machine.test.ts`](../src/machine.test.ts)). The promises a caller and a runner see are checked on
+histories of [`src/machine.test_histories.ts`](../src/machine.test_histories.ts), which any target plays, and which
+[`src/machine.histories.test.ts`](../src/machine.histories.test.ts) plays on the machine. The runtime is tested against the machine
 ([`src/runtime/loop.test.ts`](../src/runtime/loop.test.ts)): a scenario, and then random sequences of events, are driven
 on the real runtime with the process dying at each point of the table of
 [what survives a crash](#what-survives-a-crash), and what the database holds

@@ -11,18 +11,11 @@ Each step names its model and effort, what it depends on, and how to tell it is 
 
 ## Next
 
-3. **Histories with invariants, on the rehearsal.** (Opus 5.5 · high) It depends on nothing. fast-check generates
-   histories: a message under a new request id or a retried one, an operation that completes or dies, time that
-   passes, a restart, a resume and a discard. After each history the test checks the promises of the design. A
-   message under a request id is applied at most once, and a retry is given the same reply. An operation that acts
-   at most once is given `unknown` only where it started. No answer of an earlier incarnation is delivered. It
-   begins beside `src/rehearse.property.test.ts`. It is done when the property passes, and each invariant fails
-   once its rule is taken out of the machine by hand.
-
-4. **The runtime on the transaction.** (Opus 5.5 · high) It depends on step 3. The spike of step 2 passed on
+4. **The runtime on the transaction.** (Opus 5.5 · high) It depends on nothing. The spike of step 2 passed on
    2026-11-21. [`spikes/transactional/`](../spikes/transactional) holds it with its tests: a runtime of 590 lines
    on the machine and the storage of today, both unchanged. The spike becomes `src/runtime.ts`, and the histories
-   of step 3 are its tests, run on SQLite, on PGlite and on the CI's server of PostgreSQL with a pool. It keeps the
+   of step 3 are its tests, run on SQLite, on PGlite and on the CI's server of PostgreSQL with a pool.
+   `src/rehearse.property.test.ts` goes with the old runtime. It keeps the
    six rules of the review's section Where it must be able to go, and a rule it cannot keep is written here with
    its reason.
    - First `create`, `send`, `read`, the timers, the operations, a suspension and its `resume`, on SQLite.
@@ -34,6 +27,17 @@ Each step names its model and effort, what it depends on, and how to tell it is 
      parked piece.
    - It is done when the histories and the examples pass on the three, the runtime and the storage are under 2,500
      lines without tests, and `bun test` runs within a minute.
+
+   What step 3 left, which this step builds on:
+   - `src/machine.test_histories.ts` holds the toy, the histories, the interface `Target` and the checks.
+     `src/machine.histories.test.ts` plays them on the machine. Each store adds a `Target` of the runtime. Its
+     runner waits for the test's answer, and keeps the answer of each run it started, since a history answers a run
+     late. `suspended` reads what an operator reads.
+   - An operation started is one a committed step stored, not one whose runner was called, since a crash after the
+     commit gives `unknown` with no call.
+   - Each check fails once its rule is taken out of the machine. The incarnation that `record` checks has a check of
+     its own: without it a late answer stops the run under way, though `holds` drops the answer. `holds` alone is
+     found once in about a thousand histories, so the machine plays 10,000.
 
    What the spike found, which this step keeps or decides:
    - **The process holds the fibers of the operations that run, and no rule rests on anything else in memory.** A
@@ -61,9 +65,12 @@ Each step names its model and effort, what it depends on, and how to tell it is 
    - The spike did not try PostgreSQL, a pool, a deploy of a changed program, or a receiver resumed while a sender
      waits.
 
-5. **The rehearsal on the runtime's step.** (Opus 5.5 · high) It depends on step 4. `rehearse` runs the step of
+5. **The rehearsal on the runtime's step.** (Opus 5.5 · high) It depends on step 4. The rehearsal of today is not
+   a target of the histories: it fails a test at a defect, and has no `resume` and no `discard`. The maintainer chose
+   the machine on 2026-11-21, and `docs/open-questions.md` asks whether a rehearsal shows a suspension. `rehearse` runs the step of
    step 4 on a store in memory, with the test's clock and the test's answers, and reads what it stored back through
-   the migrations. The histories of step 3 run on both stores and must agree. It is done when bugs 5, 107, 108 and
+   the migrations. The histories of step 3 run on the runtime's target over both stores, and must agree. It is done
+   when bugs 5, 107, 108 and
    112 of `docs/bugs.md` each have a test that passes.
 
 6. **A slice from the browser to the entity.** (Fable 5.2 · high) It depends on steps 4 and 5. It is the library's

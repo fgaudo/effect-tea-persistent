@@ -1270,6 +1270,13 @@ with a requirement that no example has yet.
   program whose schema of rejections is `Never` could take no reason. It would be decided by:
   - a program that acts otherwise on a discard than on a rejection, as one that alerts or sends again later;
   - whether a reason the receiver's schema declares for a discard reads as the receiver's own rule.
+- **Whether a rehearsal shows a suspension.** A rehearsal fails the test once a defect suspends the entity, and gives
+  no `resume` and no `discard`, by `apply` of `src/rehearse.ts`. So the histories of
+  `src/machine.test_histories.ts` hold a die, a resume and a discard, and are played on the machine. Step 5 of the
+  [roadmap](roadmap.md) runs the rehearsal on the runtime's step, whose handle has `resume` and `discard`. Whether a rehearsal then answers `Suspended` and
+  gives a test the operator's acts, or still fails at a defect, is not decided. It would be decided by:
+  - a test of an example that rehearses the fix of a bug, deployed and resumed;
+  - the question of the contract on a defect on a caller's message, of step 8, which may take `discard` away.
 - **A handle divided by who uses it.** A handle gives more than twenty calls in one interface: a caller's `create`,
   `send` and `read`, the queries, the log's `published`, `fetch`, `ack` and `consume`, and an operator's `suspended`,
   `inspect`, `resume`, `discard`, `prune`, `forget`, `expire` and `reindex`. A boundary that serves callers holds the
