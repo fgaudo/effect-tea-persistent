@@ -188,6 +188,7 @@ what the one before stored. This library writes it once, so that a program holds
   architecture for a screen writes it the same way for an order. [`src/program.ts`](src/program.ts) imports no
   module of Node or of Bun, so a browser imports a program's schemas from it
   ([decision 0192](docs/decisions/0192-the-digest-of-a-key-is-computed-by-the-machine.md)).
+  [`examples/seat`](examples/seat) runs a screen and its entity on one module of schemas.
 
 ## What it is not for
 
@@ -234,6 +235,7 @@ Each example is a program with its scenarios as tests. If an example reads badly
 | [`booking`](examples/booking)                | a booking that holds seats of an event      | two entities that talk, rehearsed together and run on the runtime                                                             |
 | [`rental`](examples/rental)                  | bikes rented by the minute                  | the guide's running example: a value sent with the request and refused once changed, an id derived from the request id, an email carried into the end, a window a timer closes, a table of the application, a migration, a ride suspended and resumed by a fix |
 | [`stream`](examples/stream)                  | meters fed by a stream of readings          | a boundary that acknowledges an item once its answer is stored, an offset kept in the state, a meter suspended and fixed while the feed waits |
+| [`seat`](examples/seat)                      | the quick start's seat with an interface    | a screen of effect-tea in the browser and the entity on the server, with one module of schemas, a boundary of Effect's `HttpApi`, the two programs rehearsed together, and the flow over HTTP |
 
 ## Status
 

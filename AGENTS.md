@@ -68,7 +68,8 @@ again, and code written again cites no note. Step 9 of the roadmap deletes the n
 - Before code adds a helper, a data structure or a coordination of fibers, it looks in `node_modules/effect/src` for
   a module that does the same, `@stability unstable` ones too, and uses it. Code written by hand beside such a module
   says in a comment what the module does not do. An unstable module that `src/` does not import yet is used only
-  once the maintainer agrees.
+  once the maintainer agrees. The maintainer agreed to `effect/http` and `effect/http-api` for an example's
+  boundary.
 - [`src/machine.ts`](src/machine.ts) is the runtime's semantics. A rule it adds or changes changes its sentence of
   `docs/design.md`, and [`src/machine.test.ts`](src/machine.test.ts) has a test that fails without it.
 - A spike is a test in `spikes/`, run by `bun run test:spikes` and by a job of the CI, never by `bun test`. It
