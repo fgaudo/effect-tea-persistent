@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { TypesOf } from '../../src/index.program.ts'
 import { desk, World } from './desk.ts'
-import { type Handle, launch, type Runtime } from './runtime.ts'
+import { type Handle, launch, type Runtime } from '../../src/transactional.ts'
 
 type Files = Readonly<{ database: string; world: string }>
 

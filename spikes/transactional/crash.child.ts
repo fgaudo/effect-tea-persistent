@@ -9,7 +9,7 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import { appendFileSync } from 'node:fs'
 import { desk, World } from './desk.ts'
-import { launch } from './runtime.ts'
+import { launch } from '../../src/transactional.ts'
 
 const [filename = '', world = '', act = '', stop = ''] = Bun.argv.slice(2)
 

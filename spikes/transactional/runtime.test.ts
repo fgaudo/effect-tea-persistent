@@ -9,7 +9,7 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import { TestClock } from 'effect/testing'
 import { Payments, subscription } from '../../examples/subscription/subscription.ts'
-import { launch } from './runtime.ts'
+import { launch } from '../../src/transactional.ts'
 
 const ada = { _tag: 'Customer', id: 'ada' } as const
 

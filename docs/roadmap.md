@@ -11,59 +11,52 @@ Each step names its model and effort, what it depends on, and how to tell it is 
 
 ## Next
 
-4. **The runtime on the transaction.** (Opus 5.5 · high) It depends on nothing. The spike of step 2 passed on
-   2026-11-21. [`spikes/transactional/`](../spikes/transactional) holds it with its tests: a runtime of 590 lines
-   on the machine and the storage of today, both unchanged. The spike becomes `src/runtime.ts`, and the histories
-   of step 3 are its tests, run on SQLite, on PGlite and on the CI's server of PostgreSQL with a pool.
-   `src/rehearse.property.test.ts` goes with the old runtime. It keeps the
-   six rules of the review's section Where it must be able to go, and a rule it cannot keep is written here with
-   its reason.
-   - First `create`, `send`, `read`, the timers, the operations, a suspension and its `resume`, on SQLite.
-   - Then entities that talk, with a retry after a wait where a receiver is suspended.
+4. **The runtime on the transaction.** (Opus 5.5 · high) It depends on nothing. The spike of step 2 became
+   [`src/transactional.ts`](../src/transactional.ts), beside the old runtime, on the machine and the storage of
+   today. When the old runtime goes, it takes the name `src/runtime.ts`, and the types `Answer`, `Keep` and
+   `Operated` it imports from the old module move into it. The histories of step 3 are its tests, run on SQLite,
+   on PGlite and on the CI's server of PostgreSQL with a pool. `src/rehearse.property.test.ts` goes with the old
+   runtime. It keeps the six rules of the review's section Where it must be able to go, and a rule it cannot keep
+   is written here with its reason.
+   - Done on 2026-11-21: `create`, `send`, `read`, the timers, the operations, a suspension, `resume` and `discard`,
+     on SQLite. `src/transactional.histories.test.ts` plays 1,000 histories, and 10,000 with `SCHEDULES=all`.
+   - Next, entities that talk, with a retry after a wait where a receiver is suspended.
    - Then PostgreSQL: the lock of the entity's row, and a test of two transactions held at a statement for each
      statement that reads another entity's rows.
-   - Then `query`, `reindex`, the outbox as one table, `inspect`, `suspended`, `discard` and the sweep.
+   - Then `query`, `reindex`, the outbox as one table, `inspect`, `suspended` and the sweep.
    - Then the old runtime goes, with the integration of Cluster, the hold, the scheduler of the tests and every
-     parked piece.
+     parked piece. The tests of `spikes/transactional/` then move into `src/`, but `cost.test.ts`.
    - It is done when the histories and the examples pass on the three, the runtime and the storage are under 2,500
      lines without tests, and `bun test` runs within a minute.
 
-   What step 3 left, which this step builds on:
-   - `src/machine.test_histories.ts` holds the toy, the histories, the interface `Target` and the checks.
-     `src/machine.histories.test.ts` plays them on the machine. Each store adds a `Target` of the runtime. Its
-     runner waits for the test's answer, and keeps the answer of each run it started, since a history answers a run
-     late. `suspended` reads what an operator reads.
-   - An operation started is one a committed step stored, not one whose runner was called, since a crash after the
-     commit gives `unknown` with no call.
-   - Each check fails once its rule is taken out of the machine. The incarnation that `record` checks has a check of
-     its own: without it a late answer stops the run under way, though `holds` drops the answer. `holds` alone is
-     found once in about a thousand histories, so the machine plays 10,000.
-
-   What the spike found, which this step keeps or decides:
-   - **The process holds the fibers of the operations that run, and no rule rests on anything else in memory.** A
-     transaction derives the machine's `running` from the rows and the fibers: a stored timer is armed, and a
-     stored operation runs where the process holds its fiber. An operation stored with no fiber is restarted by
-     the next transaction of its entity, and by the deploy after a crash. `settled` is no fiber and no timer due.
-   - **When an entity is activated is this step's choice.** Activated at each step, a step of a state of 0.5 MB
-     took up to 2.0 times today's, over the bound of 1.5. Activated once a launch, it took at most 1.5 times, and
-     the spike then remembers the entities it activated. The step chooses a bound for that set, or a mark in the
-     entity's row. What is left of the cost is the read of the state, and the projection of the state read, which
-     `Machine.writes` computes to compare each topic. `cost.test.ts` holds the numbers.
+   What the work so far left, which the next parts build on:
+   - A `Target` of the runtime waits by `quiet` of `src/transactional.test_shared.ts`. It holds on SQLite alone,
+     whose calls answer at once, so PGlite and PostgreSQL need another wait.
+   - Its runner waits for the history's answer, kept by run. A process restarts only once it is quiet, so the runs
+     whose runner was called are the runs a committed step stored.
+   - A deploy activates only the entities with an operation or a message, so a deploy that makes a stored timer an
+     operation starts it late. `docs/open-questions.md` asks it under Programs, for step 10. The target retries the
+     creation after each deploy, so that the histories do not check it.
+   - Two rules of `runningOf` fail no test when taken out: it skips work whose message is queued, and arms no timer
+     of a suspended entity. Neither changes a history of one process. The part on PostgreSQL decides whether each
+     stays, with a test of two processes, or goes.
+   - An entity is activated once a launch, and the process remembers the last 10,000 it activated. Activated at
+     each step, a state of 0.5 MB took up to 2.0 times today's step. `spikes/transactional/cost.test.ts` holds the
+     numbers.
    - **The crash table loses its last two lines.** A message is handled in the transaction that records it, so a
      process killed between the two stored neither. The operation then runs again or is `unknown`, and the timer
      fires again. `docs/design.md` says so when this step lands.
    - **Two runtimes on one file lose no step, and each restarts the other's operations.** An operation that acts at
      most once is then recorded `unknown` while it still runs, and is never run twice. Who runs an operation is
      the claim the step under Later decides.
-   - **Of the review's six rules** the spike keeps the first, the third for a request, and the fourth. It breaks
-     the second where the storage of today does, and in no place of its own. It does not reach a sweep, the fifth
-     or the sixth. A step calls seven functions of the storage: `load`, `reply`, `write`, `answer`, `keepAnswer`,
-     `due` and `interrupted`.
-   - **The examples' tests run as they are** on a runtime under way, by the preload of `examples.preload.ts`.
-     `examples/subscription` has no test on a runtime, and every test of `examples/order` uses a parked piece or
-     a reading of the read model, which the spike took from the storage.
-   - The spike did not try PostgreSQL, a pool, a deploy of a changed program, or a receiver resumed while a sender
-     waits.
+   - **Of the review's six rules** the runtime keeps the first, the third for a request, and the fourth. It breaks
+     the second where the storage of today does, and in no place of its own. A step calls seven functions of the
+     storage: `load`, `reply`, `write`, `answer`, `keepAnswer`, `due` and `interrupted`.
+   - **The examples' tests run as they are** on the new runtime, by the preload of
+     `spikes/transactional/examples.preload.ts`. `examples/subscription` has no test on a runtime, and every test of
+     `examples/order` uses a parked piece or a reading of the read model, which the preload takes from the storage.
+   - Nothing yet tried a pool, or a receiver resumed while a sender waits. A call within a transaction of the
+     caller's client is not refused yet, as the old runtime refuses it.
 
 5. **The rehearsal on the runtime's step.** (Opus 5.5 · high) It depends on step 4. The rehearsal of today is not
    a target of the histories: it fails a test at a defect, and has no `resume` and no `discard`. The maintainer chose

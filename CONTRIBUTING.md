@@ -98,6 +98,7 @@ flowchart TB
     waker["runtime/waker.ts: the waker of the stored timers"]
     readings["runtime/readings.ts: the readings of the log that wait for a commit"]
     process["runtime/process.ts: what the runtime of one process holds,<br/>which its modules share"]
+    transactional["transactional.ts: the runtime on the transaction, which step 4<br/>of the roadmap grows to take the place of the modules above"]
   end
   check["check.ts: the check of a program against the stored entities,<br/>before its deploy, stepped by the machine, which writes nothing"]
   cluster["cluster.ts: on Effect Cluster, the Sharding of a runner,<br/>built once its versions are recorded, its RunnerHealth,<br/>the door of each program, which steps at the newest version,<br/>the client every request is sent through,<br/>and launch, the runtime of a runner"]

@@ -1110,6 +1110,15 @@ with a requirement that no example has yet.
 
 ## Programs
 
+- **When a deploy's new work starts on an entity that holds no operation.** A deploy activates the entities whose
+  state holds an operation or whose mailbox holds a message, as under Passivation of `docs/design.md`. Any other
+  entity is activated by the program deployed at its next transaction, which a stored timer gives at its time. So
+  an operation that a new version computes from a state that held only timers, or no work, starts late, or never on
+  an entity no caller touches. The machine activates every entity at the deploy. The histories of
+  `src/transactional.histories.test.ts` found it on 2026-11-21: a timer under `t` armed, then a deploy that makes
+  `t` an operation, which does not run. Their target now steps the entity after each deploy, so they do not check
+  it. Activating every entity with a stored timer at each deploy costs a transaction for each of them.
+  - Step 10 of the [roadmap](roadmap.md), which lists what a deploy may change, decides it.
 - **A rehearsal that reads back a reason, and a projection after a deploy.** `docs/design.md`, under Rehearsing,
   says that `rehearse` reads back only the projection, and that a rehearsed deploy exercises no migration of the state
   and of the projection. The machine reads back a rejection's reason too, in `replied` of `src/machine.ts`

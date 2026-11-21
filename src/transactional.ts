@@ -1,14 +1,14 @@
 /**
- * A spike of the runtime on the transaction, for step 2 of `docs/roadmap.md`. It keeps one rule: every event is one
- * transaction that reads the entity under a lock, steps `Machine.step` from what it read, and writes. No entity is
- * held in memory. The process holds the fibers of the operations that run. It also remembers which entities it has
- * activated, and it may forget one at no cost but an activation.
+ * The runtime on the transaction. It keeps one rule: every event is one transaction that reads the entity under a
+ * lock, steps `Machine.step` from what it read, and writes. No entity is held in memory. The process holds the
+ * fibers of the operations that run. It also remembers the entities it has activated, at most `remembered` of them,
+ * and it may forget one at no cost but an activation.
  *
- * It runs `src/machine.ts` and the storage of `src/storage.ts` as they are, and builds no piece the roadmap parks.
- * A reading of the storage that steps nothing, as `inspect`, is not here. It is a spike: it checks no argument of a
- * caller, and it logs and traces nothing.
+ * It grows here beside the runtime of `src/runtime.ts`, and takes that file's place once step 4 of
+ * `docs/roadmap.md` removes the old one. A reading of the storage that steps nothing, as `inspect`, is not here yet.
  */
 import * as Cause from 'effect/Cause'
+import * as Context from 'effect/Context'
 import * as DateTime from 'effect/DateTime'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
@@ -17,7 +17,7 @@ import * as Fiber from 'effect/Fiber'
 import * as Queue from 'effect/Queue'
 import type * as Scope from 'effect/Scope'
 import { SqlClient } from 'effect/sql'
-import * as Machine from '../../src/machine.ts'
+import * as Machine from './machine.ts'
 import {
   type Address,
   checkProgram,
@@ -34,20 +34,15 @@ import {
   type Receiver,
   type Reply,
   type Request,
+  requestIdFault,
   type Reused,
   runnerOf,
   type SenderOf,
   type Types,
-} from '../../src/program.ts'
-import type { Answer, Keep, Operated } from '../../src/runtime.ts'
-import {
-  createTables,
-  defaultPartitions,
-  partitioned,
-  type Storage,
-  storage,
-  transaction,
-} from '../../src/storage.ts'
+} from './program.ts'
+// The types of what a caller is answered stay in the old runtime's module until step 4 removes it.
+import type { Answer, Keep, Operated } from './runtime.ts'
+import { createTables, defaultPartitions, partitioned, type Storage, storage, transaction } from './storage.ts'
 
 /**
  * A point of an event's transaction where a test stops the process, to see what a crash there leaves. `Recorded` is
@@ -58,19 +53,27 @@ export type Point = 'Recorded' | 'BeforeCommit' | 'AfterCommit'
 
 /** What a launch takes. */
 export interface Options {
-  /** How long an operation waits before it sends again to a receiver that has no reply yet, in milliseconds. */
-  readonly retry?: number
-  /** What runs at each point of an event's transaction, given the entity of the event. */
-  readonly probe?: (point: Point, entity: Address) => Effect.Effect<void>
   /**
-   * When an entity with no operation in this process is activated by the program deployed, as after a crash:
-   * `'step'` is in each of its transactions, and `'launch'` is in the first one of this process alone. An entity
-   * that holds an operation with no fiber in this process is activated in either case. It is `'launch'` by default.
+   * How long an operation waits before it sends again to a receiver that has no reply yet: a positive integer of
+   * milliseconds, 50 by default. A receiver resumed in this process ends the wait sooner.
    */
-  readonly activation?: 'step' | 'launch'
+  readonly retry?: Readonly<{ millis: number }>
+  /** What runs at each point of an event's transaction, given the entity of the event: a test's hook. */
+  readonly probe?: (point: Point, entity: Address) => Effect.Effect<void>
 }
 
-/** What a caller does with one program's entities. */
+/**
+ * How many entities a process remembers it activated. An entity with no operation in this process is activated by
+ * the program deployed in its first transaction of the process, as after a crash. One forgotten is activated again,
+ * which writes nothing where its stored work agrees with the program, so the bound costs time and never a rule.
+ */
+const remembered = 10_000
+
+/**
+ * What a caller does with one program's entities. An id that is empty or no text a database holds is the caller's
+ * defect. So is a request id that is no text a database holds, and a `keep` that is no non-negative integer of
+ * milliseconds. Nothing is read or stored for a call refused.
+ */
 export interface Handle<T extends Types> {
   /** Creates the entity `id`, as `Handle.create` of the library does. */
   readonly create: (
@@ -124,8 +127,12 @@ interface Process {
    * is null from the transaction that stores the run until the process starts the fiber after the commit.
    */
   readonly operations: Map<string, Map<string, Fiber.Fiber<void> | null>>
-  /** The entities this process activated, where an entity is activated once a launch, and null otherwise. */
-  readonly activated: Set<string> | null
+  /**
+   * The entities this process activated, the most recently stepped last, at most `remembered` of them. A set keeps
+   * the order its addresses were added in, which is all the bound needs: Effect's `Cache` computes values through an
+   * effect, and this holds none.
+   */
+  readonly activated: Set<string>
   /** Done when an operation ends in this process or a timer fires, and then made anew: what `settled` waits on. */
   changed: Deferred.Deferred<void>
   /** Done when an entity is resumed or a program deployed, and then made anew: what a sender's retry waits on. */
@@ -149,6 +156,30 @@ const release = (p: Process, address: string, run: string) => {
   if (runs === undefined) return
   runs.delete(run)
   if (runs.size === 0) p.operations.delete(address)
+}
+
+/**
+ * `effect` without the transaction of the fiber that forks it. A caller may call within a transaction of its own,
+ * and a fiber that kept it would run its statements on the caller's connection.
+ */
+const untransacted = <A>(sql: SqlClient.SqlClient, effect: Effect.Effect<A>) =>
+  Effect.updateContext(effect, (services: Context.Context<never>) => Context.omit(sql.transactionService)(services))
+
+/**
+ * Forks `effect` in the process's scope, `untransacted`, as a fiber that can be interrupted. A fork stands inside
+ * the region of `inEntity` that no interruption divides, and the option keeps the fiber interruptible there, so
+ * that the scope's closing stops it.
+ */
+const apart = <A>(p: Process, effect: Effect.Effect<A>) =>
+  Effect.forkIn(untransacted(p.sql, effect), p.scope, { uninterruptible: false })
+
+/** Remembers that the process activated the entity, and forgets the one stepped least recently past the bound. */
+const remember = (p: Process, address: string) => {
+  p.activated.delete(address)
+  p.activated.add(address)
+  if (p.activated.size <= remembered) return
+  const oldest = p.activated.values().next()
+  if (oldest.done !== true) p.activated.delete(oldest.value)
 }
 
 /**
@@ -195,8 +226,9 @@ interface Transaction<T extends Types> {
  * One transaction of the entity `id`, and then what the process does for what the transaction stored. The
  * transaction takes the write lock as it begins, reads the entity, runs `body` and commits. An entity that is not
  * suspended is restarted first where one of its operations has no fiber in this process, which runs the operation
- * again as after a crash. It is restarted too where it has no operation here and `Options.activation` says so: the
- * restart then checks the stored work against the program deployed, and writes nothing where the two agree.
+ * again as after a crash. It is restarted too where it has no operation here and the process does not remember
+ * activating it: the restart then checks the stored work against the program deployed, and writes nothing where the
+ * two agree.
  */
 const inEntity = <T extends Types, A>(
   p: Process,
@@ -240,7 +272,7 @@ const inEntity = <T extends Types, A>(
           }),
         created: (started) => Effect.asVoid(write(started)),
       }
-      const unseen = !p.operations.has(address) && p.activated?.has(address) !== true
+      const unseen = !p.operations.has(address) && !p.activated.has(address)
       if (stored !== null && stored.suspension === null && (held?.lost === true || unseen)) {
         yield* tx.apply({ _tag: 'Restart' })
       }
@@ -264,19 +296,19 @@ const inEntity = <T extends Types, A>(
     return Effect.uninterruptible(Effect.gen(function*() {
       const result = yield* transaction(p.sql, stepped).pipe(Effect.onError(() => unclaim), Effect.orDie)
       yield* p.probe('AfterCommit', entity)
-      p.activated?.add(address)
+      remember(p, address)
       for (const output of outputs) {
         if (output._tag === 'Started') {
           const run = under(output.key, output.incarnation)
           const runs = p.operations.get(address)
-          if (runs?.has(run) === true) runs.set(run, yield* Effect.forkIn(operating(p, d, id, output), p.scope))
+          if (runs?.has(run) === true) runs.set(run, yield* apart(p, operating(p, d, id, output)))
         } else if (output._tag === 'Disarmed') {
           // A droppable operation the step dropped or changed stops. A timer has no fiber.
           const run = under(output.key, output.incarnation)
           const fiber = p.operations.get(address)?.get(run)
           if (fiber === undefined) continue
           release(p, address, run)
-          if (fiber !== null) yield* Effect.forkIn(Fiber.interrupt(fiber), p.scope)
+          if (fiber !== null) yield* apart(p, Fiber.interrupt(fiber))
         } else if (output._tag === 'Armed') {
           const at = DateTime.toEpochMillis(output.timer.at)
           if (d.next === null || at < d.next) yield* Queue.offer(d.poke, undefined)
@@ -515,22 +547,45 @@ const waking = <T extends Types>(p: Process, d: Deployment<T>): Effect.Effect<ne
   }))
 
 /**
- * Launches the spike's runtime on the client. It creates the tables of the storage, and holds no database: another
- * runtime may run on the same one.
+ * Runs `effect` once the id and the request id a caller gave, where it gave one, are text a database holds, and the
+ * id is not empty.
+ * Anything else is the caller's defect, and nothing is read or stored for it.
+ */
+const checked = <A>(id: string, requestId: string | null, effect: Effect.Effect<A>): Effect.Effect<A> =>
+  Effect.suspend(() => {
+    const reason = idFault(id) ?? (requestId === null ? undefined : requestIdFault(requestId))
+    return reason === undefined ? effect : Effect.die(new InvariantDefect({ reason }))
+  })
+
+/** The time a caller's reply is kept, in milliseconds, or undefined for ever. Anything else is the caller's defect. */
+const keptFor = (keep: Keep): number | undefined => {
+  if (keep === 'forever') return undefined
+  const millis = (keep as { millis?: unknown } | null | undefined)?.millis
+  if (typeof millis === 'number' && Number.isSafeInteger(millis) && millis >= 0) return millis
+  throw new InvariantDefect({ reason: `the reply is kept ${JSON.stringify(keep)}, which is no non-negative integer of milliseconds` })
+}
+
+/**
+ * Launches the runtime on the client. It creates the tables of the storage, and holds no database: another runtime
+ * may run on the same one. A retry that is no positive integer of milliseconds is the launcher's defect.
  */
 export const launch = (options: Options = {}): Effect.Effect<Runtime, never, SqlClient.SqlClient | Scope.Scope> =>
   Effect.gen(function*() {
+    const retry = options.retry?.millis ?? 50
+    if (!Number.isSafeInteger(retry) || retry <= 0) {
+      return yield* Effect.die(new InvariantDefect({ reason: `the retry is ${retry} milliseconds, and it is a positive integer` }))
+    }
     const sql = yield* SqlClient.SqlClient
     yield* createTables
     yield* partitioned(defaultPartitions)
     const p: Process = {
       sql,
-      retry: options.retry ?? 50,
+      retry,
       probe: options.probe ?? (() => Effect.void),
       scope: yield* Effect.scope,
       deployments: new Map(),
       operations: new Map(),
-      activated: options.activation === 'step' ? null : new Set(),
+      activated: new Set(),
       changed: Deferred.makeUnsafe<void>(),
       resumed: Deferred.makeUnsafe<void>(),
     }
@@ -554,7 +609,7 @@ export const launch = (options: Options = {}): Effect.Effect<Runtime, never, Sql
         tell(p, 'resumed')
         // An operation a crash interrupted has no fiber in this process, so a transaction of its entity restarts it.
         for (const id of yield* d.storage.interrupted) yield* inEntity(p, d, id, () => Effect.void)
-        yield* Effect.forkIn(waking(p, d), p.scope)
+        yield* apart(p, waking(p, d))
         const caller = (request: Readonly<{ requestId: string; sender?: unknown }>): Request<T['sender']> => ({
           _tag: 'Caller',
           sender: request.sender === undefined ? null : request.sender,
@@ -562,12 +617,21 @@ export const launch = (options: Options = {}): Effect.Effect<Runtime, never, Sql
         })
         const handle: Handle<T> = {
           create: (id, request) =>
-            create(p, d, id, (request as { flags?: unknown }).flags ?? null, caller(request)),
+            checked(
+              id,
+              request.requestId,
+              create(p, d, id, (request as { flags?: unknown }).flags ?? null, caller(request)),
+            ),
           send: (id, message, request) =>
-            send(p, d, id, message, caller(request), request.keep === 'forever' ? undefined : request.keep.millis),
-          read: d.storage.projected,
-          resume: (id) => operate(p, d, id, 'Resume'),
-          discard: (id) => operate(p, d, id, 'Discard'),
+            checked(
+              id,
+              request.requestId,
+              Effect.flatMap(Effect.sync(() => keptFor(request.keep)), (keep) =>
+                send(p, d, id, message, caller(request), keep)),
+            ),
+          read: (id) => checked(id, null, d.storage.projected(id)),
+          resume: (id) => checked(id, null, operate(p, d, id, 'Resume')),
+          discard: (id) => checked(id, null, operate(p, d, id, 'Discard')),
         }
         return handle
       })

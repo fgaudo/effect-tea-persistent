@@ -8,7 +8,7 @@ import * as Layer from 'effect/Layer'
 import * as library from '../../src/index.ts'
 import type { TypesOf } from '../../src/index.program.ts'
 import { desk, World } from './desk.ts'
-import { type Handle, launch } from './runtime.ts'
+import { type Handle, launch } from '../../src/transactional.ts'
 
 const [filename = '', kind = '', count = '0'] = Bun.argv.slice(2)
 

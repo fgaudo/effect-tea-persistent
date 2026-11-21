@@ -12,7 +12,7 @@ import { SqlClient } from 'effect/sql'
 import * as library from '../../src/index.ts'
 import type { Program, Types } from '../../src/program.ts'
 import { storage } from '../../src/storage.ts'
-import { launch } from './runtime.ts'
+import { launch } from '../../src/transactional.ts'
 
 const launched = () =>
   Effect.gen(function*() {

@@ -131,11 +131,16 @@ export const atMostOnce = (run: Run) => run._tag === 'B' || run._tag === 'T'
 
 const bump = (gen: State['gen'], key: Key): State['gen'] => ({ ...gen, [key]: gen[key] + 1 })
 
-// A target answers the operations of a history itself, so no runner of the toy is run.
-const answered = () => Effect.die('a target answers the operations of a history')
+/**
+ * What runs an operation of the toy. The machine answers the operations of a history itself, so its runner is never
+ * run. A runtime's runner waits for the answer the history gives.
+ */
+export type Runner = (run: Operation) => Effect.Effect<Internal>
+
+const answered: Runner = () => Effect.die('a target answers the operations of a history')
 const unknown = (run: Operation): Internal => ({ _tag: 'Unknown', run })
 
-export const toy = (version: Version): Program<T> => ({
+export const toy = (version: Version, runner: Runner = answered): Program<T> => ({
   name: 'Histories',
   keys: { b: null, d: null, t: null },
   schemas,
@@ -185,9 +190,9 @@ export const toy = (version: Version): Program<T> => ({
       ]
     })),
   operations: {
-    B: operation.atMostOnce(answered, unknown),
-    D: operation.droppable(answered),
-    T: operation.atMostOnce(answered, unknown),
+    B: operation.atMostOnce(runner, unknown),
+    D: operation.droppable(runner),
+    T: operation.atMostOnce(runner, unknown),
   },
   project: (state) => state,
   indexes: {},
@@ -404,11 +409,18 @@ export const violations = ({ sent, started, state, running, suspended, version }
 
   // The operations the state holds run while the entity is not suspended: a late answer stops no run under way.
   // A suspended entity's keys may still be those of the version before a deploy, so it is not read.
+  // A run the state no longer holds does not run either: a droppable run that a step dropped or changed stops. The
+  // machine's target reads a run from its key's work, so only a runtime's target can fail this.
   if (!suspended) {
     for (const key of state.want) {
       const run = runOf(version, state, key)
       if (run._tag !== 'Timer' && !running.some((under) => sameRun(under, run))) {
         broken.push(`the state holds ${JSON.stringify(run)}, which does not run`)
+      }
+    }
+    for (const run of running) {
+      if (!state.want.includes(run.key) || !sameRun(run, runOf(version, state, run.key))) {
+        broken.push(`${JSON.stringify(run)} runs, and the state does not hold it`)
       }
     }
   }

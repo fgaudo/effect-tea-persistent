@@ -17,7 +17,7 @@ import { join } from 'node:path'
 import * as library from '../../src/index.ts'
 import type { TypesOf } from '../../src/index.program.ts'
 import { desk, World } from './desk.ts'
-import { type Handle, launch } from './runtime.ts'
+import { type Handle, launch } from '../../src/transactional.ts'
 
 const world = Layer.succeed(World, World.of({ act: () => Effect.void }))
 
