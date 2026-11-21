@@ -67,7 +67,7 @@ notes outside it are the rules that no document says whole yet.
   code changes. A new premise is added to `docs/premises.md` only once the maintainer agrees, before the code that
   rests on it is written. The checks of `src/form.test.ts` on the section `What it rests on` of the notes check
   `docs/premises.md` instead, and a record is not checked. A rename of a test then fixes `docs/premises.md`, and no
-  record. A review reads `docs/premises.md`, by [`.claude/skills/premise-review/SKILL.md`](../../.claude/skills/premise-review/SKILL.md)
+  record. A review reads `docs/premises.md`, by `.claude/skills/premise-review/SKILL.md`
   written again for it, and `scripts/premise-pairs.ts` goes. [`docs/bugs.md`](../bugs.md) says that a fix changes
   the documents and the test, and no longer that it is a note.
 

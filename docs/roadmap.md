@@ -3,36 +3,17 @@
 The steps from here to a library, in order. The library is the server half of the Elm architecture end to end on
 Effect: [effect-tea](https://github.com/fgaudo/effect-tea) in the browser, entities on the server, and one set of
 schemas for both. [`review-2026-11.md`](review-2026-11.md) says why the work starts again from the pure core, and
-what the maintainer chose on 2026-11-21. A step that is done leaves this file. The roadmap before the review is in
-git, at the commit before the review.
+what the maintainer chose on 2026-11-21. A step that is done leaves this file. The code and the roadmap before the
+review are at the tag `pre-restart`. A step keeps its number once another leaves, so that a citation of it stays
+true.
 
 Each step names its model and effort, what it depends on, and how to tell it is done.
 
 ## Next
 
-1. **The old method is frozen.** (Opus 5.5 · medium) It depends on nothing.
-   - The commit before it is tagged `pre-restart`.
-   - The four steps under way stop, and their notes stay `proposed` as they are. The move of the rules into
-     documents, decision 0294, stops after area 6. The tests of a contract, decision 0283, keep
-     `src/contract.test.ts` as it is. The order of two timers, decision 0293, keeps `nextTimer` of `src/machine.ts`,
-     and its second part is not written. The pure core of the process, decision 0292, is not started.
-   - No note is added, moved or edited. A comment keeps its citation until its code is written again.
-   - [`AGENTS.md`](../AGENTS.md) is written again, under 120 lines. Its new rules are the review's section The rules
-     of work proposed. Its rules of today on language, commits and prose stay, but those on the citation of a note.
-     Of its rules on code and tests, these stay: how the examples and the fixtures import, the name of a file only
-     tests import, the look for a module of Effect before code is written by hand, `src/machine.ts` as the semantics
-     with a test for each rule, the jobs of the CI, the pins of Bun and of Effect's packages, the glossary, the
-     diagrams, the site and the READMEs of the examples. The section on notes goes whole, with the rules on the
-     scheduler of the tests, the pinned seeds and the mutations.
-   - `AGENTS.md` also says that the old runtime is frozen. Until step 4 takes them out, `src/runtime.ts`,
-     `src/runtime/`, `src/cluster.ts`, `src/storage/cluster.ts` and `src/testing.ts` change only to be removed.
-   - `src/form.test.ts` loses the checks of a note's form and of a premise. The skill `premise-review`,
-     `scripts/premise-pairs.ts` and `scripts/archive-notes.ts` go.
-   - It is done when `bun test`, `bun run typecheck` and `bun run links` pass, and `AGENTS.md` is under its budget.
-
-2. **A spike of the runtime on the transaction.** (Fable 5.2 · high) It depends on nothing, and may run beside
-   step 1. It is the test of the review's first finding, before anything is deleted. A runtime of at most 600 lines,
-   in `spikes/transactional/`, keeps one rule: every event is one transaction that reads the entity under a lock,
+2. **A spike of the runtime on the transaction.** (Fable 5.2 · high) It depends on nothing. It is the test of the
+   review's first finding, before anything is deleted. A runtime of at most 600 lines, in `spikes/transactional/`,
+   keeps one rule: every event is one transaction that reads the entity under a lock,
    steps `Machine.step` from what it read, and writes. It passes when all of these hold on SQLite.
    - It runs `src/machine.ts` as it is, or with changes it lists, each small.
    - The runtime tests of `examples/quick-start`, `examples/subscription`, `examples/booking` and `examples/rental`

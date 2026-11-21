@@ -7,7 +7,7 @@ A review takes out the rules its notes decide, one at a time, with [`scripts/mut
 which runs the tests and the compiler against each mutation it is given, and checks nothing else. The mutations are
 written for the code the review reads, and are not kept.
 
-A premise review, as [`.claude/skills/premise-review/SKILL.md`](../../.claude/skills/premise-review/SKILL.md) has it
+A premise review, as `.claude/skills/premise-review/SKILL.md` has it
 made, is a section here too, headed `premise review of` its area. It is the reviewer's report, whole, with what it
 ruled out. It is not the review of fifteen notes that `AGENTS.md` asks for. The report of the first premise review,
 of 2026-11-11 on Cluster and the runtime's callers, was not kept; the roadmap's step of the review says what it
@@ -1928,7 +1928,7 @@ code.
 ## 2026-11-11: premise review of The tables and migrations
 
 A session that did not write the notes read the area by the procedure of
-[`premise-review`](../../.claude/skills/premise-review/SKILL.md). The branch is
+`premise-review`. The branch is
 `claude/premise-review-tables-28f779`, cut from `main` at `a746214`.
 
 | Note | Role | How it was read |
@@ -7291,7 +7291,7 @@ brief.
 ## 2026-11-12: premise review, second reading, of The rehearsal and testing
 
 The session read area 10 of the section Messages, requests and replies, by the brief of
-[`.claude/skills/premise-review/SKILL.md`](../../.claude/skills/premise-review/SKILL.md), and the later notes 0262, 0266,
+`.claude/skills/premise-review/SKILL.md`, and the later notes 0262, 0266,
 0269, 0276 and 0281 against the notes they cite. It read none of the earlier reports of the area. Its tests are on the
 branch `claude/premise-review-2-area-10-a27203`, cut from `main` at `2e17087`.
 
