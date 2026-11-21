@@ -1,43 +1,46 @@
 /**
- * The first report built from the log: how many orders are in each status, which a dashboard shows at every view.
- * The read model answers it too, with `countBy` (decision 0150). A report answers it from a store made for the
- * question, which a consumer of the topic `status` fills, page by page (decision 0149): a store of its own is what
- * a question the read model does not answer needs. The store is a plain table of the test's database, beside the
- * library's.
+ * A report built from the outbox: how many orders are in each status, which a dashboard shows at every view. The
+ * report keeps a store made for the question, a plain table beside the library's, and fills it from the rows the
+ * orders wrote to `effecttea_outbox`, read with its own SQL. It deletes the rows it handled in the transaction that
+ * writes its store, so that a crash before the commit leaves both as they were, and a row is handled once.
  */
 import * as Effect from 'effect/Effect'
 import * as Schema from 'effect/Schema'
 import { SqlClient } from 'effect/sql'
-import type { Published, TypesOf } from '@fgaudo/effect-tea-persistent'
-import type { order } from './order.ts'
+import { order } from './order.ts'
 
-type Order = TypesOf<typeof order>
-
+const Rows = Schema.Array(Schema.Struct({ id: Schema.String, step: Schema.Number, projection: Schema.String }))
+const Shown = Schema.Struct({ status: Schema.String })
 const Counts = Schema.Array(Schema.Struct({ status: Schema.String, count: Schema.Number }))
 
 export const statusReport = Effect.gen(function*() {
   const sql = yield* SqlClient.SqlClient
-  // The store holds the last status of each order, and not a count per status: a row of the topic gives the
-  // status the step left and not the one before, so a count cannot be moved from one status to the other on a row
-  // alone. The count per status is a grouping over the store.
+  // The store holds the last status of each order, and not a count per status: a row gives the status its step
+  // left and not the one before. The count per status is a grouping over the store.
   yield* sql`CREATE TABLE order_status (id TEXT PRIMARY KEY, status TEXT NOT NULL)`
 
   return {
     /**
-     * Writes a page of the topic `status` to the store, as the handler of `consume`. A reader of `consume` writes it
-     * and acks it in one transaction of the database the runtime was launched with (decisions 0150, 0184): the store
-     * and the cursors commit together, and a page read again after a crash was never written.
+     * Handles at most `limit` rows of the outbox, and gives how many it handled. The rows of one order are read in
+     * the order of their steps, so the store keeps the status of its last step. No order holds across orders, and
+     * the report needs none.
      */
-    record: (page: ReadonlyArray<Published<Order, 'status'>>) =>
-      Effect.forEach(
-        page,
-        ({ id, value }) =>
-          sql`
-            INSERT INTO order_status (id, status) VALUES (${id}, ${value})
+    record: (limit: number) =>
+      sql.withTransaction(Effect.gen(function*() {
+        const rows = yield* Effect.flatMap(
+          sql`SELECT id, step, projection FROM effecttea_outbox WHERE name = ${order.name} ORDER BY id, step LIMIT ${limit}`,
+          Schema.decodeUnknownEffect(Rows),
+        )
+        for (const { id, step, projection } of rows) {
+          const { status } = yield* Schema.decodeUnknownEffect(Shown)(JSON.parse(projection))
+          yield* sql`
+            INSERT INTO order_status (id, status) VALUES (${id}, ${status})
             ON CONFLICT (id) DO UPDATE SET status = excluded.status
-          `,
-        { discard: true },
-      ).pipe(Effect.orDie),
+          `
+          yield* sql`DELETE FROM effecttea_outbox WHERE name = ${order.name} AND id = ${id} AND step = ${step}`
+        }
+        return rows.length
+      })).pipe(Effect.orDie),
 
     /** How many orders are in each status, by status, with no entry for a status no order is in. */
     counts: sql`SELECT status, count(*) AS count FROM order_status GROUP BY status`.pipe(

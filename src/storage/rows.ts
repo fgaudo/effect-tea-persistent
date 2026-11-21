@@ -78,9 +78,6 @@ const Version = Integer.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(1)))
 /** An incarnation, a `seq` or a count, as a driver gives an integer up to 2^53 (decision 0157). */
 export const Count = Integer.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(0)))
 
-/** A row of `effecttea_versions`: the newest version of a program, and the name a launch renamed it to, if any. */
-export const Standing = Schema.Struct({ version: Count, renamed_to: Schema.NullOr(Schema.String) })
-
 /** How an operation is delivered, as its runner declared (decisions 0011, 0123). */
 const Delivery = Schema.Literals(['Idempotent', 'IdempotentDigest', 'AtLeastOnce', 'AtMostOnce', 'Droppable'])
 
@@ -122,7 +119,6 @@ export const Rows = {
   /** A suspension's event and its cause are written together, or not at all. */
   entity: decoder(Schema.Union([
     Schema.Struct({
-      keyed_as: Schema.NullOr(Schema.String),
       state: Schema.String,
       version: Version,
       creation: Schema.String,
@@ -133,7 +129,6 @@ export const Rows = {
       suspended_at: Schema.Null,
     }),
     Schema.Struct({
-      keyed_as: Schema.NullOr(Schema.String),
       state: Schema.String,
       version: Version,
       creation: Schema.String,
@@ -223,29 +218,6 @@ export const Rows = {
     version: Version,
   })),
   state: decoder(Schema.Struct({ id: Schema.String, state: Schema.String, version: Version })),
-  /** A creation's row handles no message, and a step's always one (decision 0038). */
-  published: decoder(Schema.Union([
-    Schema.Struct({
-      position: Count,
-      partition: Count,
-      seq: Count,
-      id: Schema.String,
-      tag: Schema.Literal('Creation'),
-      version: Version,
-      message: Schema.Null,
-      projection: Schema.String,
-    }),
-    Schema.Struct({
-      position: Count,
-      partition: Count,
-      seq: Count,
-      id: Schema.String,
-      tag: Schema.Literals(['Inbound', 'Internal']),
-      version: Version,
-      message: Schema.String,
-      projection: Schema.String,
-    }),
-  ])),
   id: decoder(Schema.Struct({ id: Schema.String })),
   /** The primary key of a reply under its program, and of an answer: the receiver, the request, and the version or kind. */
   replyKey: decoder(Schema.Struct({ id: Schema.String, request: Schema.String, version: Version })),
@@ -254,44 +226,12 @@ export const Rows = {
   listed: decoder(Schema.Struct({ id: Schema.String, suspended: Count })),
   /** A timer's time, in milliseconds: one before 1970 is a time too. */
   due: decoder(Schema.Struct({ id: Schema.String, at: Integer })),
-  seq: decoder(Schema.Struct({ seq: Count })),
-  /** A count of the rows that match. */
-  count: decoder(Schema.Struct({ count: Count })),
-  /**
-   * A total of an index, a double on SQLite and the text of a `NUMERIC` on PostgreSQL, the total of its magnitudes in
-   * units of 2^980 cut to integers, alike, how many rows hold a number, and the least id of a row whose index holds a
-   * value that is no number, or null for none (decisions 0148, 0209, 0277).
-   */
-  total: decoder(Schema.Struct({
-    total: Schema.Union([Schema.Number, Schema.String]),
-    units: Schema.Union([Schema.Number, Schema.String]),
-    numbers: Count,
-    refused: Schema.NullOr(Schema.String),
-  })),
-  /**
-   * A value of an index as the JSON text the row holds, `null` for a row that lacks it, and how many rows hold it
-   * (decision 0150).
-   */
-  tally: decoder(Schema.Struct({ value: Schema.String, count: Count })),
   /** An aggregate over no rows is null. */
   last: decoder(Schema.Struct({ seq: Schema.NullOr(Count) })),
-  /** A cursor, or a partition's head: a `seq` within a partition. */
-  cursor: decoder(Schema.Struct({ partition: Count, seq: Count })),
-  /** The first row past the cursors, or null where every partition is read to its head. */
-  position: decoder(Schema.Struct({ position: Schema.NullOr(Count) })),
-  topical: decoder(Schema.Struct({ topic: Schema.String, consumer: Schema.String })),
-  behind: decoder(Schema.Struct({
-    topic: Schema.String,
-    consumer: Schema.String,
-    partition: Count,
-    seq: Count,
-    behind: Count,
-    since: Count,
-  })),
 } as const
 
 /**
- * How many rows one reading gives, or one transaction of `prune` and `expire` deletes: one that fills it is followed by
- * another (decision 0245).
+ * How many rows one reading gives, or one transaction of `expire` deletes: one that fills it is followed by another
+ * (decision 0245).
  */
 export const batch = 256

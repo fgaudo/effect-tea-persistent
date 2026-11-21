@@ -1,6 +1,6 @@
 /**
  * The read model as the storage keeps it: the rows of `effecttea_projections`, the expression indexes over them, and
- * the queries, counts and sums that read them, alike on both dialects (decisions 0032, 0148, 0157, 0241).
+ * the queries that read them, alike on both dialects.
  */
 import * as Effect from 'effect/Effect'
 import * as Hash from 'effect/Hash'
@@ -54,25 +54,6 @@ export type Query<T extends Types> = Readonly<{
    */
   after?: After<T> | undefined
 }>
-
-/** What a count across the entities of one program asks: the criteria a query takes (decision 0148). */
-export type Counted<T extends Types> = Readonly<{ where?: ReadonlyArray<Criterion<T>> }>
-
-/** What a sum across the entities of one program asks: the index added, and the criteria a query takes (decision 0148). */
-export type Summed<T extends Types> = Readonly<{ index: T['index']; where?: ReadonlyArray<Criterion<T>> }>
-
-/**
- * What a count per value of an index asks: the index grouped by, the criteria a query takes, and how many values at
- * most (decision 0150).
- */
-export type CountedBy<T extends Types> = Readonly<{
-  index: T['index']
-  where?: ReadonlyArray<Criterion<T>>
-  limit: number
-}>
-
-/** A value of an index, and how many of the entities counted hold it (decision 0150). */
-export type Tally = Readonly<{ value: Scalar; count: number }>
 
 /** A row a query gave, as a later page reads past it (decision 0143). */
 export type After<T extends Types> = Readonly<{ id: string; indexes: Readonly<Record<T['index'], Scalar>> }>
@@ -140,7 +121,7 @@ export const rowOf = <T extends Types>(held: Held<T>) => {
 /** The part of the storage of one program that reads and writes its read model. */
 export const projectionsOf = <T extends Types>(held: Held<T>): Pick<
   Storage<T>,
-  'indexed' | 'query' | 'count' | 'sum' | 'countBy' | 'projected' | 'reindex'
+  'indexed' | 'query' | 'projected' | 'reindex'
 > => {
   const { program, sql, name, version, dialect, rows, up, snapshot, lockingTheCondition } = held
   const { state, projection } = held.codecs
@@ -304,7 +285,7 @@ export const projectionsOf = <T extends Types>(held: Held<T>): Pick<
     return descending ? [tied, later, { clause: isNull(order.index), by: byId }] : [tied, later]
   }
 
-  /** The clauses of the rows of the program that match `where`, as a query, a count and a sum read them. */
+  /** The clauses of the rows of the program that match `where`, as a query reads them. */
   const criteria = (where: ReadonlyArray<Criterion<T>>) => {
     const clauses = [sql`name = ${name}`]
     for (const { index, is, value } of where) {
@@ -354,105 +335,8 @@ export const projectionsOf = <T extends Types>(held: Held<T>): Pick<
       }))
     }).pipe(Effect.orDie)
 
-  const count = ({ where = [] }: Counted<T>) =>
-    Effect.gen(function*() {
-      const [counted] = yield* rows('effecttea_projections', Rows.count)(
-        sql`SELECT COUNT(*) AS count FROM effecttea_projections WHERE ${sql.and(criteria(where))}`,
-      )
-      return counted?.count ?? 0
-    }).pipe(Effect.orDie)
-
-  /** The kind of an index's value on SQLite, NULL where the row lacks the index. */
-  const kind = (index: string) => sql.literal(`json_type(indexes, ${pathOf(index)})`)
-  /** The jsonb value of an index on PostgreSQL, and its type, NULL where the row lacks the index. */
-  const value = (index: string) => {
-    pathOf(index)
-    return sql.literal(valueOf(index))
-  }
-  const typed = (index: string) => sql.literal(`jsonb_typeof(${valueOf(index)})`)
-  /** Whether an index holds a boolean on PostgreSQL: false where the row lacks the index, as for JSON's null. */
-  const boolean = (index: string) => sql`coalesce(${typed(index)} = 'boolean', FALSE)`
-
-  /** What turns a magnitude into units of 2^980, bound as a parameter so that it reaches the database exactly. */
-  const unit = 2 ** -980
-
-  const sum = ({ index, where = [] }: Summed<T>) =>
-    Effect.gen(function*() {
-      // On SQLite `json_type` tells `true` from `1`, which `json_extract` gives alike, and is NULL where the row
-      // lacks the index. `TOTAL` gives a double and never fails on an overflow of SQLite's integers, where `SUM` does
-      // (decision 0148). On PostgreSQL the numbers are added exactly as `NUMERIC`, and read as text, since a total
-      // of doubles there fails the statement on an overflow and depends on the order of the rows (decision 0209).
-      // `units` adds each magnitude's double in units of 2^980, cut to an integer, which both dialects compute
-      // exactly, so both refuse the same sums (decision 0277). On PostgreSQL a magnitude under 1e290 counts no unit,
-      // and is not multiplied, since a product under the least double fails the statement there.
-      const [summed] = yield* rows('effecttea_projections', Rows.total)(
-        dialect === 'pg'
-          ? sql`
-            SELECT CAST(COALESCE(SUM(CASE WHEN ${typed(index)} = 'number' THEN CAST(${value(index)} AS NUMERIC) END),
-                     0) AS TEXT) AS total,
-                   CAST(COALESCE(SUM(CASE WHEN ${typed(index)} = 'number'
-                     AND ABS(CAST(${value(index)} AS NUMERIC)) >= 1e290
-                     THEN CAST(TRUNC(ABS(CAST(${value(index)} AS DOUBLE PRECISION))
-                       * CAST(${unit} AS DOUBLE PRECISION)) AS NUMERIC) END), 0) AS TEXT) AS units,
-                   COUNT(CASE WHEN ${typed(index)} = 'number' THEN 1 END) AS numbers,
-                   MIN(CASE WHEN ${typed(index)} NOT IN ('number', 'null') THEN id END) AS refused
-            FROM effecttea_projections WHERE ${sql.and(criteria(where))}
-          `
-          : sql`
-            SELECT TOTAL(CASE WHEN ${kind(index)} IN ('integer', 'real') THEN ${columnOf(index)} END) AS total,
-                   TOTAL(CASE WHEN ${kind(index)} IN ('integer', 'real')
-                     THEN CAST(ABS(${columnOf(index)}) * ${unit} AS INTEGER) END) AS units,
-                   COUNT(CASE WHEN ${kind(index)} IN ('integer', 'real') THEN 1 END) AS numbers,
-                   MIN(CASE WHEN ${kind(index)} NOT IN ('integer', 'real', 'null') THEN id END) AS refused
-            FROM effecttea_projections WHERE ${sql.and(criteria(where))}
-          `,
-      )
-      if (summed === undefined) return 0
-      if (summed.refused !== null) {
-        return yield* Effect.die(
-          new InvariantDefect({ reason: `the index '${index}' of '${summed.refused}' holds no number, and is no sum's` }),
-        )
-      }
-      // Each cut loses less than a unit, so the magnitudes add up to less than `units + numbers` units, and no
-      // partial total of either dialect overflows below 2^44 units, which is 2^1024 (decision 0277).
-      if (Number(summed.units) + summed.numbers >= 2 ** 44) {
-        return yield* Effect.die(
-          new InvariantDefect({ reason: `the total of the index '${index}' may pass the largest double` }),
-        )
-      }
-      return Number(summed.total)
-    }).pipe(Effect.orDie)
-
-  /** On SQLite, the kind of an index's value, `null` where the row lacks it, and the value as its JSON text. */
-  const grouped = (index: string) => sql.literal(`coalesce(json_type(indexes, ${pathOf(index)}), 'null')`)
-  const text = (index: string) => sql.literal(`coalesce(indexes -> ${pathOf(index)}, 'null')`)
-
-  const countBy = ({ index, where = [], limit }: CountedBy<T>) =>
-    Effect.gen(function*() {
-      // `json_extract` gives `true` as `1`, so the kind of the value groups too, and JSON's null and a path the row
-      // lacks are one kind, as a query reads them. The value is read as its JSON text, which tells `true` from `1`
-      // where the column does not. A boolean comes after the number SQLite reads it as (decision 0150). On
-      // PostgreSQL the expressions of the index order the values as on SQLite, and jsonb's type tells a boolean from
-      // its number (decision 0157).
-      const column = columnOf(index)
-      const tallies = yield* rows('effecttea_projections', Rows.tally)(
-        dialect === 'pg'
-          ? sql`
-            SELECT min(CAST(coalesce(${value(index)}, 'null'::jsonb) AS TEXT)) AS value, count(*) AS count
-            FROM effecttea_projections WHERE ${sql.and(criteria(where))}
-            GROUP BY ${column}, ${boolean(index)}
-            ORDER BY ${orderOf(index, 'ASC')}, ${boolean(index)} LIMIT ${limit}
-          `
-          : sql`
-            SELECT min(${text(index)}) AS value, count(*) AS count FROM effecttea_projections WHERE ${sql.and(criteria(where))}
-            GROUP BY ${column}, ${grouped(index)}
-            ORDER BY ${column}, ${grouped(index)} IN ('true', 'false') LIMIT ${limit}
-          `,
-      )
-      return tallies.map(({ value, count }): Tally => ({ value: JSON.parse(value) as Scalar, count }))
-    }).pipe(Effect.orDie)
-
   /**
+   * The value of each index of the program in a stored row  /**
    * The value of each index of the program in a stored row, as a query reads it: an index the row lacks, one a
    * later version added, is null, as `json_extract` gives it.
    */
@@ -524,5 +408,5 @@ export const projectionsOf = <T extends Types>(held: Held<T>): Pick<
     }
   }).pipe(Effect.orDie)
 
-  return { indexed, query, count, sum, countBy, projected, reindex }
+  return { indexed, query, projected, reindex }
 }

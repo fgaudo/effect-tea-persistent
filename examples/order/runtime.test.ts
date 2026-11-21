@@ -6,10 +6,8 @@
 import { SqliteClient } from '@effect/sql-sqlite-bun'
 import { expect, test } from 'bun:test'
 import * as DateTime from 'effect/DateTime'
-import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
-import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import { SqlClient } from 'effect/sql'
 import { launch } from '@fgaudo/effect-tea-persistent'
@@ -19,11 +17,6 @@ import { statusReport } from './report.ts'
 const ada = { _tag: 'Customer', id: 'ada' } as const
 /** A limit no reading of this test reaches: a reading says how many rows it takes (decision 0141). */
 const all = 100
-/**
- * Who reads the orders' log: a billing service and a dashboard, each a consumer of its topic. They are the
- * deployment's, declared where the orders are deployed, so a name mistyped does not compile (decision 0152).
- */
-const consumers = { consumers: { billing: ['invoices'], status: ['dashboard'] } } as const
 
 /** The world the orders act on, which answers and records nothing: this test only reads states. */
 const world = Layer.mergeAll(
@@ -31,6 +24,14 @@ const world = Layer.mergeAll(
   Layer.succeed(Warehouse, Warehouse.of({ prepare: () => Effect.void })),
   Layer.succeed(Mailer, Mailer.of({ send: () => Effect.void })),
 )
+
+/** The rows of the outbox the orders wrote, by order and in the order of their steps, as a reader of it reads them. */
+const outbox = Effect.gen(function*() {
+  const sql = yield* SqlClient.SqlClient
+  return yield* sql<{ id: string; step: number; kind: string; version: number; message: string | null; projection: string }>`
+    SELECT id, step, kind, version, message, projection FROM effecttea_outbox WHERE name = 'Order' ORDER BY id, step
+  `
+})
 
 const database = <A, E>(test: Effect.Effect<A, E, SqlClient.SqlClient>) =>
   Effect.runPromise(
@@ -79,17 +80,18 @@ test('a query finds the orders nobody paid, and leaves out the one that was', ()
     // An order against no value finds nothing, as in SQL.
     expect(yield* orders.query({ limit: all, where: [{ index: 'unpaidUntil', is: '<', value: null }] })).toEqual([])
 
-    // A number over the orders is one statement, which reads no projection: how many await their payment, and
-    // what they owe, the paid order left out by its null (decision 0148).
-    expect(yield* orders.count({ where: [{ index: 'unpaidUntil', is: '<>', value: null }] })).toBe(2)
-    expect(yield* orders.count({})).toBe(3)
-    expect(yield* orders.sum({ index: 'owedInCents' })).toBe(2_000)
+    // How many orders await their payment, and what they owe, are read off a page of the query: the paid order is
+    // left out by its null.
+    const owing = yield* orders.query({ limit: all, where: [{ index: 'owedInCents', is: '<>', value: null }] })
+    expect(owing.map(({ id }) => id)).toEqual(['o-1', 'o-3'])
+    expect(owing.reduce((total, { projection }) => total + projection.totalInCents, 0)).toBe(2_000)
   }))))
 
-test('what an order published is what another system learns of it, each consumer in its topic', () =>
+test('what an order wrote to the outbox is what another system learns of it, step by step', () =>
   database(Effect.scoped(Effect.gen(function*() {
+    const sql = yield* SqlClient.SqlClient
     const runtime = yield* launch()
-    const orders = yield* Effect.provide(runtime.deploy(order, consumers), world)
+    const orders = yield* Effect.provide(runtime.deploy(order, { outbox: true }), world)
 
     yield* orders.create('o-1', {
       flags: { order: { customer: 'ada', totalInCents: 1_000 } },
@@ -99,68 +101,37 @@ test('what an order published is what another system learns of it, each consumer
     yield* orders.send('o-1', { _tag: 'PayRequested', payment: 'card-1' }, { requestId: 'p-1', sender: ada, keep: 'forever' })
     yield* runtime.settled
 
-    // The steps were the creation, the request to pay, the charge coming back, and the warehouse told. A topic has a
-    // row for each step that changed what it selects, holding the message the step handled and the value selected
-    // (decisions 0038, 0138, 0140): the status changed at the first three, the charge at the creation and at the
-    // charge alone, and the warehouse told changed only `canCancel`, which no topic selects.
-    const statuses = yield* orders.published('status', [], all)
-    expect(statuses.map(({ id, kind, message, value }) => [id, kind, message?._tag ?? null, value]))
-      .toEqual([
-        ['o-1', 'Creation', null, 'AwaitingPayment'],
-        ['o-1', 'Inbound', 'PayRequested', 'Charging'],
-        ['o-1', 'Internal', 'ChargeSucceeded', 'Paid'],
-      ])
-    const billing = yield* orders.published('billing', [], all)
-    expect(billing.map(({ kind, message, value }) => [kind, message?._tag ?? null, value.charge])).toEqual([
-      ['Creation', null, null],
-      ['Internal', 'ChargeSucceeded', 'ch_1'],
+    // The outbox has a row for the creation and for each step that changed the projection: the request to pay, the
+    // charge coming back, and the warehouse told, which changed only `canCancel`. Each row holds the message its step
+    // handled, the projection the step left, and the version that wrote it.
+    const rows = yield* outbox
+    expect(rows.map(({ kind, message, projection }) => [
+      kind,
+      message === null ? null : (JSON.parse(message) as { _tag: string })._tag,
+      (JSON.parse(projection) as { status: string }).status,
+    ])).toEqual([
+      ['Creation', null, 'AwaitingPayment'],
+      ['Inbound', 'PayRequested', 'Charging'],
+      ['Internal', 'ChargeSucceeded', 'Paid'],
+      ['Internal', 'WarehouseTold', 'Paid'],
     ])
-    // The rows of one step share its `seq`, so a topic's `seq`s have gaps where a step published only others.
-    expect(billing.map(({ seq }) => seq)).toEqual([0, 2].map((at) => statuses[at]?.seq ?? 0))
+    expect(rows.every(({ version }) => Number(version) === 1)).toBe(true)
+    // `step` numbers every write of the entity, so the writes that changed no projection left gaps.
+    expect(rows.map(({ step }) => Number(step))).toEqual([1, 2, 4, 6])
 
-    // A consumer is a name within its topic, and its cursors are stored: it reads from where it acked, and a prune
-    // drops, in each topic, what every consumer of the topic has read (decisions 0039, 0138, 0152). The rows of one order
-    // are in its partition, in the order of their `seq`, and an ack is given the rows acted on (decision 0137).
-    expect(yield* orders.fetch('billing', 'invoices', all)).toEqual(billing)
-    expect(yield* orders.fetch('status', 'dashboard', all)).toEqual(statuses)
-    yield* orders.ack('status', 'dashboard', statuses.slice(0, 2))
-    expect(yield* orders.fetch('status', 'dashboard', all)).toEqual(statuses.slice(2))
-    expect(yield* orders.prune).toBe(2)
-    expect(yield* orders.published('status', [], all)).toEqual(statuses.slice(2))
-    expect(yield* orders.published('billing', [], all)).toEqual(billing)
-    // What each consumer still has to act on, as an operator sees it.
-    const partition = statuses[0]?.partition ?? 0
-    const stored = yield* orders.consumers
-    expect(stored.map(({ since: _, ...consumer }) => consumer)).toEqual([
-      { topic: 'billing', consumer: 'invoices', declared: true, behind: 2, cursors: [{ partition, seq: 0 }] },
-      {
-        topic: 'status',
-        consumer: 'dashboard',
-        declared: true,
-        behind: 1,
-        cursors: [{ partition, seq: statuses[1]?.seq ?? 0 }],
-      },
-    ])
-    // A consumer's next row is the oldest it has not read: the creation for `invoices`, the charge for `dashboard`,
-    // each at the time of its step on the runtime's clock (decision 0224).
-    const [invoices = Number.NaN, dashboard = Number.NaN] = stored.map(({ since }) =>
-      since === null ? Number.NaN : DateTime.toEpochMillis(since)
-    )
-    expect(invoices).toBeLessThanOrEqual(dashboard)
-    expect(dashboard).toBeLessThanOrEqual(DateTime.toEpochMillis(yield* DateTime.now))
-
-    // A consumer that has read everything waits for the next row of its topic instead of polling: the creation of
-    // another order ends its wait, and a wait with no row would give none after ten seconds (decision 0142).
-    yield* orders.ack('status', 'dashboard', statuses)
-    const next = yield* Effect.forkChild(orders.fetch('status', 'dashboard', all, { wait: { millis: 10_000 } }))
-    yield* orders.create('o-2', { flags: { order: { customer: 'ada', totalInCents: 500 } }, requestId: 'c-o-2', sender: ada })
-    expect((yield* Fiber.join(next)).map(({ id, value }) => [id, value])).toEqual([['o-2', 'AwaitingPayment']])
+    // The library deletes no row of the outbox, not even as it expires the replies. A reader deletes by key the
+    // rows it handled.
+    yield* orders.expire
+    expect(yield* outbox).toHaveLength(rows.length)
+    yield* sql`DELETE FROM effecttea_outbox WHERE name = 'Order' AND id = 'o-1' AND step = ${rows[0]?.step ?? 0}`
+    expect(yield* outbox).toEqual(rows.slice(1))
   }))))
 
-test('a report built from the log counts the orders in each status, as the read model counts them', () =>
+test('a report built from the outbox counts the orders in each status, as a query of the read model finds them', () =>
   database(Effect.scoped(Effect.gen(function*() {
+    const sql = yield* SqlClient.SqlClient
     const runtime = yield* launch()
-    const orders = yield* Effect.provide(runtime.deploy(order, consumers), world)
+    const orders = yield* Effect.provide(runtime.deploy(order, { outbox: true }), world)
     const report = yield* statusReport
 
     for (const id of ['o-1', 'o-2', 'o-3', 'o-4']) {
@@ -176,61 +147,25 @@ test('a report built from the log counts the orders in each status, as the read 
     yield* orders.send('o-4', { _tag: 'CancelRequested' }, { requestId: 'x-o-4', sender: ada, keep: 'forever' })
     yield* runtime.settled
 
-    // The consumer: `consume` writes each page of its topic to the store and acks it in one transaction, until a
-    // page is empty. A consumer that serves a dashboard passes `wait: true` instead, and stops with the runtime
-    // (decision 0184). The first reader crashes after its writes, as a crash before the commit leaves it: the store
-    // and the cursors stay as they were, so the next reader reads the page again (decision 0150).
-    const first = yield* orders.fetch('status', 'dashboard', 3)
-    const crashed = (page: Parameters<typeof report.record>[0]) => Effect.andThen(report.record(page), Effect.fail('crash'))
-    expect(yield* Effect.exit(orders.consume('status', 'dashboard', crashed, { limit: 3 }))).toEqual(Exit.fail('crash'))
+    // A reader that crashes after its writes, as a crash before the commit leaves it: the store and the outbox stay
+    // as they were, so the next reader handles the same rows.
+    const written = yield* outbox
+    const crashed = sql.withTransaction(Effect.andThen(report.record(3), Effect.fail('crash')))
+    expect(yield* Effect.exit(crashed)).toEqual(Exit.fail('crash'))
     expect(yield* report.counts).toEqual({})
-    expect(yield* orders.fetch('status', 'dashboard', 3)).toEqual(first)
-    yield* orders.consume('status', 'dashboard', report.record, { limit: 3 })
-    expect(yield* orders.fetch('status', 'dashboard', 3)).toEqual([])
+    expect(yield* outbox).toEqual(written)
+    while ((yield* report.record(3)) > 0) {}
+    expect(yield* outbox).toEqual([])
 
-    // The store answers the question in one statement, and so does the read model, on one snapshot
-    // (decisions 0149, 0150).
-    const counts = yield* report.counts
-    expect(counts).toEqual({ AwaitingPayment: 1, Paid: 2, Cancelled: 1 })
-    expect(yield* orders.countBy({ index: 'status', limit: all })).toEqual([
-      { value: 'AwaitingPayment', count: 1 },
-      { value: 'Cancelled', count: 1 },
-      { value: 'Paid', count: 2 },
-    ])
-    // A limit that is no non-negative integer is the caller's defect, as a query's is (decision 0141).
-    expect(Exit.isFailure(yield* Effect.exit(orders.countBy({ index: 'status', limit: -1 })))).toBe(true)
-  }))))
-
-// A consumer read by several readers: each names the partitions it reads, and the cursors stay the consumer's. A
-// reader that waits runs as long as the runtime, and records each row once its step commits (decisions 0142, 0184).
-test('readers that divide the partitions read each row once, and a reader that waits reads the next', () =>
-  database(Effect.scoped(Effect.gen(function*() {
-    const runtime = yield* launch()
-    const orders = yield* Effect.provide(runtime.deploy(order, consumers), world)
-    const report = yield* statusReport
-    for (const id of ['o-1', 'o-2', 'o-3', 'o-4']) {
-      yield* orders.create(id, {
-        flags: { order: { customer: 'ada', totalInCents: 1_000 } },
-        requestId: `c-${id}`,
-        sender: ada,
-      })
+    // The store answers the question in one statement, and a query of the read model finds as many in each status.
+    expect(yield* report.counts).toEqual({ AwaitingPayment: 1, Paid: 2, Cancelled: 1 })
+    for (const [status, count] of [['AwaitingPayment', 1], ['Paid', 2], ['Cancelled', 1]] as const) {
+      expect(yield* orders.query({ limit: all, where: [{ index: 'status', is: '=', value: status }] })).toHaveLength(count)
     }
 
-    const n = 2
-    for (let i = 0; i < n; i++) {
-      const mine = Array.from({ length: orders.partitions }, (_, at) => at + 1).filter((p) => p % n === i)
-      yield* orders.consume('status', 'dashboard', report.record, { limit: 3, partitions: mine })
-    }
-    expect(yield* report.counts).toEqual({ AwaitingPayment: 4 })
-    expect(yield* orders.fetch('status', 'dashboard', 3)).toEqual([])
-
-    // The handler signals inside the reader's transaction. The client of SQLite runs one statement or transaction
-    // at a time, so the counts read after the signal wait for the commit.
-    const recorded = yield* Deferred.make<void>()
-    const record = (page: Parameters<typeof report.record>[0]) =>
-      Effect.andThen(report.record(page), Deferred.succeed(recorded, undefined))
-    yield* Effect.forkChild(orders.consume('status', 'dashboard', record, { limit: 3, wait: true }))
-    yield* orders.send('o-4', { _tag: 'CancelRequested' }, { requestId: 'x-o-4', sender: ada, keep: 'forever' })
-    yield* Deferred.await(recorded)
-    expect(yield* report.counts).toEqual({ AwaitingPayment: 3, Cancelled: 1 })
+    // A later step writes its row, which the next reading handles.
+    yield* orders.send('o-1', { _tag: 'CancelRequested' }, { requestId: 'x-o-1', sender: ada, keep: 'forever' })
+    yield* runtime.settled
+    while ((yield* report.record(3)) > 0) {}
+    expect(yield* report.counts).toEqual({ Paid: 2, Cancelled: 2 })
   }))))

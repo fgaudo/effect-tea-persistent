@@ -19,8 +19,8 @@ import { inventory } from './fixtures/inventory.ts'
 import { first, type T, toy } from './machine.test_histories.ts'
 import { type Address, operation, type Program, send, type Types } from './program.ts'
 import { server } from './storage.test_databases.ts'
-import { type Handle, launch, type Options, type Point } from './transactional.ts'
-import { clientOf, quiet, quietly } from './transactional.test_shared.ts'
+import { type Handle, launch, type Options, type Point } from './runtime.ts'
+import { clientOf, quiet, quietly } from './runtime.test_shared.ts'
 
 const onServer = test.skipIf(server === undefined)
 

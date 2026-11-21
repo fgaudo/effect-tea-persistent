@@ -15,9 +15,9 @@ import { booking } from './fixtures/booking.ts'
 import { inventory } from './fixtures/inventory.ts'
 import { create, defect, operation, type Program, rejectWith, send, type Types } from './program.ts'
 import { storage } from './storage.ts'
-import { launch, type Options } from './transactional.ts'
+import { launch, type Options } from './runtime.ts'
 import { onEach } from './storage.test_databases.ts'
-import { clientOf, dialects, quiet, quietly } from './transactional.test_shared.ts'
+import { clientOf, dialects, quiet, quietly } from './runtime.test_shared.ts'
 
 const organizer = { _tag: 'Organizer' } as const
 const gig = { flags: { capacity: 10 }, requestId: 'c-gig', sender: organizer }

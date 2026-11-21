@@ -62,11 +62,9 @@ export {
   type Step,
   type Timer,
   timer,
-  type Topic,
   type Types,
   type TypesOf,
   type Update,
-  type Value,
   versionOf,
   type Work,
 } from './program.ts'

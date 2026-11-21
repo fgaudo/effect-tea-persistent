@@ -20,8 +20,8 @@ export interface Source {
   readonly acknowledge: (reading: Reading) => Effect.Effect<void>
 }
 
-/** A reading whose meter stored nothing of it yet: it is suspended, or holds as many messages as its bound. */
-export class Unanswered extends Data.TaggedError('Unanswered')<{ reading: Reading; answer: 'Suspended' | 'Full' }> {}
+/** A reading whose meter stored nothing of it yet, since the meter is suspended. */
+export class Unanswered extends Data.TaggedError('Unanswered')<{ reading: Reading; answer: 'Suspended' }> {}
 
 /**
  * A reading answered `Reused`: its request id was given before to another message. The source gave another reading
@@ -59,7 +59,6 @@ export const deliver = (meters: Handle<TypesOf<typeof meter>>, options: Options)
       case 'Rejected':
         return
       case 'Suspended':
-      case 'Full':
         return yield* new Unanswered({ reading, answer: answer._tag })
       case 'Reused':
         return yield* new ReusedOffset({ reading })

@@ -20,7 +20,6 @@ pieces are written in.
 | `operations` | `{ Tag: operation(run) }`                                   | the **runner** of each kind of operation, with its **delivery**                |
 | `project`    | `(state) => projection`                                     | the **projection** callers read, as JSON                                       |
 | `indexes`    | `{ name: (projection) => scalar }`                          | what a query across entities filters and orders by                             |
-| `topics`     | `{ name: (projection) => JSON }`                            | the parts of the projection the **outbox** publishes                           |
 | `migrations` | a list, each a record of pure functions on JSON, by kind     | how this version reads what the versions before it stored                      |
 | `children`   | `{ Name: child(part, { at }) }` or `each(part, { id, at })` | the **parts** the state holds, with `onEvent` for what they raise              |
 
@@ -53,7 +52,6 @@ current one, so a late answer of a first attempt never reaches the second. [Work
 |          | `Rejected`, with a reason or `null`                             | `update` rejected the message, and the state did not change                               |
 |          | `NotFound`                                                      | no entity has that id, and nothing is created                                             |
 |          | `Suspended`                                                     | the entity is suspended, and the request has no reply yet: retry under the same request id |
-|          | `Full`                                                          | the entity holds `callers.messages` messages already, and nothing is stored               |
 |          | `Reused`                                                        | the request id was used for another message, and nothing of this one is applied            |
 | `read`   | the projection, or `null`                                       | what the last step that changed the state wrote                                           |
 | `resume` | `Resumed`, `StillSuspended`, `NotSuspended` or `NotFound`       | what the operator's own resumption did                                                    |
@@ -67,10 +65,9 @@ A reply carries no data. A caller learns what a message did by reading the proje
 `deploy(program)` gives a **handle** to one program's entities. Each call of the handle is made by one of three
 people:
 
-- **A caller**, through the **boundary**: `create`, `send`, `read`, `query`, `count`, `sum` and `countBy`
-  ([Reading](design.md#reading)).
-- **A consumer of the outbox**: `fetch`, `ack`, `consume`, `published`, `consumers`, `prune` and `forget`
-  ([Publishing what happened](design.md#publishing-what-happened)).
+- **A caller**, through the **boundary**: `create`, `send`, `read` and `query` ([Reading](design.md#reading)).
+- **A reader of the outbox**, which reads the table `effecttea_outbox` with its own SQL and calls nothing of the
+  handle ([Publishing what happened](design.md#publishing-what-happened)).
 - **An operator**: `suspended`, `inspect`, `resume`, `discard`, `reindex` and `expire`
   ([the operator's calls](guide/operator.md)). An operator also calls `check`, a function of the main entry and no
   call of the handle, before a deploy.
@@ -82,26 +79,21 @@ A test calls none of them. It calls `rehearse`, which runs the program without a
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Loaded: create
-  Loaded --> Loaded: a step
-  Loaded --> Unloaded: idle, or a crash
-  Unloaded --> Loaded: activation
-  Loaded --> Suspended: a defect
-  Suspended --> Loaded: resume or discard
+  [*] --> Stored: create
+  Stored --> Stored: a step
+  Stored --> Suspended: a defect
+  Suspended --> Stored: resume or discard
 ```
 
 - **Created.** `create` runs `init` on the flags. An entity whose flags `init` rejects is never stored.
-- **Loaded.** The entity is in the process, and handles one message at a time: a caller's message, an operation's
-  completion or a timer's firing. Each **step** is one transaction, which stores the next state with its reply. Then
-  the runtime starts the work of each new key, and ends the work of each key that left the state.
-- **Unloaded.** Nothing of the entity is in memory, and everything it needs is stored. An entity is unloaded when it
-  has had nothing to do for a while, when the process is over its **capacity**, or by a crash. The earliest of its
-  stored timers wakes it, and so does the next message. Its **activation** reads the state back, computes
-  `work(state)` again, and starts what the state holds. Nothing is replayed.
+- **Stored.** Nothing of the entity is held in memory. Each event, a caller's message, an operation's completion or
+  a timer's firing, is one **step**: one transaction that locks the entity, reads it, steps it, and stores the next
+  state with its reply. Then the runtime starts the work of each new key, and ends the work of each key that left
+  the state. A stored timer fires once its time comes, and nothing is replayed.
 - **Suspended.** A **defect** stopped the entity. Its state stays as it was before the message, and the message
   stays first in its mailbox. Its timers are disarmed, and its operations under way run to their end. Every caller
   is answered `Suspended` until an operator resumes it, once a fix is deployed, or discards the message. A suspended
-  entity may be unloaded, and stays suspended.
+  entity stays suspended across a restart.
 
-[Execution](design.md#execution) says when an entity is loaded and unloaded, and
+[Execution](design.md#execution) says how a step runs, and
 [what survives a crash](design.md#what-survives-a-crash) says what holds at each point where the process may die.

@@ -9,3 +9,4 @@ subscription. A change of plan or of payment method during a charge applies from
 - [`subscription.ts`](subscription.ts): the program.
 - [`scenarios.test.ts`](scenarios.test.ts): the subscription's scenarios, rehearsed, a restart among them.
 - [`subscription.test.ts`](subscription.test.ts): the subscription's properties, checked for generated states.
+- [`runtime.test.ts`](runtime.test.ts): the subscription on the runtime, its renewal fired by the clock.

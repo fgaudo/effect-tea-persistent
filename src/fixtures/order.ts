@@ -94,12 +94,12 @@ const Projection = Schema.Struct({
   // the orders nobody paid, so what it filters by is what the customer is told, in milliseconds, since the
   // projection is JSON (decisions 0032, 0139).
   deadline: Schema.NullOr(Schema.Number),
-  // What the order costs, which a sum over the orders still awaiting their payment adds up (decision 0148).
+  // What the order costs, which a query of the orders still awaiting their payment orders by.
   totalInCents: Schema.Int,
   canPay: Schema.Boolean,
   canCancel: Schema.Boolean,
   // What billing acts on: the charge the order took, and whether it was given back. The projection is the one
-  // contract of the order, so what a consumer of the log needs is in it too (decision 0138).
+  // contract of the order, so what a reader of the outbox needs is in it too.
   charge: Schema.NullOr(ChargeId),
   refunded: Schema.Boolean,
 })
@@ -293,19 +293,10 @@ export const order = program({
     refunded: state._tag === 'Cancelled' && state.reason === 'Refunded',
   }),
 
-  // The topics of the log, each selecting of the projection what a consumer acts on: a row is written in a topic
-  // only when that changed, and gives it (decisions 0138, 0140). A dashboard reads the status. Billing reads the
-  // charge and the refund, and is not told when the warehouse is.
-  topics: {
-    status: ({ status }) => status,
-    billing: ({ charge, refunded }) => ({ charge, refunded }),
-  },
-
   // "The orders nobody paid by now": the deadline of an order still awaiting its payment, as the projection
-  // holds it, and nothing for an order that is being charged, paid or over (decisions 0032, 0139). "What they
-  // owe": the total of such an order, which a sum adds up and leaves out where it is null (decision 0148). "How
-  // many orders are in a status": its status, which a count takes one status at a time; how many are in each is
-  // a report, built from the log in `report.ts` (decision 0149).
+  // holds it, and nothing for an order that is being charged, paid or over. "What they owe": the total of such an
+  // order, which a query orders by. "The orders in a status": its status, which a query takes one status at a time.
+  // How many orders are in each status is a report, built from the outbox in `report.ts`.
   indexes: {
     unpaidUntil: ({ deadline, status }) => (status === 'AwaitingPayment' ? deadline : null),
     owedInCents: ({ status, totalInCents }) => (status === 'AwaitingPayment' ? totalInCents : null),

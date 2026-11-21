@@ -1,5 +1,5 @@
 /**
- * The process `crash.test.ts` kills. It creates a desk and does one act of it, and stops where it is told to: at a
+ * The process `runtime.crash.test.ts` kills. It creates a desk and does one act of it, and stops where it is told to: at a
  * point of a transaction of the act, or inside the world, once the act's effect is done there. It says so on its
  * output and waits there to be killed, with whatever transaction it is in left open.
  */
@@ -8,8 +8,8 @@ import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import { appendFileSync } from 'node:fs'
-import { desk, World } from './desk.ts'
-import { launch } from '../../src/transactional.ts'
+import { desk, World } from './runtime.test_desk.ts'
+import { launch } from './runtime.ts'
 
 const [filename = '', world = '', act = '', stop = ''] = Bun.argv.slice(2)
 

@@ -1,15 +1,14 @@
 /**
- * The subscription of `examples/subscription` on the spike's runtime, since the example has no test on a runtime.
- * Its renewal is a timer a month away. No entity is held in memory, so the renewal is a row of the storage, which
- * the one fiber that waits on time fires once the clock passes it.
+ * The subscription on the runtime. Its renewal is a timer a month away. No entity is held in memory, so the renewal
+ * is a row of the storage, which the one fiber that waits on time fires once the clock passes it.
  */
 import { SqliteClient } from '@effect/sql-sqlite-bun'
 import { expect, test } from 'bun:test'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import { TestClock } from 'effect/testing'
-import { Payments, subscription } from '../../examples/subscription/subscription.ts'
-import { launch } from '../../src/transactional.ts'
+import { launch } from '@fgaudo/effect-tea-persistent'
+import { Payments, subscription } from './subscription.ts'
 
 const ada = { _tag: 'Customer', id: 'ada' } as const
 

@@ -2,8 +2,8 @@
 
 This page is for whoever runs a program in production: what to do with an entity a defect suspended, and the
 calls that keep the database from growing. Its code is the test `a ride the first version suspends is inspected,
-and resumed by the fix` of [`examples/rental/runtime.test.ts`](../../examples/rental/runtime.test.ts), and the
-operator's routes of [`examples/server`](../../examples/server/server.ts). `bun test` runs both. Read the guide's
+and resumed by the fix` of [`examples/rental/runtime.test.ts`](../../examples/rental/runtime.test.ts), which
+`bun test` runs. Read the guide's
 [first page](README.md) before it: this page uses its words for a step, an operation and a delivery. The words in
 bold are defined in [`glossary.md`](../glossary.md), and [`design.md`](../design.md#defects) is the specification
 behind each rule.
@@ -18,7 +18,6 @@ behind each rule.
 - [Resuming with a fix](#resuming-with-a-fix)
 - [Discarding the message](#discarding-the-message)
 - [What a resume or a discard answers](#what-a-resume-or-a-discard-answers)
-- [The calls over HTTP](#the-calls-over-http)
 - [The calls that keep the database small](#the-calls-that-keep-the-database-small)
 - [The rules, in one list](#the-rules-in-one-list)
 
@@ -122,7 +121,7 @@ that loads the entity would die. A failure `on: 'Activation'` is a program that 
 changes an operation under way, so the deploy would suspend the entity. A suspended entity is checked as a `resume`
 by the new program would activate it. The message it died on is not handled, so a fix that dies on that message
 still passes the check. The check is a reading of a moment: an operation under way at the check may have ended by
-the deploy. A check before a launch that renames the program is given the launch's `renames`.
+the deploy.
 
 ## Resuming with a fix
 
@@ -186,46 +185,21 @@ Each answer says what the operator's own call did, even when two operators act o
 | `NotSuspended` | The entity is not suspended. |
 | `NotFound` | There is no such entity. |
 
-## The calls over HTTP
-
-The server of the orders exposes `resume` and `discard` beside its routes, for a caller it authenticates as an
-operator:
-
-```ts
-HttpRouter.add(
-  'POST',
-  '/orders/:id/resume',
-  Effect.gen(function*() {
-    yield* operator
-    const orders = yield* Orders
-    return yield* answer(yield* orders.resume(yield* id))
-  }),
-),
-```
-
-Its map of answers gives each tag a status, so that a tag the library adds fails to compile in the boundary. A
-suspended order is answered `409` and not `503`, since an HTTP client retries a `503` as transient, and a suspended
-order waits for an operator.
-
 ## The calls that keep the database small
 
-The runtime sweeps each program at an interval, every five minutes by default: it runs `expire`, then `prune`.
-An operator runs these calls too, each from the handle of one program:
+The runtime sweeps each program at an interval, every five minutes by default: it runs `expire`. An operator runs
+these calls too, each from the handle of one program:
 
 | Call | What it does | Where it is explained |
 | --- | --- | --- |
-| `expire` | Deletes the callers' replies past the `keep` their boundary gave. A reply sent with `keep: 'forever'` is kept for ever. | [Cluster](cluster.md#what-changes-for-a-caller) |
-| `prune` | Drops, in each topic of the log, what every consumer of the topic has read. | [The outbox](outbox.md#pruning-and-a-consumer-that-holds-the-log) |
-| `consumers` | Shows each consumer of the log, how many rows it has not read yet, and the time of the oldest it reads next. | [The outbox](outbox.md#pruning-and-a-consumer-that-holds-the-log) |
-| `forget` | Drops a consumer the deploy no longer declares, so that the next prune passes it. | [The outbox](outbox.md#pruning-and-a-consumer-that-holds-the-log) |
+| `expire` | Deletes the callers' replies past the `keep` their boundary gave. A reply sent with `keep: 'forever'` is kept for ever. | [The first page](README.md) |
 | `reindex` | Writes the read model again, after a deploy that added or changed an index. | [Schemas that change](schemas.md#how-a-stored-row-is-read) |
 
 A step that stores a reply deletes its own entity's replies past their time, so `expire` frees the rows of the
-entities that answer no message. The sweep is an option of `launch`. `sweep: { millis: 60_000 }` sweeps every minute, and
-`sweep: { millis: 300_000, prune: false }` expires and leaves the log to an operator's `prune`. `sweep: 'none'` runs
-no sweep. A sweep that fails logs a warning, and the next one runs at the next interval. On Cluster one runner
-sweeps each program. A sweep frees rows in the database, and SQLite gives no room back to the volume, so the file
-stops growing and does not shrink. `forget` stays the operator's, since only the operator knows a consumer is gone.
+entities that answer no message. The sweep is an option of `launch`. `sweep: { millis: 60_000 }` sweeps every
+minute, and `sweep: 'none'` runs no sweep. A sweep that fails logs a warning, and the next one runs at the next
+interval. A sweep frees rows in the database, and SQLite gives no room back to the volume, so the file stops
+growing and does not shrink.
 
 ## The rules, in one list
 
@@ -237,5 +211,4 @@ stops growing and does not shrink. `forget` stays the operator's, since only the
 5. **A new program is checked before its deploy**, and the check writes nothing.
 6. **A fix is a deploy, and a resume follows it.**
 7. **Only an inbound message is discarded**, and its caller's retry is a new message.
-8. **The runtime sweeps, and an operator forgets.** The sweep runs `expire` and `prune` at an interval, and an
-   operator forgets a consumer that is gone.
+8. **The runtime sweeps.** The sweep runs `expire` at an interval.

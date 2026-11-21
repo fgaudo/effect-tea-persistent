@@ -195,7 +195,7 @@ health check and leaves the ring. The old runner fails every row the new version
 A request the new version persisted does not reach the runtime. Cluster decodes its payload first, and answers a
 payload its schema does not decode with a defect, which it stores, logging nothing. The request is then processed,
 and the new version never runs it again, as a spike on `SingleRunner` and `@effect/sql-sqlite-bun` sees
-([`cluster-older-runner-answers-a-newer-request`](../spikes/cluster-older-runner-answers-a-newer-request.test.ts)).
+(`cluster-older-runner-answers-a-newer-request` (at the tag `pre-restart`)).
 
 Shard groups do not separate versions: an entity's group is chosen by its type, from its id (the `ShardGroup`
 annotation), and the group is part of its shard and so of its address: a group per version would change the
@@ -249,7 +249,7 @@ record both checks read ([decision 0174](decisions/archive/0174-on-cluster-a-run
   Cluster's rows with them, by the runtime's own statements
   ([decision 0090](decisions/archive/0090-on-cluster-a-reply-is-deleted-as-on-one-process.md)). What 0090 relies on of
   Cluster's rows, which are not its contract, is tested by
-  [`spikes/cluster-forgets-a-request-deleted-by-its-id.test.ts`](../spikes/cluster-forgets-a-request-deleted-by-its-id.test.ts),
+  `spikes/cluster-forgets-a-request-deleted-by-its-id.test.ts` (at the tag `pre-restart`),
   so that a release that changes them fails it: the tables have the columns the statements name and no foreign key;
   a processed request keeps its rows, and its key sent again is answered from them with no row of its own; a handler
   under `WithTransaction` deletes in Cluster's transaction, so a failure rolls the deletion back; a deletion by

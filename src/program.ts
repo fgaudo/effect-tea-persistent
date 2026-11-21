@@ -150,7 +150,7 @@ export type Migration = Readonly<{
   flags?: (json: Json) => Json
   /** Reads the sender of a stored reply or of a message waiting. */
   sender?: (json: Json) => Json
-  /** Reads a stored projection, in the read model and in the log. */
+  /** Reads a stored projection, in the read model. */
   projection?: (json: Json) => Json
 }>
 
@@ -479,7 +479,7 @@ type LiteralNames<List extends DeclaredKeys> = string extends NameOf<List[number
 export const noWork: Readonly<Record<string, never>> = Object.freeze({})
 
 /**
- * The types of a program, as one record: what its schemas decode to, and the names of its keys, indexes and topics.
+ * The types of a program, as one record: what its schemas decode to, and the names of its keys and indexes.
  * `TypesOf<typeof program>` gives the record of a declared program, which a handle and a rehearsal are typed by.
  */
 export type Types = Readonly<{
@@ -499,11 +499,6 @@ export type Types = Readonly<{
   /** The names of the indexes a query across the program's entities filters and orders by (decision 0032). */
   index: string
   services: unknown
-  /**
-   * The topics of the log, by name, each with the type of the value its selector gives of the projection. Types
-   * that leave it out publish the projection as the one topic `projection` (decisions 0138, 0140).
-   */
-  topics?: Readonly<Record<string, Json>> | undefined
 }>
 
 /**
@@ -526,21 +521,6 @@ export type FlagsOf<T extends Types> = [T['flags']] extends [null] ? Readonly<{ 
  */
 export type Flagged<T extends Types> = [T['flags']] extends [null] ? [flags?: null] : [flags: T['flags']]
 
-/** The topics `T` declares, each with the type of its value, or `never` where it declares none (decision 0140). */
-type DeclaredTopics<T extends Types> = T extends Readonly<{ topics: infer Topics extends Readonly<Record<string, Json>> }>
-  ? Topics
-  : never
-
-/** The name of a topic of the log a program publishes: `projection` for a program that declares none. */
-export type Topic<T extends Types> = [DeclaredTopics<T>] extends [never] ? 'projection'
-  : Extract<keyof DeclaredTopics<T>, string>
-
-/**
- * What a row of the topic `Name` gives: the value the topic's selector gives of the projection, or the projection
- * whole for the topic `projection` of a program that declares none (decision 0140).
- */
-export type Value<T extends Types, Name extends Topic<T>> = [DeclaredTopics<T>] extends [never] ? T['projection']
-  : DeclaredTopics<T>[Name & keyof DeclaredTopics<T>]
 
 /**
  * The columns a query reads the entities by: for each name of `T['index']`, a pure function from the
@@ -665,14 +645,8 @@ export interface Program<T extends Types, Name extends string = string> {
   ) => Readonly<Record<string, Returned<T['operation'], T['internal']> | undefined>>
   /** The runner of each operation, by its tag, with its delivery. */
   readonly operations: Runners<T>
-  /** The projection of a state: what callers read, what a query filters on, and what the log publishes. */
+  /** The projection of a state: what callers read, what a query filters on, and what the outbox holds. */
   readonly project: (state: T['state']) => T['projection']
-  /**
-   * The topics of the log, each a pure function that selects, of the projection, the topic's value: a step writes
-   * a row in a topic when that changed, and the row gives it. A program that declares none publishes its
-   * projection as the one topic `projection` (decisions 0138, 0140).
-   */
-  readonly topics?: { readonly [Name in Topic<T>]: (projection: T['projection']) => Value<T, Name> }
   /**
    * What a query across the program's entities may filter and order by, each a pure function of the projection:
    * the read model is the projection, and nothing is queried that a caller cannot read (decision 0032).
@@ -706,22 +680,6 @@ export const migrationOf = <T extends Types>(
   const steps = migrations.slice(from - 1).flatMap((migration) => migration[of] ?? [])
   return steps.length === 0 ? (json) => json : (json) => steps.reduce((held, up) => up(held), json)
 }
-
-/**
- * A topic of the log, as the runtime reads it: its name, and what it selects of the projection, which a step
- * compares to decide whether to write a row in it, or `null` for the whole projection (decision 0138).
- */
-export type TopicOf = Readonly<{ topic: string; select: ((projection: unknown) => Json) | null }>
-
-/**
- * The topics a program publishes, in the order it declares them: its projection as the topic `projection`, where
- * it declares none (decision 0138).
- */
-export const topicsOf = <T extends Types>(program: Program<T>): ReadonlyArray<TopicOf> =>
-  program.topics === undefined
-    ? [{ topic: 'projection', select: null }]
-    : Object.entries(program.topics as unknown as Readonly<Record<string, (projection: unknown) => Json>>)
-      .map(([topic, select]) => ({ topic, select }))
 
 /**
  * Whether a string is text every database holds as it is: it holds no U+0000, which PostgreSQL holds in no text and
@@ -771,22 +729,13 @@ export const checkProgram = <T extends Types>(program: Program<T>): void => {
     throw new InvariantDefect({ reason: `the program '${program.name}' ${reason}` })
   }
   if (program.name.length === 0) refuse('has an empty name')
-  // A name, a key's name and a topic's are each stored as text of their own (decision 0157).
+  // A name and a key's name are each stored as text of their own (decision 0157).
   if (!isText(program.name)) refuse('has a name that is no text a database holds')
   for (const key of Object.keys(program.keys)) {
     if (!isText(key)) refuse(`has a key ${JSON.stringify(key)} whose name is no text a database holds`)
   }
   for (const index of Object.keys(program.indexes)) {
     if (!isWord(index)) refuse(`has an index '${index}' whose name is not a word`)
-  }
-  // A program that declares topics publishes them alone, so `topics` with none would publish nothing (decision 0138).
-  if (program.topics !== undefined) {
-    const topics = Object.keys(program.topics)
-    if (topics.length === 0) refuse('declares no topic in its topics')
-    for (const topic of topics) {
-      if (topic.length === 0) refuse('has a topic with an empty name')
-      if (!isText(topic)) refuse(`has a topic ${JSON.stringify(topic)} whose name is no text a database holds`)
-    }
   }
 }
 
@@ -1620,14 +1569,6 @@ const assemble = (
   }
 }
 
-/**
- * The topics a program declares, each with the type of its selector's value, in the slot `topics` of its types, or
- * `undefined` where it declares none: `Topics` is then inferred as its constraint, whose keys are any string
- * (decisions 0138, 0140).
- */
-type TopicValues<Topics> = string extends keyof Topics ? undefined
-  : { readonly [Name in keyof Topics]: Topics[Name] extends (projection: never) => (infer V extends Json) ? V : never }
-
 /** The names of the indexes a program declares, or none where it leaves `indexes` out (decision 0180). */
 type IndexNames<Indexes> = string extends keyof Indexes ? never : Extract<keyof Indexes, string>
 
@@ -1715,7 +1656,7 @@ export const program = <
   State extends object,
   Flags,
   Inbound,
-  // The projection is JSON: what `read`, a query, an index and a topic read is one shape, and a schema that
+  // The projection is JSON: what `read`, a query and an index read is one shape, and a schema that
   // decodes to what JSON does not hold, a `DateTime`, is refused here (decision 0139).
   Projection extends Json,
   // A schema left out gives its type nothing to infer from, so the type is its default, the type of the schema
@@ -1739,9 +1680,8 @@ export const program = <
 <
   // No default for either: a type parameter is fixed to its default before a context-sensitive selector is typed,
   // and the selectors' parameters would be the default's. With none, a record left out is inferred as its
-  // constraint, whose keys are any string, and `IndexNames` and `TopicValues` read that as none (decision 0180).
+  // constraint, whose keys are any string, and `IndexNames` reads that as none (decision 0180).
   Indexes extends Readonly<Record<string, (projection: Projection) => Scalar>>,
-  Topics extends Readonly<Record<string, (projection: Projection) => Json>>,
   // The name is a type too, so that a reference made without the program's code is checked against it (decision 0183).
   const Name extends string,
   const List extends DeclaredKeys = [],
@@ -1761,21 +1701,15 @@ export const program = <
       indexes?: Indexes
       /** How the versions before this one are read, in order: none for a first version (decision 0036). */
       migrations?: ReadonlyArray<Migration>
-      /**
-       * The topics of the log, by name, each a pure function that selects, of the projection, the topic's value:
-       * a step is written in a topic when that changed, and the row gives it. None publishes the projection as the
-       * one topic `projection` (decisions 0138, 0140).
-       */
-      topics?: Topics
     }>,
 ): Program<
   & Composed<State, Flags, Inbound, Internal, Operation, Rejection, Sender, Projection, KeysOf<List>, Operations, C>
-  & Readonly<{ index: IndexNames<Indexes>; topics: TopicValues<Topics> }>,
+  & Readonly<{ index: IndexNames<Indexes> }>,
   Name
 > => {
   type Of =
     & Composed<State, Flags, Inbound, Internal, Operation, Rejection, Sender, Projection, KeysOf<List>, Operations, C>
-    & Readonly<{ index: IndexNames<Indexes>; topics: TopicValues<Topics> }>
+    & Readonly<{ index: IndexNames<Indexes> }>
   const filled = filledProgramSchemas(schemas as unknown as DeclaredSchemas)
   const pieces = assemble(filled, filledDeclaration(declaration as unknown as LeftOut))
   return {
@@ -1795,9 +1729,6 @@ export const program = <
     work: pieces.work as Program<Of>['work'],
     operations: pieces.operations as unknown as Runners<Of>,
     project: pieces.project as Program<Of>['project'],
-    ...(declaration.topics === undefined
-      ? {}
-      : { topics: declaration.topics as unknown as NonNullable<Program<Of>['topics']> }),
   }
 }
 

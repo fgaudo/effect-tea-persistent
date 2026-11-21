@@ -64,39 +64,6 @@ test('a bigint is read as a number up to 2^53, and as a bigint past it', () =>
     expect(row).toEqual({ small: 1, large: 9007199254740993n, count: 1 })
   })), 30_000)
 
-test('an upsert that moves a head gives the seq it drew', () =>
-  run(Effect.gen(function*() {
-    const sql = yield* SqlClient.SqlClient
-    yield* sql`CREATE TABLE heads (name TEXT, partition INTEGER, seq BIGINT, PRIMARY KEY (name, partition))`
-    const draw = sql<{ seq: number }>`
-      INSERT INTO heads VALUES ('p', 1, 1) ON CONFLICT (name, partition) DO UPDATE SET seq = heads.seq + 1
-      RETURNING seq
-    `
-    expect([yield* draw, yield* draw]).toEqual([[{ seq: 1 }], [{ seq: 2 }]])
-  })), 30_000)
-
-test('a row trigger after a delete sees every row the statement deleted', () =>
-  run(Effect.gen(function*() {
-    const sql = yield* SqlClient.SqlClient
-    yield* sql`CREATE TABLE outbox (seq INTEGER, topic TEXT)`
-    yield* sql`CREATE TABLE publications (seq INTEGER PRIMARY KEY)`
-    yield* sql.unsafe(`
-      CREATE FUNCTION drops() RETURNS trigger LANGUAGE plpgsql AS $$
-      BEGIN
-        IF NOT EXISTS (SELECT 1 FROM outbox WHERE seq = OLD.seq) THEN
-          DELETE FROM publications WHERE seq = OLD.seq;
-        END IF;
-        RETURN NULL;
-      END $$
-    `)
-    yield* sql`CREATE TRIGGER drops AFTER DELETE ON outbox FOR EACH ROW EXECUTE FUNCTION drops()`
-    yield* sql`INSERT INTO outbox VALUES (1, 'a'), (1, 'b'), (2, 'a'), (2, 'b')`
-    yield* sql`INSERT INTO publications VALUES (1), (2)`
-    // Both rows of 1 go in one statement, one row of 2: the publication of 1 goes, the one of 2 stays.
-    yield* sql`DELETE FROM outbox WHERE seq = 1 OR (seq = 2 AND topic = 'a')`
-    expect(yield* sql`SELECT seq FROM publications`).toEqual([{ seq: 2 }])
-  })), 30_000)
-
 test('an advisory lock is taken again by its own session, and PGlite has one', () =>
   run(Effect.gen(function*() {
     const sql = yield* SqlClient.SqlClient

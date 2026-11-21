@@ -533,7 +533,7 @@ with a requirement that no example has yet.
 - **A timer due, which no test of the capacity reaches.** An entity whose timer is due is not spare, and is not told
   to leave a process over its capacity before the timer fires
   ([decision 0078](decisions/archive/0078-a-timer-due-is-no-spare-entity-and-a-registered-deploy-keeps-its-name.md)). The test `entities woken past the
-  capacity each fire their timer and leave once`, in [`src/runtime/loop.test.ts`](../src/runtime/loop.test.ts), was
+  capacity each fire their timer and leave once`, in `src/runtime/loop.test.ts` (at the tag `pre-restart`), was
   written for it, and passes with the timers taken out of `spare` of `src/runtime/loop.ts`: under every seed of
   2,000, at depth 10, and under every deviation of `bound` 1, on 2026-11-11. The firing seems to be queued before
   the entity is told to leave, so its loop applies the firing first, and no timer is due when it decides. So no test
@@ -551,7 +551,7 @@ with a requirement that no example has yet.
   connection, gives the lock back while the runtime still runs, and nothing tells the runtime. A second runtime may
   then launch on the database, and the two load the same entities
   ([decision 0080](decisions/archive/0080-a-database-is-held-by-one-runtime.md)).
-  [`spikes/postgres-session-ended.test.ts`](../spikes/postgres-session-ended.test.ts) sees it on a server: once
+  `spikes/postgres-session-ended.test.ts` (at the tag `pre-restart`) sees it on a server: once
   `pg_terminate_backend` ends the reserved session, the first runtime still answers `Accepted`, a second launches,
   and three sends accepted by the two leave a count of two, since the first steps from the state it holds in memory
   and writes over the second's step. Whether the runtime checks its hold, and how often, is not decided. It waits
@@ -577,7 +577,7 @@ with a requirement that no example has yet.
     that holds the shard at a retry reads, as the premise review of Messages, requests and replies found
     ([`reviews.md`](decisions/reviews.md)).
 - **A test of Cluster that times out under the whole run.** `` an operation is woken by a `Resumed` delivered before
-  its client gives it the answer Suspended ``, in [`src/cluster.test.ts`](../src/cluster.test.ts), failed once on
+  its client gives it the answer Suspended ``, in `src/cluster.test.ts` (at the tag `pre-restart`), failed once on
   2026-11-11 in a whole run of `bun test` on the maintainer's machine. Its wait for the first answer `Suspended` to be
   withheld timed out after 15 seconds. It passed six runs alone, in 3.5 seconds each, and two runs of its file. Its
   runners poll on a clock that is real, so the cause may be the load of the run, or an interleaving the test does
@@ -589,7 +589,7 @@ with a requirement that no example has yet.
     whether the storage saw it and did not withhold it.
 - **A test of a rename on Cluster that missed its log once on the CI.** `` a rename stops the runners of the old
   name, and its door delivers what Cluster saved under it (decision 0176) ``, in
-  [`src/cluster.test.ts`](../src/cluster.test.ts), failed once on 2026-11-12 in the job `test (4)` of the CI, on the
+  `src/cluster.test.ts` (at the tag `pre-restart`), failed once on 2026-11-12 in the job `test (4)` of the CI, on the
   push of `claude/pool-gate`, whose change touched only `src/contract.test.ts`. The log of the run held no
   `Defect in entity, restarting` for the rename, where the test expects one. The job passed when it ran again, and the
   test passed five runs alone and a run of its shard on the maintainer's machine. A lead, from a reading of the test
@@ -609,7 +609,7 @@ with a requirement that no example has yet.
   interrupted, and the newer runner delivers `unknown`. A completion stepped during a drain after a newer launch
   would die in the guard of the version too, which is read in the code and not tested. The test `a rolling deploy to
   a newer version drains the at-most-once operation under way on the older runner`, a todo of
-  [`src/cluster.test.ts`](../src/cluster.test.ts) that `bun test --todo` runs, expects `done` and gets `unknown`. Any move of a shard
+  `src/cluster.test.ts` (at the tag `pre-restart`) that `bun test --todo` runs, expects `done` and gets `unknown`. Any move of a shard
   interrupts an at-most-once operation, which
   [decision 0092](decisions/archive/0092-on-cluster-the-runtime-keeps-its-entities-and-learns-its-shards.md)
   accepts. Whether a rolling deploy drains is not decided. It would be decided by:
@@ -628,7 +628,7 @@ with a requirement that no example has yet.
   or changes a payload, is not caught by that guard. A runner of the older release that still holds a shard, before
   the next health check or after it starts again, is given the newer request by Cluster before any step runs. Cluster
   answers a payload it cannot decode with a defect and stores it, as
-  [`spikes/cluster-older-runner-answers-a-newer-request.test.ts`](../spikes/cluster-older-runner-answers-a-newer-request.test.ts)
+  `spikes/cluster-older-runner-answers-a-newer-request.test.ts` (at the tag `pre-restart`)
   sees, so the request is lost in silence. An RPC the older runner does not know fails in Cluster's code, as the
   description of [Effect-TS/effect#10270](https://github.com/Effect-TS/effect/pull/10270) says; no spike runs it.
   That pull request would have left such a request in storage for a runner that decodes it. It was closed without a

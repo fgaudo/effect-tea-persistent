@@ -53,7 +53,7 @@ test('a rent sent twice creates one ride, which unlocks the bike', () =>
     const again = yield* rent(rides)(request)
     expect(again).toEqual(first)
     yield* runtime.settled
-    expect(yield* rides.count({})).toBe(1)
+    expect(yield* rides.query({ limit: 10 })).toHaveLength(1)
     expect(first._tag === 'Rented' ? yield* rides.read(first.ride) : null).toMatchObject({ status: 'Riding' })
     expect(yield* bikes.read('bike-7')).toMatchObject({ status: 'Ridden' })
   })))
@@ -68,7 +68,7 @@ test('a ride id drawn anew at each try creates a second ride, which the bike ref
       expect(yield* rides.create(id, { flags, requestId: 'r-1', sender })).toEqual({ _tag: 'Created' })
     }
     yield* runtime.settled
-    expect(yield* rides.count({})).toBe(2)
+    expect(yield* rides.query({ limit: 10 })).toHaveLength(2)
     expect(yield* rides.read('drawn-2')).toMatchObject({ status: 'Refused', refusal: 'InUse' })
   })))
 
@@ -96,7 +96,7 @@ test('a customer the application does not know rents nothing', () =>
     const { rides } = yield* rental
     expect(yield* rent(rides)({ customer: 'bob', bike: 'bike-7', centsPerMinute: 20, requestId: 'r-1' }))
       .toEqual({ _tag: 'NoSuchCustomer' })
-    expect(yield* rides.count({})).toBe(0)
+    expect(yield* rides.query({ limit: 10 })).toHaveLength(0)
   })))
 
 // The ride's flags check the rate as the bike's schema does, so a rate no bike holds stores nothing.
@@ -107,7 +107,7 @@ test('a rent at a rate no bike can hold dies at the boundary, and creates no rid
       rent(rides)({ customer: 'ann', bike: 'bike-7', centsPerMinute: 0, requestId: 'r-1' }),
     )
     expect(exit._tag).toBe('Failure')
-    expect(yield* rides.count({})).toBe(0)
+    expect(yield* rides.query({ limit: 10 })).toHaveLength(0)
   })))
 
 // The ride as one would write it at first: the end holds no email, so a ride that ends while its email is sent
@@ -174,21 +174,5 @@ test('a ride the first version suspends is inspected, and resumed by the fix', (
       expect(yield* bikes.read('bike-7')).toMatchObject({ status: 'Docked', rides: 1 })
       // The customer's retry is answered from the reply the fix stored, and ends nothing twice.
       expect(yield* rides.send(id, end, { requestId: 'end-1', sender: ann, keep: 'forever' })).toEqual({ _tag: 'Accepted' })
-    }))
-  })))
-
-// A rename is the launch's: the rows of the old name move to the new one before any deploy, and the bike keeps its
-// state under the name it now carries.
-test('a bike renamed by the launch keeps its state under its new name', () =>
-  database(Effect.gen(function*() {
-    yield* Effect.scoped(Effect.gen(function*() {
-      const runtime = yield* launch()
-      const bikes = yield* runtime.deploy(bike)
-      yield* bikes.create('bike-7', { flags: { centsPerMinute: 20 }, requestId: 'add-bike-7', sender: operator })
-    }))
-    yield* Effect.scoped(Effect.gen(function*() {
-      const runtime = yield* launch({ renames: { Bike: 'Cycle' } })
-      const cycles = yield* runtime.deploy({ ...bike, name: 'Cycle' })
-      expect(yield* cycles.read('bike-7')).toMatchObject({ status: 'Docked', centsPerMinute: 20 })
     }))
   })))

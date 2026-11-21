@@ -15,7 +15,6 @@ import {
   type Piece,
   type Program,
   timer,
-  topicsOf,
   type Types,
   versionOf,
 } from '../program.ts'
@@ -25,18 +24,8 @@ import { dialectOf } from './tables.ts'
 /** What the storage of one program holds, as `heldOf` makes it. */
 export type Held<T extends Types> = ReturnType<typeof heldOf<T>>
 
-/**
- * What the storage of `program` holds on the client `sql`, with its schemas read once. `partitions` is the number of
- * partitions of the log, and `onCluster` says whether Cluster's tables are beside the runtime's (decision 0169).
- * `stored` is the name the rows are stored under (decision 0247).
- */
-export const heldOf = <T extends Types>(
-  program: Program<T>,
-  sql: SqlClient.SqlClient,
-  partitions: number,
-  onCluster: boolean,
-  stored: string = program.name,
-) => {
+/** What the storage of `program` holds on the client `sql`, with its schemas read once. */
+export const heldOf = <T extends Types>(program: Program<T>, sql: SqlClient.SqlClient) => {
   const state = json(program.schemas.state)
   const inbound = json(program.schemas.inbound)
   const internal = json(program.schemas.internal)
@@ -46,13 +35,7 @@ export const heldOf = <T extends Types>(
   const reason = json(reasonOf(program.schemas.rejection))
   const suspended = json(Suspended)
   const projection = json(program.schemas.projection)
-  /**
-   * The topics the program publishes, by name, each with what it selects of a projection, or null for the whole of
-   * it: what a row of the topic gives, selected of the stored projection once it is read at the program's version
-   * (decisions 0138, 0140).
-   */
-  const topics = new Map(topicsOf(program).map(({ topic, select }) => [topic, select]))
-  const name = stored
+  const name = program.name
   const version = versionOf(program)
   const dialect = dialectOf(sql)
 
@@ -166,12 +149,9 @@ export const heldOf = <T extends Types>(
   return {
     program,
     sql,
-    partitions,
-    onCluster,
     name,
     version,
     dialect,
-    topics,
     codecs: { state, inbound, internal, flags, request, work, reason, suspended, projection },
     upsert,
     rows,

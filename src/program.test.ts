@@ -31,7 +31,6 @@ import {
   send,
   create,
   timer,
-  type Topic,
   type TypesOf,
   key,
 } from './program.ts'
@@ -277,53 +276,6 @@ test('the schemas applied first type the pieces, where one call would widen a ta
   const widened = oneCall({ state: State, init: () => ({ _tag: 'Opn' }) })
   const any: ReturnType<typeof widened.init> = { _tag: 'any string' }
   expect([misspelt, any]).toHaveLength(2)
-})
-
-test('a topic selects JSON of the projection, and the topics a program declares are its only ones (decision 0138)', () => {
-  const pieces = {
-    name: 'Charges',
-    keys: [],
-    init: () => ({ charging: true }),
-    update: () => () => ({ charging: false }),
-    work: () => noWork,
-    operations: {},
-    project: ({ charging }: { charging: boolean }) => ({ charging, since: 0 }),
-    indexes: {},
-  } as const
-  const shown = {
-    ...schemas,
-    operation: Schema.Never,
-    projection: Schema.Struct({ charging: Schema.Boolean, since: Schema.Number }),
-  }
-  const charges = program(shown)({ ...pieces, topics: { charging: ({ charging }) => charging } })
-  type Of = TypesOf<typeof charges>
-  const named: Topic<Of> = 'charging'
-  // @ts-expect-error a program that declares topics publishes them alone, and its projection is no topic
-  const projection: Topic<Of> = 'projection'
-  const untopical = program(shown)(pieces)
-  const only: Topic<TypesOf<typeof untopical>> = 'projection'
-  // @ts-expect-error a topic selects of the projection, which has no such field
-  const misnamed = program(shown)({ ...pieces, topics: { charging: ({ charged }) => charged } })
-  // @ts-expect-error a topic selects what JSON holds, which a Date is not
-  const unencoded = program(shown)({ ...pieces, topics: { when: () => new Date(0) } })
-  expect([named, projection, only, misnamed, unencoded]).toHaveLength(5)
-  // A program with topics publishes them alone, so none would publish nothing, and a topic has a name
-  // (decision 0054).
-  const refused: ReadonlyArray<readonly [Program<Of>, string]> = [
-    [{ ...charges, topics: {} as unknown as NonNullable<typeof charges.topics> }, 'declares no topic in its topics'],
-    [
-      { ...charges, topics: { '': () => true } as unknown as NonNullable<typeof charges.topics> },
-      'has a topic with an empty name',
-    ],
-    // A topic's name is stored as text of its own, which a database holds as it is (decision 0157).
-    [
-      { ...charges, topics: { 'a\u0000': () => true } as unknown as NonNullable<typeof charges.topics> },
-      'has a topic "a\\u0000" whose name is no text a database holds',
-    ],
-  ]
-  for (const [broken, reason] of refused) {
-    expect(() => checkProgram(broken)).toThrow(`the program 'Charges' ${reason}`)
-  }
 })
 
 // A name and a key's name are stored as text of their own: no database gives a lone surrogate back as written, so that two

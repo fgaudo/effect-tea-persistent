@@ -56,7 +56,7 @@ test('readings the source gives again are counted once, after the keep too', () 
     yield* run(meters, source, forgetful)
     expect(yield* acknowledged).toBe(2)
     // The feed created each meter at its first reading.
-    expect(yield* meters.count({})).toBe(2)
+    expect(yield* meters.query({ limit: 10 })).toHaveLength(2)
     // The acknowledgements were lost, as by a crash before the source stored them: the source gives every reading again.
     yield* lost
     yield* run(meters, source, forgetful)

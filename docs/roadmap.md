@@ -11,69 +11,38 @@ Each step names its model and effort, what it depends on, and how to tell it is 
 
 ## Next
 
-4. **The runtime on the transaction.** (Opus 5.5 · high) It depends on nothing. The spike of step 2 became
-   [`src/transactional.ts`](../src/transactional.ts), beside the old runtime, on the machine and the storage of
-   today. When the old runtime goes, it takes the name `src/runtime.ts`, and the types `Answer`, `Inspected`, `Keep`
-   and `Operated` it imports from the old module move into it. The histories of step 3 are its tests, run on SQLite,
-   on PGlite and on the CI's server of PostgreSQL with a pool. `src/rehearse.property.test.ts` goes with the old
-   runtime. It keeps the six rules of the review's section Where it must be able to go, and a rule it cannot keep
-   is written here with its reason.
-   - Done on 2026-11-21: `create`, `send`, `read`, the timers, the operations, a suspension, `resume` and `discard`,
-     on SQLite. `src/transactional.histories.test.ts` plays 1,000 histories, and 10,000 with `SCHEDULES=all`.
-     Entities that talk, on SQLite, with the tests of `src/transactional.talk.test.ts`.
-   - Done on 2026-11-21: every test of `src/transactional*.test.ts` runs on SQLite and PGlite, and the histories
-     play 50 on PostgreSQL. A step takes an advisory lock of its entity first. `src/transactional.pool.test.ts`
-     holds the tests only a server runs: two steps of an entity, two creations, a deadlock, and the four overlaps
-     of a receiver's step and its asker's. The CI's job `postgres` passes them. No run has checked yet that the
-     tests of two steps and of two creations fail without the lock.
-   - Done on 2026-11-21: `runningOf` arms no timer of a suspended entity, since the waker reads the due timers
-     before it takes the lock. A test of `src/transactional.test.ts` fails without the rule. The rule that skipped
-     work whose message is queued went, since only a suspended entity holds such a message as a step begins.
-   - Done on 2026-11-21: `query`, `reindex`, `expire`, `suspended`, `inspect`, and a sweep that runs `expire` alone.
-   - Next: the old runtime goes, with the integration of Cluster, the hold, the scheduler of the tests and every
-     parked piece. The outbox becomes one table a step writes in the same part, since the old runtime's tests read
-     the log of today. The tests of `spikes/transactional/` then move into `src/`, but `cost.test.ts`.
-   - It is done when the histories and the examples pass on the three, the runtime and the storage are under 2,500
-     lines without tests, and `bun test` runs within a minute.
+4. **The runtime on the transaction.** (Opus 5.5 · high) It depends on nothing. [`src/runtime.ts`](../src/runtime.ts)
+   runs each event as one transaction that locks the entity, reads it, steps the machine and writes. The histories
+   of step 3 are its tests, run on SQLite, on PGlite and on the CI's server of PostgreSQL with a pool. It keeps the
+   six rules of the review's section Where it must be able to go, and a rule it cannot keep is written here with its
+   reason.
+   - Done on 2026-11-21: the old runtime went, with Cluster, the hold, the scheduler of the tests, `examples/server`
+     and every parked piece. The outbox is one table, as `docs/design.md` says under Publishing what happened.
+     `bun test` runs in 52 s. `src/contract.test.ts` went, since it compared backends on pieces that went.
+     `spikes/full-volume.test.ts` and `spikes/full-database.test.ts` went with the consumers they freed room for.
+   - Next: the runtime and the storage are 2,903 lines without tests, over the budget of 2,500. The maintainer
+     chooses whether to cut further or to move the budget.
+   - Next: a push of `main` runs the CI's job `postgres`. Its new test of `READ COMMITTED` and its deadlock test,
+     rebuilt on a key of the outbox, have run on no server yet. No run has checked yet that the tests of two steps
+     and of two creations of `src/runtime.pool.test.ts` fail without the lock.
+   - It is done when the histories and the examples pass on the three, the runtime and the storage are under their
+     budget without tests, and `bun test` runs within a minute.
 
-   What the work so far left, which the next parts build on:
-   - A `Target` of the runtime waits by `quiet` of `src/transactional.test_shared.ts`. SQLite and PGlite answer
-     within microtasks. On a server it waits until the pool of `fixed` connections is idle.
+   What the work so far left, which the next steps build on:
+   - A `Target` of the runtime waits by `quiet` of `src/runtime.test_shared.ts`. SQLite and PGlite answer within
+     microtasks. On a server it waits until the pool of `fixed` connections is idle.
    - Its runner waits for the history's answer, kept by run. A process restarts only once it is quiet, so the runs
      whose runner was called are the runs a committed step stored.
    - A deploy activates only the entities with an operation or a message, so a deploy that makes a stored timer an
      operation starts it late. `docs/open-questions.md` asks it under Programs, for step 10. The target retries the
      creation after each deploy, so that the histories do not check it.
-   - An entity is activated once a launch, and the process remembers the last 10,000 it activated. Activated at
-     each step, a state of 0.5 MB took up to 2.0 times today's step. `spikes/transactional/cost.test.ts` holds the
-     numbers.
-   - **The crash table loses its last two lines.** A message is handled in the transaction that records it, so a
-     process killed between the two stored neither. The operation then runs again or is `unknown`, and the timer
-     fires again. `docs/design.md` says so when this step lands.
-   - **Two runtimes on one file lose no step, and each restarts the other's operations.** An operation that acts at
-     most once is then recorded `unknown` while it still runs, and is never run twice. Who runs an operation is
-     the claim the step under Later decides.
    - **Of the review's six rules** the runtime keeps the first, the third for a request, and the fourth. It breaks
-     the second where the storage of today does, and in no place of its own. A step calls eight functions of the
-     storage: `lock`, `load`, `reply`, `write`, `answer`, `keepAnswer`, `due` and `interrupted`.
-   - **The examples' tests run as they are** on the new runtime, by the preload of
-     `spikes/transactional/examples.preload.ts`. `examples/subscription` has no test on a runtime, and every test of
-     `examples/order` uses a parked piece or a reading of the read model, which the preload takes from the storage.
-   - **A sender sees a resumption or a deploy of another process at its retry.** Only those of its own process end
-     the wait sooner. `docs/design.md` says a wait looks again on no clock, and says this when this step lands.
-   - **A transaction that fails in the database is tried again at the retry**, as a deadlock fails it. A
-     receiver's is sent again by its sender, an operation's end by its fiber, and a timer's fire by the waker. A
-     caller's dies as its defect. `docs/design.md` says a deadlock crashes its entity, and says this when this step
-     lands.
+     the second where the storage does, and in no place of its own. Who runs an operation when two runtimes share a
+     database is the claim the step under Later decides.
    - A reply or a `NotFound` stored while the asker's work ends is left on PostgreSQL. Neither step waits for the
      other, and each misses the other's write. The four overlaps check that `expire` deletes the row.
-   - **The outbox, as the maintainer chose on 2026-11-21.** It is one table `effecttea_outbox`, keyed by the
-     entity's name, its id and its `steps` after the write, with the kind, the version, the time, the message and the
-     projection. A program deployed with `outbox: true` writes a row at its creation and at each step whose
-     projection changed. No order holds across entities. The library never deletes a row, and a reader deletes by
-     key the rows it handled. `topics` are parked with the consumers, and the sweep runs no `prune`.
-   - `deploy`, `create`, `send`, `resume` and `discard` within a transaction of the client are the caller's defect,
-     as in the old runtime. `read` is not.
+   - No spike sees the runtime on a full volume since the consumers went. A spike of it is owed before the release.
+   - `docs/open-questions.md` still links to removed code at the tag `pre-restart`. Step 7 reads each entry again.
 
 5. **The rehearsal on the runtime's step.** (Opus 5.5 · high) It depends on step 4. The rehearsal of today is not
    a target of the histories: it fails a test at a defect, and has no `resume` and no `discard`. The maintainer chose
@@ -138,7 +107,7 @@ Each step names its model and effort, what it depends on, and how to tell it is 
 
 ## Parked
 
-Each piece is taken out by step 4, and git keeps it at `pre-restart`. A piece comes back as a step of this file,
+Step 4 took each piece out, and git keeps it at `pre-restart`. A piece comes back as a step of this file,
 once what it waits for holds.
 
 - **The consumers of the log**: topics by reader, partitions, cursors, `fetch`, `consume`, `prune`. They wait for a

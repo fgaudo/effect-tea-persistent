@@ -2045,22 +2045,6 @@ describe('a new program', () => {
     expect(Machine.idempotencyKeyOf(machine, { name: 'charge' }, 1)).toBe(digest)
   })
 
-  test("a renamed entity's work keeps the idempotency keys of the name its keys are drawn from (decision 0156)", () => {
-    const plain = checked((message) => message, () => ({ charge: 'operation' }))
-    const created = Machine.start(plain.program, 'tiny', null, epoch, by('creation'))
-    if (created._tag !== 'Created') throw created._tag === 'Defect' ? created.cause : created.reply
-    const first = idempotencyKey({ name: 'Tiny', id: 'tiny' }, { name: 'charge' }, 1)
-    const keysOf = (outputs: ReadonlyArray<Machine.Output<Tiny>>) =>
-      outputs.flatMap((output) => (output._tag === 'Started' ? [output.idempotencyKey] : []))
-    expect(keysOf(created.outputs)).toEqual([first])
-    // The launch renamed `Tiny` to `Small`: the entity holds the new name, and the name its keys are drawn from.
-    const program = { ...plain.program, name: 'Small' }
-    const stored = { ...created.machine.stored, name: 'Small', keyedAs: 'Tiny' }
-    const machine: Entity = { ...created.machine, stored, program, replies: new Map() }
-    expect(keysOf(stepped(machine, { _tag: 'Restart' }).outputs)).toEqual([first])
-    expect(Machine.idempotencyKeyOf(machine, { name: 'charge' }, 1)).toBe(first)
-  })
-
   test('declaring the digest of an operation under way is a defect, as changing its delivery is', () => {
     const machine = checked((message) => message, () => ({ charge: 'operation' }))
     const transition = stepped(machine, { _tag: 'Restart' }, {
@@ -2377,7 +2361,7 @@ describe('what an event writes', () => {
     const machine: Entity = { ...created.machine, program, replies: new Map() }
     count.projected = count.state = count.projection = 0
     const transition = handled(machine, { _tag: 'Receive', request: by('r'), message: 'go' })
-    expect(transition.written?.published).toMatchObject({ projection: 'go', topics: ['projection'] })
+    expect(transition.written?.published).toMatchObject({ projection: 'go' })
     expect(count).toEqual({ projected: 1, state: 1, projection: 1 })
   })
 
@@ -2451,7 +2435,6 @@ describe('what an event writes', () => {
         kind: 'Creation',
         message: null,
         projection: keys.length,
-        topics: ['projection'],
       })
       for (const { event, program, before, after, written } of events) {
         const head = handledBy(event, before)
@@ -2464,7 +2447,6 @@ describe('what an event writes', () => {
               kind: head._tag,
               message: head.message,
               projection: project(after.stored.state),
-              topics: ['projection'],
             }
             : null,
         )
@@ -2485,70 +2467,6 @@ describe('what an event writes', () => {
 
 // A key may take a parameter, and every piece of work of an entity draws its incarnation from one counter
 // (decision 0132).
-describe('topics of the log (decision 0138)', () => {
-  // A tiny program whose log has two topics, each selecting of the projection, the last message: its length, and
-  // its first letter.
-  type Topical = Omit<Tiny, 'topics'> & Readonly<{ topics: Readonly<{ length: number; first: Json }> }>
-  const topical = (first: (last: string) => Json = (last) => last.slice(0, 1)): Program<Topical> => ({
-    ...tiny((message) => message, () => ({})),
-    topics: { length: (last) => last.length, first },
-  })
-  const started = (program: Program<Topical>) => {
-    const created = Machine.start(program, 'tiny', null, epoch, by('creation'))
-    if (created._tag !== 'Created') throw created._tag === 'Defect' ? created.cause : created.reply
-    return created
-  }
-  const step = (program: Program<Topical>, machine: Machine.Machine<Topical>, message: string) =>
-    Machine.step(program, machine, { _tag: 'Receive', request: by(message), message, reply: null, carried: null, at })
-
-  test('a step is written in each topic whose selection changed, with the projection, and a creation in every topic', () => {
-    const program = topical()
-    const created = started(program)
-    expect(created.written?.published).toEqual({
-      kind: 'Creation',
-      message: null,
-      projection: 'start',
-      topics: ['length', 'first'],
-    })
-    // The state and the projection change, and what no topic selects does: nothing is published.
-    const shout = step(program, created.machine, 'shout')
-    expect(shout.written?.shown?.projection).toBe('shout')
-    expect(shout.written?.published).toBeNull()
-    const go = step(program, shout.machine, 'go')
-    expect(go.written?.published).toEqual({
-      kind: 'Inbound',
-      message: 'go',
-      projection: 'go',
-      topics: ['length', 'first'],
-    })
-    const gone = step(program, go.machine, 'gone')
-    expect(gone.written?.published).toEqual({
-      kind: 'Inbound',
-      message: 'gone',
-      projection: 'gone',
-      topics: ['length'],
-    })
-  })
-
-  test('a state a topic dies on, or selects what JSON does not hold of, is a defect, and is not stored', () => {
-    const broken = new Error('broken')
-    const dies = topical((last) => {
-      if (last === 'go') throw broken
-      return last.slice(0, 1)
-    })
-    const died = step(dies, started(dies).machine, 'go')
-    expect(died.machine.stored.suspension?.cause).toBe(broken)
-    expect(died.machine.stored.state).toEqual({ last: 'start' })
-    expect(died.written?.published ?? null).toBeNull()
-    // A cast lets through a value JSON does not hold.
-    const unencoded = topical((last) => (last === 'go' ? new Date(0) : last.slice(0, 1)) as unknown as Json)
-    const refused = step(unencoded, started(unencoded).machine, 'go')
-    const cause = refused.machine.stored.suspension?.cause
-    expect(cause instanceof InvariantDefect ? cause.reason : null).toContain("the topic 'first' does not encode")
-    expect(refused.machine.stored.state).toEqual({ last: 'start' })
-  })
-})
-
 describe('keys with a parameter', () => {
   // A message `+x` charges the line `x`, whose charge leaves once it completes with `charged x`. The shipment of
   // each line charged is a timer under `ship`, whose parameter `flip` writes with its properties in the other

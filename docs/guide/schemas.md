@@ -16,7 +16,6 @@ The words in bold are defined in [`glossary.md`](../glossary.md), and
 - [Work under way](#work-under-way)
 - [Recording what a migration does](#recording-what-a-migration-does)
 - [No way back](#no-way-back)
-- [Renaming a program](#renaming-a-program)
 - [The rules, in one list](#the-rules-in-one-list)
 
 ## The requirement
@@ -147,27 +146,6 @@ that must start again the work of an entity version 2 wrote dies. So a deploy is
 undone by deploying the version before. A fault found after a deploy is fixed by a version 3, whose migration reads
 what version 2 wrote.
 
-## Renaming a program
-
-A program's name is stored with each of its entities. A program is renamed by its launch:
-
-```ts
-const runtime = yield* launch({ renames: { Bike: 'Cycle' } })
-const cycles = yield* runtime.deploy({ ...bike, name: 'Cycle' })
-expect(yield* cycles.read('bike-7')).toMatchObject({ status: 'Docked', centsPerMinute: 20 })
-```
-
-The program then carries its new name, `name: 'Cycle'`, here given by the deploy, and written in its declaration
-once the old name is gone. The launch moves every row of the old name to the new one,
-in one transaction, before any deploy. A reply stored for a request of the old name names the new name, so a
-caller's retry and an entity's request sent again still find their replies. An entity keeps the idempotency keys
-of its work, so an operation under way runs again under the key it was given. A state that holds an address of the
-old name is the program's data, which a migration of its own moves.
-
-A rename whose old name holds nothing moves nothing, so it may stay in the launch for as long as a database of the
-old name may be launched. A program renamed twice names both its former names: `{ Bike: 'Vehicle', Cycle:
-'Vehicle' }`. A deploy of a program under a name the launch renames dies, since it is the old program.
-
 ## The rules, in one list
 
 1. **A change needs a migration when the new schema cannot decode what the old one wrote.** A case added or a
@@ -180,4 +158,3 @@ old name may be launched. A program renamed twice names both its former names: `
 5. **A program keeps every migration, and never changes one once deployed.** A test records cases of each, and
    `migrationViolations` checks them.
 6. **A deploy is not undone by the version before.** A fault is fixed by the next version.
-7. **A program is renamed by its launch**, and keeps its entities, their replies and their keys.

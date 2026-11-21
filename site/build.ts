@@ -1,6 +1,6 @@
 // Builds the documentation site into `site/dist/`. The README is its home page. The guide, the concepts, the design
 // and the glossary are TypeDoc documents, and each example is a page of its README followed by its files. The API reference
-// is generated from the four entries of `src/`, and the diagrams are drawn by `mermaid.ts`. A warning of TypeDoc
+// is generated from the three entries of `src/`, and the diagrams are drawn by `mermaid.ts`. A warning of TypeDoc
 // fails the build, since it is a doc comment or a link to fix.
 import { $ } from 'bun'
 import { existsSync, readdirSync, statSync } from 'node:fs'
@@ -16,7 +16,7 @@ const revision = (await $`git rev-parse HEAD`.cwd(root).text()).trim()
 /** A path of the repository, with forward slashes, from its root. */
 const repo = (path: string) => relative(root, path).replaceAll('\\', '/')
 
-const guide = ['README.md', 'children.md', 'outbox.md', 'schemas.md', 'cluster.md', 'operator.md'].map((page) =>
+const guide = ['README.md', 'children.md', 'outbox.md', 'schemas.md', 'operator.md'].map((page) =>
   `docs/guide/${page}`
 )
 const examples = readdirSync(join(root, 'examples')).filter((name) => existsSync(join(root, 'examples', name, 'README.md')))

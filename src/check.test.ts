@@ -19,7 +19,7 @@ import { TestClock } from 'effect/testing'
 import { check } from './check.ts'
 import { defect, type Program } from './program.ts'
 import { storage } from './storage.ts'
-import { all, database, hands, onBoth, process, program, ran, type T, tester } from './runtime.test_shared.ts'
+import { all, database, hands, onBoth, process, program, ran, type T, tester } from './check.test_toy.ts'
 
 /** The cause a check dies with, as its message. */
 const diesWith = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -196,23 +196,6 @@ describe('the check of a program', () => {
       expect((yield* check(failing, { limit: 0 })).active).toEqual({ checked: 3, failing: 3, failed: [] })
       expect(yield* diesWith(check(failing, { limit: -1 })))
         .toBe('the check is given a limit of -1, which is no non-negative integer')
-    })))
-
-  test('reads the entities of a name the launch renames to the program, as the rename would', () =>
-    database(Effect.gen(function*() {
-      yield* settled
-      const renamed: Program<T> = { ...dying, name: 'Toy2' }
-      expect(yield* check(renamed, { limit: all })).toEqual({
-        active: { checked: 0, failing: 0, failed: [] },
-        suspended: { checked: 0, failing: 0, failed: [] },
-      })
-      const { active } = yield* check(renamed, { limit: all, renames: { Toy: 'Toy2' } })
-      expect(active.checked).toBe(3)
-      expect(active.failed.map(({ id }) => id)).toEqual(['t-2'])
-      expect(yield* diesWith(check(program, { limit: all, renames: { Toy: 'Toy2' } })))
-        .toBe("the program 'Toy' is checked, and the launch renames it to 'Toy2'")
-      expect(yield* diesWith(check(program, { limit: all, renames: { Toy: '' } })))
-        .toBe("the launch renames 'Toy' to '', and a name is a string that is not empty")
     })))
 
   test('dies on what the runtime throws: a row that is no JSON, and tables another release made', () =>

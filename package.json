@@ -9,19 +9,15 @@
   "exports": {
     ".": "./src/index.ts",
     "./program": "./src/index.program.ts",
-    "./testing": "./src/index.testing.ts",
-    "./cluster": "./src/index.cluster.ts"
+    "./testing": "./src/index.testing.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:parallel": "bun test --parallel=8",
     "test:release": "SCHEDULES=all bun test",
-    "test:slow": "SCHEDULES=all bun test src/cluster.test.ts examples/server/server.test.ts",
     "test:spikes": "bun test '--path-ignore-patterns=node_modules/**' ./spikes",
-    "test:postgres": "bun test '--path-ignore-patterns=node_modules/**' src/check.test.ts src/storage.test.ts src/runtime.test.ts src/runtime/ src/contract.test.ts src/postgres.test.ts src/cluster.test.ts src/fixtures.property.test.ts src/log.property.test.ts src/rehearse.property.test.ts src/transactional spikes/postgres-session-ended.test.ts",
-    "test:explore": "bun scripts/explore.ts",
-    "test:pins": "bun scripts/pins.ts",
+    "test:postgres": "bun test '--path-ignore-patterns=node_modules/**' src/check.test.ts src/storage.test.ts src/postgres.test.ts src/fixtures.property.test.ts src/runtime",
     "links": "bun scripts/check-links.ts"
   },
   "devDependencies": {

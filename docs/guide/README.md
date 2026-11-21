@@ -596,7 +596,7 @@ const first = yield* rent(rides)(request)
 const again = yield* rent(rides)(request)
 expect(again).toEqual(first)
 yield* runtime.settled
-expect(yield* rides.count({})).toBe(1)
+expect(yield* rides.query({ limit: 10 })).toHaveLength(1)
 expect(first._tag === 'Rented' ? yield* rides.read(first.ride) : null).toMatchObject({ status: 'Riding' })
 ```
 
@@ -620,6 +620,5 @@ expect(first._tag === 'Rented' ? yield* rides.read(first.ride) : null).toMatchOb
 
 The pages of this guide by topic are read when a program needs them. [Children](children.md) holds items inside
 an entity, each with a life of its own. [The outbox](outbox.md) tells other systems what an entity did.
-[Schemas that change](schemas.md) changes a program whose entities are stored. [Effect Cluster](cluster.md) runs a
-program on several processes at once. [The operator's calls](operator.md) handle an entity a defect suspended, and
-keep the database small.
+[Schemas that change](schemas.md) changes a program whose entities are stored. [The operator's calls](operator.md)
+handle an entity a defect suspended, and keep the database small.

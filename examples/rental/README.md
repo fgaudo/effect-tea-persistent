@@ -14,6 +14,6 @@ deployed later resumes it.
 - [`scenarios.test.ts`](scenarios.test.ts): the ride and the bike rehearsed, alone and together.
 - [`ride.test.ts`](ride.test.ts): the ride's properties, checked for generated states.
 - [`bike.test.ts`](bike.test.ts): the bike's migration, checked against the cases recorded.
-- [`runtime.test.ts`](runtime.test.ts): the rental on the runtime, a suspension and its fix, and a rename.
+- [`runtime.test.ts`](runtime.test.ts): the rental on the runtime, and a suspension and its fix.
 
 [The guide](../../docs/guide/README.md) writes this example from its requirement, one decision at a time.

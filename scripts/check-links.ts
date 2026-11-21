@@ -1,7 +1,9 @@
 // Checks every relative link of the repository's `.md` files, and every citation of a note in prose or in a comment
 // (`decision 0029`) in its `.md` and `.ts` files, and fails on one whose target is missing. A link to a note is a
 // path, which moving the note to the archive changes; a citation of a note deleted says so, as
-// `decision 0082 (deleted; git keeps it)` (`AGENTS.md`).
+// `decision 0082 (deleted; git keeps it)` (`AGENTS.md`). The notes, `premises.md` and `rejected.md` are frozen, and
+// a link of theirs to a file that step 4 of the roadmap removed is read at the tag `pre-restart`, so a missing
+// target other than a note is not reported for them.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
@@ -25,6 +27,10 @@ for (const dir of ["docs/decisions", "docs/decisions/archive"]) {
   }
 }
 
+const docs = resolve(root, "docs");
+const frozen = (file: string) =>
+  file.startsWith(resolve(docs, "decisions")) || [resolve(docs, "premises.md"), resolve(docs, "rejected.md")].includes(file);
+
 const broken: string[] = [];
 for (const file of files(root)) {
   const text = readFileSync(file, "utf8");
@@ -34,7 +40,9 @@ for (const file of files(root)) {
       if (target === undefined || /^(https?:|mailto:|#)/.test(target)) continue;
       const path = target.replace(/#.*$/, "");
       if (path === "") continue;
-      if (!existsSync(resolve(dirname(file), decodeURIComponent(path)))) broken.push(`${file}: ${target}`);
+      const resolved = resolve(dirname(file), decodeURIComponent(path));
+      if (existsSync(resolved) || (frozen(file) && !resolved.startsWith(resolve(docs, "decisions")))) continue;
+      broken.push(`${file}: ${target}`);
     }
   }
   for (const match of text.matchAll(/\bdecisions? (0\d{3}(?:,? (?:and |to )?0\d{3})*)/g)) {

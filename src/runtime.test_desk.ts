@@ -1,5 +1,5 @@
 /**
- * The program the spike's own tests run: a desk that counts, charges, sends a mail and rings an alarm. It holds one
+ * The program the runtime's tests of processes run: a desk that counts, charges, sends a mail and rings an alarm. It holds one
  * piece of each kind of work, so that a test stops a process at each line of the design's crash table. The charge
  * is idempotent, the mail is sent at most once, and the alarm is a timer.
  */
@@ -7,7 +7,7 @@ import * as Context from 'effect/Context'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
 import * as Schema from 'effect/Schema'
-import { operation, program, reject, timer } from '../../src/index.program.ts'
+import { operation, program, reject, timer } from './index.program.ts'
 
 const State = Schema.Struct({
   count: Schema.Int,
@@ -36,7 +36,7 @@ const Operation = Schema.TaggedUnion({ Charge: {}, Mail: {} })
 export class World extends Context.Service<World, {
   /** Acts on the world, once for each call. */
   readonly act: (what: string) => Effect.Effect<void>
-}>()('spikes/transactional/World') {}
+}>()('@fgaudo/effect-tea-persistent/test/World') {}
 
 const acting = (what: string, message: Internal) =>
   Effect.gen(function*() {

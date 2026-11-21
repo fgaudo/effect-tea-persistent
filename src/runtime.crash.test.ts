@@ -1,10 +1,10 @@
 /**
- * A process killed at each line of the table What survives a crash of `docs/design.md`, on the spike's runtime on a
- * file of SQLite. `crash.child.ts` is the process: it stops at a point of a transaction or inside the world, and
- * this test kills it there, as `sqlite-transaction.test.ts` kills its own. A new runtime on the same file then ends
+ * A process killed at each line of the table What survives a crash of `docs/design.md`, on a file of SQLite.
+ * `runtime.test_crash.ts` is the process: it stops at a point of a transaction or inside the world, and this test
+ * kills it there, as `spikes/sqlite-transaction.test.ts` kills its own. A new runtime on the same file then ends
  * where the machine ends from what the killed process stored.
  *
- * The spike handles a message in the transaction that records it. So the table's last two lines have no state at
+ * The runtime handles a message in the transaction that records it. So the table's last two lines have no state at
  * rest: a process killed after a completion or a firing is recorded, and before the message is handled, stored
  * neither. The operation is then the fourth line's, and the timer fires again from the state.
  */
@@ -15,9 +15,9 @@ import * as Layer from 'effect/Layer'
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { TypesOf } from '../../src/index.program.ts'
-import { desk, World } from './desk.ts'
-import { type Handle, launch, type Runtime } from '../../src/transactional.ts'
+import type { TypesOf } from './index.program.ts'
+import { desk, World } from './runtime.test_desk.ts'
+import { type Handle, launch, type Runtime } from './runtime.ts'
 
 type Files = Readonly<{ database: string; world: string }>
 
@@ -32,7 +32,7 @@ const inDirectory = async (body: (files: Files) => Promise<void>) => {
 
 /** Runs the process that does `act`, and waits until it stops at `stop`. It gives how to kill the process there. */
 const stoppedAt = async ({ database, world }: Files, act: string, stop: string) => {
-  const child = Bun.spawn(['bun', join(import.meta.dir, 'crash.child.ts'), database, world, act, stop], {
+  const child = Bun.spawn(['bun', join(import.meta.dir, 'runtime.test_crash.ts'), database, world, act, stop], {
     stdout: 'pipe',
     stderr: 'inherit',
   })

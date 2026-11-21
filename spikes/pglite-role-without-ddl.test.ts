@@ -39,7 +39,7 @@ test('a role that may only read and write rows creates no table, runs migrations
     const refused = yield* Effect.exit(sql`CREATE TABLE effecttea_other (name TEXT)`)
     expect(Exit.isFailure(refused) ? String(refused.cause) : null).toContain('permission denied for schema public')
     yield* createTables
-    const runtime = yield* launch({ tables: 'existing' })
+    const runtime = yield* launch()
     const counters = yield* runtime.deploy(counter)
     const sender = null
     const at = DateTime.makeUnsafe(0)

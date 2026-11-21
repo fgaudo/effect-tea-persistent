@@ -30,8 +30,8 @@ import {
   violations,
 } from './machine.test_histories.ts'
 import { type Dialect, storage } from './storage.ts'
-import { type Handle, launch } from './transactional.ts'
-import { clientOf, dialects, quiet, quietly } from './transactional.test_shared.ts'
+import { type Handle, launch } from './runtime.ts'
+import { clientOf, dialects, quiet, quietly } from './runtime.test_shared.ts'
 
 const id = 'history'
 
@@ -112,7 +112,7 @@ const onRuntime = Effect.gen(function*() {
       Effect.gen(function*() {
         const answer = yield* launched().send(id, message, { requestId, keep: 'forever' })
         yield* quiet
-        if (answer._tag === 'NotFound' || answer._tag === 'Full') {
+        if (answer._tag === 'NotFound') {
           return yield* Effect.die(new Error(`${requestId} was answered ${answer._tag}`))
         }
         return answer as Answer

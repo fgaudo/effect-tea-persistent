@@ -10,16 +10,17 @@ holds at each point where the process may die. The words it uses are defined in 
   message at a time.
 - **`update`** is a pure function from a message and the state to the next state. It rejects an inbound message
   that does not apply, and answers an internal message that cannot arrive with a defect.
-- **Each step is one transaction.** The runtime stores the next state with the reply to the message, the row
-  callers read and the rows of the outbox.
+- **Each step is one transaction.** The transaction locks the entity, reads it, steps the machine and stores the
+  next state with the reply to the message, the row callers read and the row of the outbox. No entity is held in
+  memory.
 - **There are no commands.** `work(state)` derives the operations and the timers under way from the state, by key.
   A key that leaves the state ends its work, and nothing has to cancel it.
 - **An operation is data.** Its runner turns it into an effect, and declares what a crash does to it. An idempotent
   one is given the same idempotency key at every try.
 - **An incarnation** numbers each run of the work under a key. The runtime drops an answer of a run that is no
   longer the current one.
-- **Callers read the projection**, JSON made from the state. A query across entities reads its indexes, and the
-  outbox publishes its topics.
+- **Callers read the projection**, JSON made from the state. A query across entities reads its indexes, and a
+  program deployed with the outbox writes a row of the outbox at each step that changes the projection.
 - **A defect suspends the entity**, with its state and its message kept, until an operator resumes it with a fix
   or discards the message.
 - **Nothing is replayed.** After a crash the runtime reads the state back and starts the work `work` derives from
@@ -38,23 +39,20 @@ the runtime.
 - [Messages](#messages)
 - [Work](#work): [keys with a parameter](#keys-with-a-parameter), [incarnations](#incarnations) and
   [entities that talk](#entities-that-talk)
-- [Persistence](#persistence): [what a step costs](#what-a-step-costs) and [the tables](#the-tables)
+- [Persistence](#persistence): [what a step costs](#what-a-step-costs), [the tables](#the-tables) and
+  [the sweep](#the-sweep)
 - [Schemas that change](#schemas-that-change): [checking a program before its deploy](#checking-a-program-before-its-deploy)
-  and [renaming a program](#renaming-a-program)
 - [Execution](#execution) and [what survives a crash](#what-survives-a-crash)
 - [Defects](#defects)
 - [Reading](#reading)
-- [Publishing what happened](#publishing-what-happened): [topics](#topics), [the order of the log](#the-order-of-the-log),
-  [consumers](#consumers), [readers of one consumer](#readers-of-one-consumer),
-  [declared consumers](#declared-consumers), [the sweep](#the-sweep) and [what a step publishes](#what-a-step-publishes)
+- [Publishing what happened](#publishing-what-happened)
 - [Testing](#testing): [the tests of a program](#the-tests-of-a-program), [rehearsing](#rehearsing) and
   [rehearsing a world](#rehearsing-a-world)
 - [Where it departs from effect-tea](#where-it-departs-from-effect-tea)
-- [Where it runs](#where-it-runs): [databases](#databases), [entities in the process](#entities-in-the-process),
-  [deployments](#deployments), [a planned stop](#a-planned-stop), [what a tracer sees](#what-a-tracer-sees),
-  [on Effect Cluster](#on-effect-cluster) and [the public surface](#the-public-surface)
+- [Where it runs](#where-it-runs): [databases](#databases), [deployments](#deployments) and
+  [the public surface](#the-public-surface)
 - [How the runtime keeps it](#how-the-runtime-keeps-it): [what the storage writes](#what-the-storage-writes),
-  [fibers and locks](#fibers-and-locks), [Effect Cluster inside the runtime](#effect-cluster-inside-the-runtime) and
+  [fibers and locks](#fibers-and-locks) and
   [how the machine and the runtime are tested](#how-the-machine-and-the-runtime-are-tested)
 
 ## What it is for
@@ -89,22 +87,19 @@ tested by calling pure functions, crashes included.
 | `work`       | the work under way in each state, by key: operations, as data, and timers                 |
 | `operations` | how each kind of operation runs, what it answers, and what a crash does to it             |
 | `project`    | what callers read of the state, with the actions it allows, from the children's too       |
-| `topics`     | the parts of the projection the log publishes, by name, each selected from it as JSON    |
 | `children`   | the parts the state holds, each placed with `child` or `each`                             |
 | `onEvent`    | what the program does with each event a child raises                                      |
 | `indexes`    | what a query across the program's entities filters and orders by, read off the projection |
 | `migrations` | how the versions before this one are read, in order                                       |
 
-An entity's loop runs every piece of the table, with its children and the bound of callers' messages:
+An entity's loop runs every piece of the table, with its children:
 
 ```mermaid
 flowchart LR
   caller -->|create, with flags| init
   init -->|Created or Rejected| caller
   init --> state([state])
-  caller -->|inbound message, with a request id| bound{within the bound of callers' messages}
-  bound -->|yes| update
-  bound -->|no: Full| caller
+  caller -->|inbound message, with a request id| update
   update -->|Accepted, Rejected or Suspended| caller
   update --> state
   update -->|wrapped message| child[a child's update]
@@ -118,8 +113,8 @@ flowchart LR
   timers -->|firing, same incarnation| update
   runner -->|send, create| other[another entity]
   state --> project
-  project -->|projection| read[read, query, count, sum, countBy]
-  project -->|a row in each topic whose selection changes| outbox
+  project -->|projection| read[read, query]
+  project -->|a row where the projection changes| outbox
 ```
 
 A program is declared in one place, `program(schemas)(…)`: the schemas first, which give every type the program
@@ -162,7 +157,7 @@ once, since a program is never mutated
 ([decision 0054](decisions/archive/0054-a-program-is-checked-where-it-enters.md),
 [decision 0136](decisions/archive/0136-a-key-is-a-name-and-a-parameter-as-data.md)).
 
-A program's types are what `Handle`, `Rehearsal` and `Published` take. `TypesOf<typeof p>` gives them, of the program
+A program's types are what `Handle` and `Rehearsal` take. `TypesOf<typeof p>` gives them, of the program
 or of a reference to it, so a boundary names the handle it launched as `Handle<TypesOf<typeof order>>`
 ([decision 0188](decisions/0188-typesof-gives-a-programs-types.md)).
 
@@ -313,9 +308,7 @@ A program's `init` may reject the flags, with `reject` or `rejectWith` and the p
 rejects a message. A rule of the domain at creation that the flags' schema cannot hold, such as one that reads the
 time of the creation, lives there. The creator is answered `Rejected`, with the reason. The runtime stores neither
 the entity nor the reply: a retry under the same request id runs `init` again, as a message answered `NotFound` is
-applied once its entity exists. On Cluster, Cluster saves the door's answer, and the creator's client resets a saved
-`Rejected` before it sends the creation, so that a retry is delivered again
-([decision 0182](decisions/0182-init-may-reject-the-flags.md)). Another entity's operation is the exception: its
+applied once its entity exists ([decision 0182](decisions/0182-init-may-reject-the-flags.md)). Another entity's operation is the exception: its
 rejection is kept while its work holds, so that a run after a crash is given it again, as
 [entities that talk](#entities-that-talk) says.
 
@@ -384,7 +377,7 @@ item sent again after a crash gets the stored reply. `update` rejects an item th
 ([decision 0127](decisions/archive/0127-a-live-stream-feeds-its-entities-from-the-boundary.md)).
 
 The boundary acknowledges an item to its source once `send` answers `Accepted` or `Rejected`, since every other
-answer stores nothing of the item. After `Suspended` or `Full` it sends the same item again, under the same request
+answer stores nothing of the item. After `Suspended` it sends the same item again, under the same request
 id, after a wait. After `NotFound` it creates the entity and sends again, or drops the item on purpose and logs it.
 After `Reused` it stops without acknowledging, and an operator decides. A source gives an item again after a crash
 between the answer and the acknowledgement, which may come after the `keep`. So the entity keeps the offset of the
@@ -464,15 +457,11 @@ receiver holds. So an operation whose completion reports what it sent builds the
 the replies it was given, never from what it reads again
 ([decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)). While the receiver is
 suspended, `send` waits for its resumption, and an operation that reaches a program not deployed yet waits for
-its deploy ([decision 0045](decisions/archive/0045-an-operation-waits-for-a-program-not-deployed-yet.md)): each is woken by
-what it waits for, and nothing looks again on a clock
-([decision 0063](decisions/archive/0063-the-runtime-waits-for-what-it-waits-for.md)). On Effect Cluster the
-receiver may be resumed on another runner, which tells the sender's entity `Resumed`
-([decision 0167](decisions/archive/0167-on-cluster-an-operation-sends-through-the-doors-client-and-is-woken-by-resumed.md)). A receiver that crashes has no reply
-yet either, and the operation sends again after a while; only a defect of the sender's own suspends it
-([decision 0046](decisions/archive/0046-a-receiver-that-crashes-is-sent-again.md)). A full receiver stored nothing
-of the message, and the operation sends again after the same while: it is never given `Full`
-([decision 0147](decisions/archive/0147-an-entity-holds-a-bounded-number-of-callers-messages.md)). An operation creates an
+its deploy ([decision 0045](decisions/archive/0045-an-operation-waits-for-a-program-not-deployed-yet.md)). The
+operation sends again after the launch's `retry`, 50 ms by default. A resumption or a deploy in the sender's own
+process ends the wait sooner. A resumption or a deploy in another process is seen at the retry. A receiver's
+transaction that fails in the database, as a deadlock fails it, gives no reply either, and the operation sends
+again at the retry. Only a defect of the sender's own suspends it. An operation creates an
 entity the same way, with `create` and a name. Both name the receiver by its program, or by a *reference*:
 `reference<typeof inventory>('Inventory')` is the program's name with its types, made where an `import type` brings
 none of its code. The compiler checks the name against the program's, and the runtime reads only the name. A
@@ -489,7 +478,7 @@ the booking is cancelled or expires.
 
 ## Persistence
 
-After each message the runtime stores, in one transaction:
+After each message the runtime stores, in one transaction that locks the entity first:
 
 - the new state, when the step changed it;
 - the work the state holds, by key, with its incarnation and how each operation is delivered, and the last
@@ -497,9 +486,8 @@ After each message the runtime stores, in one transaction:
 - the message, marked as handled, with its reply for an inbound one;
 - and, when the state changed, the row a query reads: the projection, and the value of each index on it
   ([decision 0032](decisions/archive/0032-a-projection-is-a-row.md));
-- and, in each topic of the log whose selection changed with it, the row other systems learn from
-  ([decision 0038](decisions/archive/0038-what-happened-is-published-through-an-outbox.md),
-  [decision 0138](decisions/archive/0138-the-log-publishes-topics.md), see [publishing](#publishing-what-happened)).
+- and, when the projection changed and the program is deployed with the outbox, the row of the outbox that other
+  systems learn from (see [publishing](#publishing-what-happened)).
 
 It stores the state, not the messages that led to it: a fixed `update` changes what happens next, never what
 already happened ([decision 0002](decisions/archive/0002-store-the-state-not-the-messages.md)). The messages may be
@@ -507,22 +495,15 @@ kept as an audit, but nothing replays them.
 
 ### What a step costs
 
-A step writes the state whole. A step that changes the projection writes it in the read model. A step that changes
-what at least one topic selects writes it once more, in the step's publication of the outbox, however many topics
-the step is written in. Each row of a topic names the publication, and the selector runs where the row is read
-([decision 0140](decisions/archive/0140-a-row-of-a-topic-gives-its-value.md),
-[decision 0154](decisions/archive/0154-a-steps-projection-is-stored-once-in-the-outbox.md)). A program that declares no
-topics writes its projection twice.
-The spike `spikes/large-states.test.ts` saw a step written in five topics take as long as one written in one, and
-a step take about 5 ms with a state of 48 KB, 21 ms with 0.5 MB and 240 ms with 5 MB, when the projection holds
+A step writes the state whole. A step that changes the projection writes it in the read model. A program deployed
+with the outbox writes that projection once more, in the step's row of the outbox.
+The spike `spikes/large-states.test.ts` saw a step take about 5 ms with a state of 48 KB, 21 ms with 0.5 MB and 240 ms with 5 MB, when the projection holds
 the state. It took about a third of that from 0.5 MB up when the projection holds a count. The spike
 `spikes/many-children.test.ts` saw a parent's step take 3.5 ms with 1 000
 children by id and 10 ms with 10 000, about half as much again as a flat state of that size takes. Such a step is
 synchronous, and holds every other entity of the process while it runs.
 
-So the runtime refuses no state for its size, and warns of a large step. A step that writes more than
-`warn.characters` of the state and of the projection, in the read model and in its publication, 262 144 by default,
-logs a warning through Effect's logger, once per activation of the entity. A large state is split by the program:
+So the runtime refuses no state for its size. A large state is split by the program:
 an item goes into an entity of its own
 once its parent would hold more than one step should write
 ([decision 0135](decisions/archive/0135-a-large-state-is-split-by-the-program-and-the-runtime-warns-of-it.md)).
@@ -530,9 +511,8 @@ once its parent would hold more than one step should write
 ### The tables
 
 The runtime writes all of it through the program's schemas, as JSON, in tables of its own: the entity, the
-keys with their incarnations and work, the mailbox in order, the replies by request, the read model, the
-outbox with the publication of each step, the number of its partitions and the head of each, its consumers and
-their cursors, and on Cluster the versions and the requests it keeps ([`src/storage.ts`](../src/storage.ts)). Every
+keys with their incarnations and work, the mailbox in order, the replies by request, the answers kept for an
+operation, the waits for a resumption, the read model and the outbox ([`src/storage.ts`](../src/storage.ts)). Every
 table, index, trigger and function the runtime makes is named with `effecttea_`, as `effecttea_entities`, so that
 the tables of an application in the same database are never taken for its own. The prefix is fixed, and an
 application names no table of its own with it. A launch on a database that already holds an object under one of the
@@ -543,10 +523,8 @@ where a schema further on the `search_path` holds the tables, and makes nothing,
 schema put in front of them on purpose from one made later by chance
 ([decision 0263](decisions/0263-a-launch-dies-where-a-schema-further-on-the-search-path-holds-the-tables.md)). Only `effecttea_migrations` is named with that schema, which
 `current_schema()` gives, since `Migrator` would otherwise find it in any schema of the `search_path`
-([decision 0217](decisions/0217-tea-migrations-is-named-in-the-schema-the-tables-are-made-in.md)). A launcher that sets the `search_path` of the runtime's role, as Cluster asks for
-its own tables, puts them in a schema of their own. A database is still held by one runtime, whatever its schemas,
-since the advisory lock that holds it is the database's
-([decision 0215](decisions/0215-the-runtimes-tables-are-made-in-the-schema-of-the-search-path.md)). Each row carries the version of the program that wrote it, and is read
+([decision 0217](decisions/0217-tea-migrations-is-named-in-the-schema-the-tables-are-made-in.md)). A launcher that sets the `search_path` of the runtime's role
+puts them in a schema of their own ([decision 0215](decisions/0215-the-runtimes-tables-are-made-in-the-schema-of-the-search-path.md)). Each row carries the version of the program that wrote it, and is read
 by migrating its JSON to the program's version (see [schemas that change](#schemas-that-change)). The row around
 the JSON is read through its table's schema, which says what the storage writes: nothing is filled in or cast, and
 a row it refuses fails the call that meets it ([decision 0062](decisions/archive/0062-a-row-is-read-through-a-schema.md)). A schema whose
@@ -565,6 +543,17 @@ rejection's reason is given as a caller reads it from its JSON, so a first reply
 
 How the machine and the storage write these rows, and how a reply is kept and deleted, is under
 [what the storage writes](#what-the-storage-writes).
+
+### The sweep
+
+The runtime runs `expire` on each program it deploys, at an interval. `launch` takes `sweep`, as `{ millis }`,
+every 300 000 ms by default, or `'none'` to leave `expire` to an operator. The first sweep runs one interval after
+the deploy. A sweep that fails logs a warning with its cause, and the next one runs at the next interval. A `sweep`
+that is neither `'none'` nor a positive integer of millis is the launcher's defect. A sweep changes no answer. It
+deletes only the callers' replies past their `keep`, and the replies and the answers kept for work of another entity
+that has ended. `expire` deletes in batches, and each batch is a transaction of its own, so that a sweep holds
+SQLite's one writer for a short time. SQLite gives no room back to the volume once rows are deleted, so a sweep
+bounds the growth of the file and shrinks nothing. The sweep deletes no row of the outbox.
 
 ## Schemas that change
 
@@ -614,7 +603,7 @@ each migration: a JSON value a version wrote of one kind, and the JSON value the
 `check(program, { limit })` finds, before a deploy, the stored entities a new program would not run. It reads each
 entity as an activation reads it, through the new program's migrations and from a snapshot of the entity's own, and
 steps its activation with the machine, in memory. Inside a transaction the caller left open, each entity is read at
-the caller's level, as [Databases](#databases) says. So it runs `work`, `project`, the indexes and the topics on the stored
+the caller's level, as [Databases](#databases) says. So it runs `work`, `project` and the indexes on the stored
 state, compares the operations under way with the new `work`, and calls the `unknown` of an at-most-once operation
 that may have run. A suspended entity is stepped as a `resume` by the new program would activate it, and the
 message it died on is not handled. The check launches nothing, holds nothing and writes nothing, so it runs on the
@@ -628,84 +617,37 @@ It gives the entities not suspended and the suspended ones apart: how many it ch
 so that every activation of the entity dies, or `Activation`, an activation that suspends the entity. Each gives
 its cause, as a suspension renders it. What the runtime throws fails the whole call, as it fails `reindex`. The
 entities are read by pages of their ids, so the check is a reading of a moment: an operation under way at the check
-may have ended by the deploy. `renames` are the launch's, and the check reads the entities of a name renamed to the
-program's as the program's, and refuses the renames as the launch refuses them. The check dies on tables that a
+may have ended by the deploy. The check dies on tables that a
 migration of another release made, since it migrates nothing: `effecttea_migrations` must record every migration of
 this release's `createTables`, and no other. The program is refused as a deploy refuses it, before any row is read.
 `limit` is a non-negative integer, required, and a `limit` of 0 gives the counts alone, since one broken program may
-fail every entity. The check leaves out the handling of the mailbox's first message by `update`, the messages
-Cluster saved and has not delivered, the rows of the read model, which `reindex` writes, and whether the launch's
-rename itself would run
-([decision 0247](decisions/archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)).
-
-### Renaming a program
-
-A program is renamed by its launch: `launch` takes `renames`, a record from each old name to its new name
-([decision 0156](decisions/archive/0156-a-program-is-renamed-by-its-launch-and-keeps-its-keys.md)). A rename is a move of the
-database, as the number of partitions is, so it is the launch's, and the program only carries its new name.
-
-The launch runs every rename in one transaction, after it holds the database and before any deploy, so no entity
-is loaded while the rows move. Every row stored under the old name moves to the new one, in every table. Every
-reply whose sender is the old name names the new one, and so does every request the old name's entities sent: in
-the mailboxes, in the replies and in the rows of the entities they created. A sender that sends again after the
-rename keys its request with the new name, and finds the reply stored for it. A caller's retry finds its reply too.
-
-An entity keeps the idempotency keys of its work. From its first rename it stores the name its keys are drawn
-from, and its keys are drawn from that name from then on, so an operation under way runs again under the key it
-was given. Its state, versions, incarnations, partition and suspension do not change, and the consumers keep their
-names and cursors. A state or a message that holds an address of the old name is the program's data, which its own
-migration moves.
-
-A rename whose old name holds nothing moves nothing, so it may stay in the launch for as long as a database of the
-old name may be launched. A rename onto a name that holds an entity, a head of the log or a consumer dies, and
-moves nothing. An empty name, a name renamed to itself, and a name both renamed and the new name of another are
-refused before the database is held. Two names may be renamed to one, as a program renamed twice declares both of
-its former names: `{ a: 'c', b: 'c' }` ([decision 0176](decisions/archive/0176-on-cluster-a-rename-marks-the-old-name-and-keeps-its-door.md)). A deploy of a program whose name the launch
-renames dies, since it is the old program.
-
-On Effect Cluster other runners share the database, and Cluster stores a door's requests under the program's name.
-So the launch marks each old name renamed, in the transaction that moves the rows, and the newest version moves to
-the new name. The check of every step dies for a renamed name, a runner of it is outranked as an older version is,
-and a runner of the old code that launches again dies. The new program's door is registered under each old name
-too, and steps the entity under the new name, so a request Cluster saved under the old name is delivered. A door's
-step names an operation's sender by its new name, so that a retry sent under the old name is answered from the
-reply the rename wrote again, and not applied twice ([decision 0176](decisions/archive/0176-on-cluster-a-rename-marks-the-old-name-and-keeps-its-door.md)).
+fail every entity. The check leaves out the handling of the mailbox's first message by `update`, and the rows of
+the read model, which `reindex` writes ([decision 0247](decisions/archive/0247-check-reads-the-stored-entities-as-a-deploy-would-activate-them.md)).
 
 ## Execution
 
-- **Activation.** The runtime loads the state, the incarnations and the stored work, computes `work(state)`,
-  compares it with the stored work, starts its operations and arms its timers.
+- **An event is one transaction.** The transaction locks the entity, reads the time and the entity, steps the
+  event with the machine, handles the mailbox until it is empty or the entity is suspended, and commits. The time
+  is read after the lock, so a transaction that waited for another steps at the time it holds the entity. No entity
+  is held in memory between two transactions. The process holds only the fibers of the operations that run.
+- **Activation.** The runtime reads the state, the incarnations and the stored work, computes `work(state)`,
+  compares it with the stored work, starts its operations and arms its timers. An entity is activated once a
+  launch, in its first transaction of the process. The process remembers the last 10,000 entities it activated, and
+  one it forgot is activated again, which writes nothing where the stored work agrees with the program. A
+  transaction also activates an entity whose stored operation has no fiber in this process, as after a crash, so
+  that the operation runs again. A deploy activates the entities with an operation or a message stored, and the
+  others are activated at their next transaction.
 - **A message.** It reads `meta.at`, calls `update`, checks the step (defects included, and `work`,
   `project` and the indexes on the next state), stores it, answers the caller, and starts or ends the work
   whose keys changed.
   An internal message `update` rejects is a defect, since it cannot be late
-  ([decision 0014](decisions/archive/0014-rules-the-machine-settled.md)). A message that finds the mailbox empty is
-  received and handled in one event, and one transaction; the runtime takes a caller's message only once the
-  mailbox is empty, so a burst waits in memory, unstored
-  ([decision 0074](decisions/archive/0074-a-message-that-finds-the-mailbox-empty-is-handled-as-it-arrives.md)). An
-  entity holds at most `callers.messages` callers' messages, an option of the runtime, 4096 by default: the messages
-  of `send` offered to it and not yet applied. A `send` past the bound is answered `Full` at once, and nothing of
-  its message is offered or stored, so a retry under the same request id is a new try. The first refusal of an
-  activation logs a warning that names the entity
-  ([decision 0147](decisions/archive/0147-an-entity-holds-a-bounded-number-of-callers-messages.md)). On Effect Cluster a
-  caller is never answered `Full`: its message waits in Cluster's table until the entity takes it
-  ([decision 0165](decisions/archive/0165-on-cluster-a-caller-sends-through-the-doors-client-and-is-never-answered-full.md)).
-- **Passivation.** An entity with no message for a while is unloaded. An operation under way keeps it loaded, a
-  suspended entity's too; a suspended entity whose operations have ended is unloaded with the message it died on,
-  and the completions recorded behind it. To the machine, a passivation is
-  a crash the runtime chose: a `Restart` activates the entity again, and arms the same timers in the same
-  incarnations. The timers stored are the stored work's, which says each one's time: the earliest wakes the
-  entity, and nothing else needs storing. So a process starts with the entities whose state holds an operation,
-  which only an activation runs again, and with those whose mailbox holds a message a crash left before its
-  step; the stored times wake the rest — except a suspended entity's, which nothing of fires
-  until an operator resumes it ([decision 0029](decisions/archive/0029-an-idle-entity-is-unloaded.md),
-  [decision 0071](decisions/archive/0071-a-process-starts-the-entities-with-a-message.md)). A process
-  over its capacity unloads the least recently used of its idle entities as soon as it holds more, and never a busy
-  one, nor one whose timer is due ([decision 0076](decisions/archive/0076-a-process-over-its-capacity-unloads-the-least-recently-used.md),
-  [decision 0078](decisions/archive/0078-a-timer-due-is-no-spare-entity-and-a-registered-deploy-keeps-its-name.md)).
-  The capacity is 10 000 entities by default, Effect Cluster's own number, and `'unbounded'` leaves time alone to
-  unload. A loaded entity holds about 8 KB beside its decoded state, so 10 000 small ones hold about 100 MB
-  ([decision 0151](decisions/archive/0151-a-process-holds-ten-thousand-entities-by-default.md)).
+  ([decision 0014](decisions/archive/0014-rules-the-machine-settled.md)). A message is received and handled in the
+  transaction that records it. A suspended entity is the exception, and holds its completions behind the message it
+  died on. A burst of callers' messages waits for the entity's lock, and nothing of a message
+  is stored before its transaction commits.
+- **A timer.** Each deployment has one fiber, the waker, that reads the entities with a timer due, fires each timer
+  in a transaction of its entity, and sleeps until the earliest time stored, or until a step arms an earlier one. A
+  suspended entity's timer does not fire until an operator resumes it.
 
 These rules are a pure state machine, [`src/machine.ts`](../src/machine.ts): its events are a message arriving,
 an operation completing or dying, a timer firing, a step, the process dying, and an operator resuming or
@@ -722,8 +664,11 @@ is a `Restart` stepped by another one, so the machine and the runtime never see 
 | after the commit, before the reply reaches the caller                  | the caller retries with the same request id, and gets the stored reply            |
 | after the commit, before the work it started                           | activation computes `work(state)` and starts it                                |
 | while an operation runs, its effect done in the world but not recorded | it runs again, with the same idempotency key, or delivers `unknown` if at most once |
-| after an operation's completion is recorded, before it is handled      | it is handled as any message in the mailbox                                       |
-| after a timer fired, before its message is handled                     | its message is still in the mailbox, or the timer fires again from the state      |
+
+A message to an entity that is not suspended is handled in the transaction that records it, so a process killed
+between the two stored neither. An
+operation whose completion was not stored then runs again or delivers `unknown`, as on the fourth line. A timer
+whose firing was not stored fires again from the state.
 
 The fourth line is the one the library cannot close. An effect on the world is at least once, or at most once
 and then perhaps not at all. A service with idempotency keys, such as a payment provider, makes it exactly once.
@@ -744,10 +689,11 @@ as it is, and runs again at the resumption ([decision 0113](decisions/archive/01
 operation, in `work` or `project` on a step's next state, or in a new program activating the stored state,
 suspends it too. A defect is what the program does: what one of its functions or schemas throws, each caught on
 its own, or a rule of the design it breaks. Anything else thrown while an event is applied — a bug of the machine,
-a row the runtime corrupted — is the runtime's, and crashes the entity instead
+a row the runtime corrupted — is the runtime's, and is no suspension
 ([decision 0061](decisions/archive/0061-only-what-the-program-does-is-its-defect.md)). Resuming activates it as after a
 crash, by the program deployed: a fixed program is a deploy, which the entity stays suspended through, and the
-resumption follows it ([decision 0064](decisions/archive/0064-the-program-is-not-the-machines-state.md)). A caller's
+resumption follows it ([decision 0064](decisions/archive/0064-the-program-is-not-the-machines-state.md)). The
+transaction of an event the runtime throws on rolls back, and the caller of the event is given the defect. A caller's
 discarded message stores no reply, and the caller's retry is a new message
 ([decision 0014](decisions/archive/0014-rules-the-machine-settled.md)). A discarded message an operation sent stores a
 rejection with no reason, kept while the work that sent it holds. The operation's `send` sends the request again at
@@ -768,7 +714,7 @@ once, whichever retry finds it
 An operator finds the suspended entities with `suspended`, the longest suspended first: each with what it died on,
 the cause, since when, and the operations of other entities that wait for its resumption. The step that answers an
 operation `Suspended` stores its wait, and the step that takes the entity out of its suspension deletes the waits.
-So the list is read from storage, on any runner and after a restart, and holds a wait while the run that sent it
+So the list is read from storage, in any process and after a restart, and holds a wait while the run that sent it
 holds ([decision 0265](decisions/archive/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md)).
 The cause is stored as text, as [what the storage writes](#what-the-storage-writes) says. Nobody is told on a clock: a sender waits as long as it takes, and a deployment that wants an alarm reads the list. `resume` and `discard` say
 what they did: `Resumed` or `Discarded`; `NotDiscarded`, for an entity that died on an internal message, in an
@@ -778,8 +724,7 @@ operator's own event did, even when two operate on one entity at once ([decision
 
 An operator decides between `resume` and `discard` with `inspect(id)`. It gives what is stored of one entity: the
 state, the mailbox with the next message first, the work under way with the oldest first, and the suspension as
-`suspended` lists it. It reads what is stored and activates nothing, so an entity this process does not hold is
-inspected too. Its rows are read through the migrations from one snapshot, so a step that commits meanwhile is read
+`suspended` lists it. It reads what is stored and activates nothing. Its rows are read through the migrations from one snapshot, so a step that commits meanwhile is read
 whole or not at all. A row that no migration reads is a defect of `inspect`, as it is of the entity's activation,
 and an entity that is not stored is inspected as `null`
 ([decision 0185](decisions/archive/0185-inspect-gives-what-is-stored-of-one-entity.md)). Inside a
@@ -791,12 +736,12 @@ transaction the caller left open, `inspect` reads at the caller's level, as [Dat
 counterpart of effect-tea's model, and follows the same rule: it shows no action that `update` would reject.
 A caller learns how an operation ended by reading the projection. The reply says only whether the message was
 accepted and, for a rejection, perhaps why: an acceptance never carries data. The projection is JSON, and
-`project` converts what the state holds, a time to its milliseconds: `read`, a query, an index and a topic read
+`project` converts what the state holds, a time to its milliseconds: `read`, a query, an index and the outbox read
 one shape, and the compiler refuses a projection schema that decodes to anything else
 ([decision 0139](decisions/archive/0139-the-projection-is-json.md)). A projection shows what a caller
-acts on, not the whole state: it is written twice in each step that changes it, and the outbox keeps it
-([decision 0135](decisions/archive/0135-a-large-state-is-split-by-the-program-and-the-runtime-warns-of-it.md)).
-The projection is the one contract of the entity: what a consumer of the log needs of it is in the projection
+acts on, not the whole state: it is written in each step that changes it, and twice where the program is deployed
+with the outbox ([decision 0135](decisions/archive/0135-a-large-state-is-split-by-the-program-and-the-runtime-warns-of-it.md)).
+The projection is the one contract of the entity: what a reader of the outbox needs of it is in the projection
 too, and a boundary that answers a caller leaves out what that caller is not shown
 ([decision 0138](decisions/archive/0138-the-log-publishes-topics.md)).
 
@@ -823,7 +768,7 @@ projections, at most `limit` of them. The limit is required: a reading that hold
 one array is never what its caller meant, and a call without one is the caller's defect
 ([decision 0141](decisions/archive/0141-a-query-and-a-reading-of-the-log-take-a-limit.md)). A criterion's value is
 null, a boolean, a finite number or a string that is text a database holds, and so is the id and the value of the
-row passed as `after`. Anything else is the caller's defect, for `query`, `count`, `sum` and `countBy`. SQLite finds
+row passed as `after`. Anything else is the caller's defect. SQLite finds
 no row under `NaN`, where PostgreSQL holds it a number past every other, and PostgreSQL takes no U+0000 in a
 parameter of text, so each dialect would answer the same call otherwise
 ([decision 0207](decisions/archive/0207-a-criterion-is-a-scalar-both-dialects-compare-alike.md)).
@@ -835,49 +780,17 @@ past the id of that row, since the id breaks ties in either order. Nothing is he
 is given once, on one page, and a row whose index a step changes between two pages is given where it stands when
 the next is read ([decision 0143](decisions/archive/0143-a-query-pages-after-the-last-row-it-gave.md)).
 
-A number over the entities that match is read in one statement, which reads no projection. `count` takes the
-criteria a query takes, and gives how many entities match them. `sum` takes an index and the same criteria, and
-gives the total of that index over the entities that match, a double, `0` over none. A row whose index holds null,
-or no value at all, adds nothing, as in SQL. A row whose index holds a string or a boolean is the caller's defect:
-SQLite would read the string as `0` and `true` as `1`, and the total would look right. The call dies, naming the
-index and the least id of such a row. Both read the rows as they stand while `reindex` runs, as a query does
-([decision 0148](decisions/archive/0148-a-count-and-a-sum-are-read-in-one-statement.md)).
-
-A sum is also the caller's defect when the numbers it adds, taken without their sign, may add up past the largest
-double. Each number without its sign is counted in units of 2^980, cut to an integer, and the sum is refused once
-those units and the count of numbers reach 2^44. Both dialects compute that count exactly, so both refuse the same
-sums, and below the bound no partial total overflows, in whatever order the rows are added. So the top of the range
-is refused: `sum` over one row of `Number.MAX_VALUE` is the caller's defect. PostgreSQL counts no unit for a magnitude
-under 1e290, which counts none on SQLite either, and tests the magnitude before it multiplies, since a product under
-the least double fails its statement. 2^-980 is bound as a parameter, since a decimal of it written in the statement
-would not be read back exactly
-([decision 0277](decisions/archive/0277-a-sum-is-refused-by-a-count-of-its-magnitudes-both-dialects-make-alike.md)). PostgreSQL adds the
-numbers exactly and rounds the total once. SQLite adds doubles with a compensated sum. So the two dialects may give
-totals that differ in the last digits, by a few units of the last place of the total without signs
-([decision 0209](decisions/archive/0209-a-sum-is-refused-past-the-largest-double-alike-on-both-dialects.md)).
-
-A count per value of an index is read in one statement too. `countBy` takes an index, the criteria a query takes
-and a limit, and gives each value the index holds among the entities that match, with how many hold it, so every
-count is read on one snapshot. The values come in the order a query orders the index by, null first, at most
-`limit` of them, and a value no entity holds has no entry. `true` and `1` are two values, though a query orders a
-boolean as its number, and a boolean comes after that number. An index a row lacks is null, as a query reads it.
-A grouping by an index of many values, such as a customer, is a report's question past its limit. A sum is not
-grouped ([decision 0150](decisions/archive/0150-a-count-per-value-of-an-index-is-read-in-one-statement.md)).
-
 The read model answers what the program's application reads to act, from the rows a step writes in its own
 transaction, so its answers are consistent with the states. Its questions are declared: an index for each value a
-question filters, orders or adds by, and a question added is a deploy and a `reindex`. It answers in four forms,
-the entities whose indexes match, their count, the sum of one index over them, and their count per value of one
-index. Any other question over the entities is a **report**: how many per day, the total per customer, the
-entities whose status is one of several, a word in a text, an entity with what another program holds of it. A report is built from the log: a consumer of a
-topic writes a store made for the question, a table of a relational database, a search index or a warehouse, and
-the question is asked of that store. What such a consumer needs is in the projection, which is the entity's one
-contract. A form the read model gains is one statement over the indexes, under the criteria a query takes, which
-reads no projection ([decision 0149](decisions/archive/0149-the-read-model-answers-what-a-program-acts-on.md),
-[decision 0150](decisions/archive/0150-a-count-per-value-of-an-index-is-read-in-one-statement.md)).
+question filters or orders by, and a question added is a deploy and a `reindex`. It answers in one form, the
+entities whose indexes match. Any other question over the entities is a **report**: how many, how many per day,
+the total per customer, the entities whose status is one of several, a word in a text, an entity with what another
+program holds of it. A report is built from the outbox. A reader of the outbox writes a store made for the
+question, a table of a relational database, a search index or a warehouse, and the question is asked of that store.
+What such a reader needs is in the projection, which is the entity's one contract.
 
 A descending order is the ascending order reversed, the ids of the rows that tie included, so the rows that hold no
-value come last. A page reads only the rows it gives, however late in the order its cursor is, as
+value come last. The order of values of mixed kinds under one index, as a string beside a number, is not promised. A page reads only the rows it gives, however late in the order its cursor is, as
 [what the storage writes](#what-the-storage-writes) says.
 
 `reindex` writes every row again from the stored states, which is what an index added or changed
@@ -897,219 +810,24 @@ payment.
 
 ## Publishing what happened
 
-A queue, an event store or another service learns what an entity did from an **outbox**: a step that changes
-what callers read writes one row in its own transaction, in each **topic** of the log whose selection changed,
-holding the entity's address, the message the step handled and the value the topic selects of the projection it
-left. An entity's creation
-writes a row in every topic, with no message. Nothing more is declared: the message names the fact, and the
-projection is already the public contract
-([decision 0038](decisions/archive/0038-what-happened-is-published-through-an-outbox.md)).
+A queue, an event store or another service learns what an entity did from the **outbox**, one table
+`effecttea_outbox`. A program deployed with `runtime.deploy(program, { outbox: true })` writes a row at the
+creation of each entity, and at each step whose projection changed, in the step's own transaction. A program
+deployed without the option writes none. A row holds the entity's `name` and `id`, its `step`, the `kind` of the
+event, the `version` of the program that wrote it, the time `written_at`, the `message` the step handled and the
+`projection` it left. `step` is the entity's count of writes after the step, and the primary key is
+`(name, id, step)`, with no other index. Every write counts, one that stores only a reply too, so the steps of one
+entity's rows have gaps. Nothing more is declared: the message names the fact, and the projection is
+already the public contract.
 
-### Topics
+A step that changes the state without changing what callers read writes no row. Neither does a rejected message, an
+internal message dropped, a step that suspends the entity, a deploy, or `reindex`. A program whose fact must reach
+other systems shows it to callers.
 
-A program may declare `topics`: by name, a pure function that selects, of the projection, what the topic
-watches, as JSON ([decision 0138](decisions/archive/0138-the-log-publishes-topics.md)). Different readers act on
-different parts of what an entity shows: a billing service reads what an order was charged, a dashboard its
-status. A topic per reader writes a row only when what that reader acts on changes, compared as canonical JSON by
-the runtime, and a consumer of one topic reads none of the others' rows. A row gives the value its topic selects,
-typed by the selector, so a consumer has a contract of its own: the row's publication stores the projection, which is read
-through the projection's migrations, and the selector of the program deployed is applied to it where the row is
-read ([decision 0140](decisions/archive/0140-a-row-of-a-topic-gives-its-value.md)). A step stores its message and its
-projection once, in a **publication** keyed by its partition and its `seq`, and each of its rows names it. A prune
-drops a publication with the last row that names it, so a publication stays while one topic has not read past it
-([decision 0154](decisions/archive/0154-a-steps-projection-is-stored-once-in-the-outbox.md)). A selector that dies on a row gives
-the defect to whoever reads it, as the schema does. A program that declares no topics publishes its projection as
-the one topic `projection`, whose value is the projection whole. A topic selects and does not decide, as `indexes`
-do: a part of the projection, the whole of it, all of it but a field, a value nested in it, or a comparison of it
-with a threshold, which changes when the threshold is crossed. What it selects is JSON, as the projection is
-([decision 0139](decisions/archive/0139-the-projection-is-json.md)). A topic has no schema and no migration of its own:
-what a consumer needs is in the projection, and a boundary that answers a caller leaves out what the caller is not
-shown. A topic that dies on a projection, or selects what JSON does not hold, suspends
-the entity, as `project` does. [`examples/order`](../examples/order/order.ts) publishes its status and its
-charge.
-
-### The order of the log
-
-The log is ordered within a **partition**, and promises no order across partitions
-([decision 0137](decisions/archive/0137-the-log-is-ordered-within-a-partition.md)). Each entity belongs to one partition,
-drawn from its id when it is created and stored with it. The partition is `Math.abs(Hash.string(id) % partitions) + 1`,
-Cluster's formula for a shard. `launch` takes the number of partitions as `log.partitions`, 300 by default. The
-first launch stores the number in the database, and a launch given another number fails, since a change would
-move entities between partitions, and every consumer's cursors with them.
-
-Each row carries its partition and a `seq`, which rises with every step that publishes in the partition and is
-never reused. A step draws its `seq` once, by moving the head of its partition, in its own transaction, which holds
-the head's row until it commits. Every row the step writes, one per topic, takes that `seq`, so a step takes one
-lock however many topics it is written in, and a topic's `seq`s have gaps where a step was written in other topics
-only. So the steps of one partition commit in the order of their `seq`, and the steps of different partitions
-do not wait for each other. The rows of one entity therefore come in the order its steps committed.
-
-A reading of the log is several statements: the heads of the partitions, the position of the first row past each
-cursor, then its pages. On a pool of PostgreSQL at `READ COMMITTED` each reads a snapshot of its own, so a step that
-commits between two of them, followed by the next step of its partition, would give the second row before the
-first, and an ack of the second would pass the first for ever. So a reading keeps the head of each partition behind
-as its first statement read it, and leaves out of each page a row whose `seq` passes that head, or whose partition
-was not behind. A row up to the head committed before the heads were read, since a step holds its partition's head
-until it commits. The reading takes no lock, and runs at the level of its caller. It may give fewer rows than its
-limit while rows past a head are committed, and a consumer reads them at its next `fetch`
-([decision 0287](decisions/archive/0287-a-reading-of-the-log-gives-each-partition-up-to-its-first-head.md)). A row of one
-entity written before a row of another may come after it, as on Kafka. A consumer that needs an effect after its
-cause in another entity waits for the cause, or reads the cause's projection, which a row holds whole.
-
-### Consumers
-
-A consumer is a name within one topic, and it keeps a cursor per partition, stored: one name in two topics is two
-consumers, each declared at deploy. `fetch(topic, consumer, limit)` gives at most `limit` rows of the topic past its
-cursors, the oldest first. `ack(topic, consumer, through)` takes a list of partitions and `seq`s, which the rows `fetch` gave are, and
-moves each of those cursors once the rows are acted on. A cursor never moves back, and
-never past the head of its partition, so a crash before the ack delivers the rows again: at least once,
-deduplicated by the topic, the partition and the `seq`. A consumer that must act on a row once keeps cursors of
-its own, written in the transaction of its work, and drops a row delivered again behind them: the cursor it acks
-then serves the prune alone, and may lag. A consumer whose store is a table of the runtime's database writes it
-and acks in one transaction: `ack` joins a transaction the caller left open on the client the runtime was
-launched with, so the store and the cursors commit together. Within that transaction the caller waits for nothing
-a step does, since the transaction may hold the one connection of the database, as on SQLite and PGlite, and a
-step's commit waits for it
-([decision 0150](decisions/archive/0150-a-count-per-value-of-an-index-is-read-in-one-statement.md)). So a call that
-runs a step or waits for one, within a transaction of the client, dies as the caller's defect: `deploy`, `create`,
-`send`, `resume`, `discard` and a fetch that waits. The handler of `consume` runs within its page's transaction, and
-a handler that must create or send stores the request for a fiber outside the transaction
-([decision 0256](decisions/0256-a-call-that-waits-for-a-step-is-refused-within-a-transaction.md)). A partition a
-consumer has no cursor for is read from `0`.
-`prune` drops, in each topic and partition, what every consumer of the topic has read there, through the lowest
-cursor. A topic no consumer is stored for is dropped whole, since no reader that keeps cursors needs its rows
-([decision 0152](decisions/archive/0152-the-consumers-of-a-topic-are-declared-at-deploy.md)).
-`consumers` says the topic of each consumer, whether the deploy declares it, how many rows are past its cursors,
-and in which partitions. It says too, as `since`, the time of the step that wrote the oldest of the rows the consumer
-reads next, or `null` where it has read every row. In each partition the row read next is the one of the lowest
-`seq` past the cursor, since a step's time may run against the order its partition committed in. The time is the
-clock of the process that wrote the step, so an age read against another clock may come out a little below zero.
-The runtime records no metric of the age and runs nothing at an interval for it: an application that wants a gauge
-reads `consumers` at an interval of its own
-([decision 0224](decisions/0224-a-consumer-shows-the-time-of-the-step-it-reads-next.md)).
-`published(topic, after, limit)` reads past cursors the caller holds, and registers nothing; `[]` is the whole
-topic
-([decision 0039](decisions/archive/0039-a-consumer-of-the-outbox-keeps-its-cursor.md)).
-`fetch(topic, consumer, limit, { wait: { millis } })` waits where it finds no row: until a step commits a row in the topic,
-and then reads again, for at most `millis` from the call. It gives the first page with a row, or none once the
-time is over or the runtime stops. A step tells each topic it wrote in once its transaction has committed, and a
-consumer of another topic is not woken. The reading takes its topic's signal before it reads, so that a commit
-between its reading and its wait is not missed. A consumer that waits polls nothing, and a consumer that stops
-calling costs the runtime nothing
-([decision 0142](decisions/archive/0142-a-consumer-waits-for-a-row-of-its-topic.md)). On Effect Cluster a reading that
-waits is woken by another runner's commit too, as
-[Effect Cluster inside the runtime](#effect-cluster-inside-the-runtime) says. A partition a handle is
-given is an integer from 1 to the number of partitions, a topic is one the program publishes, and a `seq`, a limit
-and a wait are non-negative integers. The limit is required, of `fetch` and `published` as of `query`, so that no
-reading holds a whole topic in one array; a caller that wants more reads again, past the last row it was given
-([decision 0141](decisions/archive/0141-a-query-and-a-reading-of-the-log-take-a-limit.md)). Anything else is its
-caller's defect, which stores nothing
-([decision 0053](decisions/archive/0053-what-a-handle-is-given-is-checked.md)). So is a request or a query left
-out: a call of the handle returns its effect, and the effect dies with the defect. The log is kept for its
-consumers and is not an archive: a program whose past must stay readable keeps it where callers read it, in the
-state or in entities of its own.
-`consume(topic, consumer, handler, { limit })` runs the loop of a consumer: it reads a page with `fetch`, runs
-`handler` on it and acks it in one transaction of the client the runtime was launched with, and reads the next
-page only once that one is acked. Without `wait` it ends at the first page that is empty, or once the runtime
-stops, and the rows it did not read stay for the next reader. Given `wait: true`, a reading that finds no row waits for a commit in the topic with no time limit, and the reader ends only when the
-runtime stops. A failure of `handler` or of the transaction rolls the page back and fails the reader, and the
-caller retries it. A reader within a transaction of the client is the caller's defect, since its wait would hold
-the connection the commit that ends it waits for
-([decision 0184](decisions/0184-consume-runs-a-reader-of-a-consumer.md)).
-The runtime writes the log and runs a reader, and does not deliver the log elsewhere: the transport and the
-retries are the consumer's.
-
-### Readers of one consumer
-
-A consumer whose work on a row is slow is read by several readers, each of which names the partitions it reads:
-`fetch(topic, consumer, limit, { partitions })` reads those partitions only, from the consumer's cursors there, and
-so does a reader of `consume` given `partitions`
-([decision 0153](decisions/archive/0153-a-reader-of-a-consumer-names-the-partitions-it-reads.md)). The cursors stay the
-consumer's, whichever reader acked them, so a prune reads them as one, and a reader added or removed moves no
-cursor. A slow row holds only its reader's partitions. The handle gives the number of partitions as `partitions`.
-The division is the caller's, and the runtime holds no reader. A fixed pool divides with a line, the reader `i` of
-`n` reading the partitions `p` where `p % n === i`. A pool whose readers come and go divides with what tells it its
-members, an orchestrator's ordinal or a lease of its own. Two readers that name one partition are given the same
-rows, and their work on them interleaves. So a division that changes keeps the order within each partition only
-where the readers of the old division stop, after their acks, before the readers of the new one start. A partition
-no reader names is read by nobody, and holds its topic, which `consumers` shows. A wait ends at a commit in the
-topic, so a reader woken by a commit in another reader's partition reads an empty page and waits again. A list of
-partitions that is empty, or holds what is no partition of the log, is the caller's defect.
-
-### Declared consumers
-
-The consumers are declared where the program is deployed, by topic:
-`deploy(program, { consumers: { status: ['dashboard'] } })`. Who reads the log is the deployment's, so the same
-program is deployed with other consumers, or none, in a test. The handle is typed by the names declared, so a name
-mistyped does not compile, and a name not declared is the caller's defect. The deploy stores each consumer it
-declares that is not stored yet, so a consumer holds its topic from the deploy that first declares it, and a
-reading writes nothing. A consumer stored and no longer declared is kept, and holds its topic: the deploy logs a
-warning for it, `consumers` shows it as not declared, and `forget` drops it. A consumer the deploy declares is not
-forgotten, since a deploy without it is how it goes
-([decision 0152](decisions/archive/0152-the-consumers-of-a-topic-are-declared-at-deploy.md)).
-
-The runtime drops nothing of the log by time. A prune, by hand or by [the sweep](#the-sweep), drops only what every
-stored consumer has read, so a consumer that stalls holds its topic under any sweep. A database that is full fails
-the commit of every step, and each caller is given the defect, while the readings, the acks and `forget` still answer. An operator
-finds in `consumers` the consumer that holds the log, deploys without it, forgets it and prunes, and the steps
-commit again ([decision 0152](decisions/archive/0152-the-consumers-of-a-topic-are-declared-at-deploy.md)).
-
-On a disk that is really full, a file of SQLite in WAL mode still commits a forget, and not a prune of many rows,
-which writes a page of the WAL for each page it changes. A prune in batches needs about as much room as one prune,
-since its first batch fails on the full volume too. The operator stops the callers first, since the steps they
-retry take the room freed within a second. The operator then frees room on the volume, about a twentieth of what the
-stalled consumer holds, and room for the steps the runtime takes of its own: the timers due, the operations stored
-and the steps a crash took out. Then the operator deploys without the consumer, forgets it, prunes, and lets the
-callers in again. The runtime keeps no room of its own: it does not hold the volume, and a file of reserved room is
-the operator's to keep and drop ([decision 0223](decisions/0223-a-disk-that-is-really-full.md),
-[decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md),
-[decision 0278](decisions/0278-on-a-full-volume-the-callers-stop-before-room-is-freed.md)).
-
-### The sweep
-
-The runtime sweeps each program it deploys at an interval: it runs `expire`, then `prune`. `launch` takes `sweep`,
-as `{ millis }`, every 300 000 ms by default, or `{ millis, prune: false }` to leave the log to an operator's
-`prune`, or `'none'` to leave both to an operator. The first sweep runs one interval after the deploy. A sweep that
-fails logs a warning with its cause, and the next one runs at the next interval, while the deployment goes on. A
-`sweep` that is neither `'none'` nor a positive integer of millis, with `prune` left out or `false`, is the
-launcher's defect. On Effect Cluster one runner sweeps a program, as a singleton of Cluster named
-`@fgaudo/effect-tea-persistent/<program>/sweep`, so that runners do not contend for the same rows.
-
-A sweep changes no answer. It deletes only the replies past their `keep`, the replies and the answers kept for work
-of another entity that has ended, and the rows of the log that every stored consumer has read. The step of the work
-that ends deletes those replies and answers itself, and a sweep takes those it leaves where it runs beside the step
-that stores them, on a pool of PostgreSQL
-([decision 0289](decisions/archive/0289-expire-deletes-what-work-that-ended-was-given.md)). A topic no consumer is stored for keeps no rows under a sweep, so a deployment that wants a
-topic's history declares its consumer before the topic's first step, or sweeps with `prune: false`. `forget` stays
-an operator's call. SQLite gives no room back to the volume once rows are deleted, so a sweep bounds the growth of
-the file and shrinks nothing.
-
-`prune` and `expire` delete in batches of 256 rows, read in the order of an index, and repeat until a batch deletes
-nothing. A batch skips the rows a step or another batch holds
-([decisions 0285](decisions/archive/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md),
-[0288](decisions/0288-a-batch-of-prune-skips-the-rows-another-batch-holds.md)). Each batch is a transaction of its own. A short transaction holds SQLite's one writer for less time, so a
-sweep does not stall the steps. The count each gives is the sum of its batches. A batch of `prune` reads the cursors
-in its own transaction, and a batch of `expire` on Cluster deletes Cluster's rows under each id it takes. The runtime
-calls neither Cluster's `deleteProcessed` nor its `MessageRetention`, since neither spares an operation's request
-ids kept under its work, nor a caller's rows its client has not read
-([decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)).
-
-### What a step publishes
-
-A step that changes the state without changing what callers read publishes nothing, and neither does a
-rejected message, an internal message dropped, or a step that suspends the entity. The booking's inventory
-shows what that costs: confirming seats moves them from held to sold and leaves `available` where it was, so the
-sale is not published. A program whose fact must reach other systems shows it to callers, where a topic selects
-it.
-
-A deploy publishes nothing of itself, and `reindex` writes the read model again without publishing. A step is
-written in a topic when what the topic selects changed in that step, as the program deployed computes the
-projection before and after: a new `project` reaches the log at an entity's next step that changes what a topic
-selects, and a
-consumer that needs every entity as the new program shows it reads them through `query`, once `reindex` has run.
-A projection whose schema changed is read through its migrations in the log too
-([decision 0072](decisions/archive/0072-the-log-shows-what-a-step-changed.md),
-[decision 0138](decisions/archive/0138-the-log-publishes-topics.md)).
+No order holds across entities. The rows of one entity commit in the order of `step`, since a step locks its entity
+first. The library never deletes a row of the outbox. A reader deletes by key the rows it has handled, in the
+transaction of its own write, or deduplicates by `(name, id, step)`. A row's JSON is as the version in `version`
+wrote it, and the library gives a reader no migration of it.
 
 ## Testing
 
@@ -1134,7 +852,7 @@ Most of a program is pure, so most tests need no runtime:
 
 ### Rehearsing
 
-`rehearse` runs a scenario on the program without storage, cluster or clock. It is the runtime's machine, which
+`rehearse` runs a scenario on the program without storage or clock. It is the runtime's machine, which
 handles the mailbox to its end after each act of the test. Time stands at the start's, and moves to a timer's
 time when it fires, and forward by a duration with `advance`. The test decides when each operation answers, when
 time passes, and when the process dies:
@@ -1174,9 +892,7 @@ time passes, and when the process dies:
   keeps a pending to act on an incarnation that has moved on, and sees its message dropped
   ([decision 0186](decisions/0186-a-rehearsal-names-the-work-by-its-key.md));
 - `restart` drops everything that is not stored, and activates the entity again: an at-most-once operation
-  under way delivers its `unknown` message. It rehearses a passivation too, which is the same thing — on an
-  entity with only timers under way, where nothing delivers an `unknown`
-  ([decision 0029](decisions/archive/0029-an-idle-entity-is-unloaded.md));
+  under way delivers its `unknown` message;
 - `deploy(program)` restarts it with a new version of the program, which keeps the work under way it returns
   the same and starts the rest as new work. One that changes, drops or delivers otherwise an operation under way
   fails the test, as a defect.
@@ -1253,31 +969,20 @@ How the library tests its own machine and runtime is under
 
 ## Where it runs
 
-On one process, with SQLite or PostgreSQL: the mailbox, the states and the timers sit in one database, so each step
-is one transaction ([decisions 0007](decisions/archive/0007-one-process-first.md), [0157](decisions/archive/0157-the-storage-speaks-sqlite-and-postgresql.md)). A runtime holds its
-database until it ends: a second runtime on it dies as it launches
-([decision 0080](decisions/archive/0080-a-database-is-held-by-one-runtime.md)). The hold refuses no reader, on SQLite as on a
-server of PostgreSQL. A file of SQLite is held by a file of its own beside it, named by the database's path and
-`-effecttea-hold`, which the runtime's connection attaches in SQLite's exclusive locking mode. An exclusive
-transaction that writes no row takes the hold file's lock, so that a launch on a full volume takes it. The database
-itself stays in the normal locking mode, so another connection reads it while the runtime runs, and the end of the
-process gives the hold back however it ends
-([decision 0267](decisions/0267-a-file-of-sqlite-is-held-by-a-file-of-its-own-and-refuses-no-reader.md)). A database of
-PostgreSQL is held by a session advisory lock, on a connection the runtime reserves until it ends. A database of
-PGlite is held in the process by its client. Its data directory is held too, while the client a runtime launched on
-is open, so a launch on another client over the directory dies
-([decision 0255](decisions/0255-a-data-directory-of-pglite-is-held-while-its-client-is-open.md)). A data directory of
-PGlite opened by another process is the launcher's defect, which the runtime does not see. Once it holds the
-database, a launch runs the migrations of the tables not yet recorded in `effecttea_migrations`, with Effect's
-`Migrator` ([decision 0216](decisions/0216-the-tables-are-made-by-effects-migrator.md)). The first migration is the schema of
+On one database, of SQLite or PostgreSQL: the mailbox, the states and the timers sit in it, so each step
+is one transaction ([decisions 0007](decisions/archive/0007-one-process-first.md), [0157](decisions/archive/0157-the-storage-speaks-sqlite-and-postgresql.md)). A runtime holds no
+database, and another runtime may launch on the same one. Two runtimes on one database lose no step, since a step
+locks its entity first: by an advisory lock of the transaction on PostgreSQL, and by the one writer on SQLite. Each
+runtime restarts the operations of the other, since an operation whose fiber another process holds has no fiber in
+this one. So an operation that acts at most once is recorded `unknown` while it still runs in the other process, and
+is never run twice. A launch runs the migrations of the tables not yet recorded in `effecttea_migrations`, with
+Effect's `Migrator` ([decision 0216](decisions/0216-the-tables-are-made-by-effects-migrator.md)). The first migration is the schema of
 the first release, and a later change of a table is a migration after it. `Migrator` runs the pending migrations in
-one transaction, so that two launches on one database run each migration once. A launch given `tables: 'existing'`
-runs no migration, for a role of PostgreSQL that may only read and write rows, and an operator runs `createTables`
-under the tables' owner before each new release. On
-Cluster the runners share the database, and `sharding` creates the tables before any runner registers
-([decision 0191](decisions/0191-a-launch-creates-the-tables.md)). `launch` gives a runtime, `deploy(program)`
-a handle to one program's entities — `create`, `send`, `read`, and `suspended`, `inspect`, `resume` and `discard` for an
-operator — and
+one transaction, so that two launches on one database run each migration once. A role of PostgreSQL that may only
+read and write rows launches once the tables' owner has run `createTables` for the release, since the launch then
+finds every migration recorded and makes nothing. `launch` gives a runtime, `deploy(program)`
+a handle to one program's entities — `create`, `send`, `read`, `query`, `reindex` and `expire`, and `suspended`,
+`inspect`, `resume` and `discard` for an operator — and
 the operations of a program are run with the services it was deployed with
 ([`src/runtime.ts`](../src/runtime.ts), [decision 0028](decisions/archive/0028-rules-the-runtime-settled.md)).
 
@@ -1286,19 +991,21 @@ the operations of a program are run with the services it was deployed with
 The storage speaks SQLite and PostgreSQL, in the same tables, with the same columns, and a statement both read alike
 is written once. A launch on a client of any other dialect is the launcher's defect ([decision 0157](decisions/archive/0157-the-storage-speaks-sqlite-and-postgresql.md)).
 
-- A query finds and orders the same rows on both, and ids are ordered alike too. How each dialect stores and orders
+- A query finds and orders the same rows on both, for the values of one kind, and ids are ordered alike too. How each dialect stores and orders
   a value is under [what the storage writes](#what-the-storage-writes).
 - On PostgreSQL every transaction the runtime begins states its level, whatever default the role or the database
-  sets. A step and every other write begin at `READ COMMITTED`, where a step that draws its `seq` behind another of
-  its partition waits for it, and a higher level would fail it. A reading of one snapshot begins at `REPEATABLE READ`
+  sets. A step and every other write begin at `READ COMMITTED`, so that each statement after the entity's lock
+  reads what the step that held the lock committed. A reading of one snapshot begins at `REPEATABLE READ`
   ([decision 0222](decisions/0222-postgresql-with-many-connections.md)). The migrations run in `Migrator`'s
   transaction, at the level the role sets. Any level holds, since `Migrator` locks its table before it reads the
   history ([decision 0225](decisions/0225-the-migrations-run-at-the-roles-level-and-lock-before-they-read.md)).
   `createTables` dies within a transaction of its client, where the migrations' transaction would be a savepoint
   begun after the caller's snapshot
   ([decision 0279](decisions/0279-createtables-dies-within-a-transaction-of-its-client.md)).
-- A step whose transaction PostgreSQL ends with a deadlock crashes its entity, as a write that fails does, and is not
-  retried ([decision 0222](decisions/0222-postgresql-with-many-connections.md)).
+- A transaction that fails in the database, as a deadlock fails it on PostgreSQL, is tried again at the launch's
+  `retry`. A receiver's transaction is sent again by its sender, an operation's end by the operation's fiber, and a
+  timer's fire by the waker. A commit that failed may have committed, and the event tried again is then one the
+  machine ignores. A caller's transaction is not tried again, and the caller is given the failure as a defect.
 - Four readings run several statements in one transaction, begun at `REPEATABLE READ` on PostgreSQL where the
   transaction is the reading's own: a page of a query, `inspect`, `suspended`, and the reading of each entity by
   `check`. So a page gives a row once though a step moves it between its parts, and `inspect` reads a step whole or
@@ -1316,7 +1023,7 @@ is written once. A launch on a client of any other dialect is the launcher's def
 - An integer of a row may come from the driver as a number or as a bigint: PGlite gives a number, and
   `@effect/sql-pg` a bigint. Either is read as a number up to 2^53
   ([decision 0222](decisions/0222-postgresql-with-many-connections.md)).
-- An id, a request id, a name, a key's name, a topic's, a consumer's, and a string an index holds are text every
+- An id, a request id, a name, a key's name and a string an index holds are text every
   database holds as it is: no U+0000, which PostgreSQL holds in no text, and no lone surrogate, which no database
   gives back as written, so that two ids would be one. Anything else is the defect of whoever gave it.
 - An id is not empty either. The waker and `reindex` page the entities from the empty id up, so an entity under it
@@ -1327,169 +1034,15 @@ is written once. A launch on a client of any other dialect is the launcher's def
   `request_id` ([decision 0204](decisions/0204-a-request-id-is-text-a-database-holds.md)).
 - The tests of the storage run on both, PostgreSQL on PGlite, and the tests of the runtime whose steps write what the
   dialects write otherwise run on both too. The CI runs them on a server of PostgreSQL with a pool as well, with the
-  tests only a server runs: two writers of one partition, a deadlock, the levels of a page, the advisory lock across
-  pools and schemas, a role whose `search_path` is set by `ALTER ROLE`, and two runs of `createTables` at once
-  ([decision 0222](decisions/0222-postgresql-with-many-connections.md)). A runtime whose session the server ends loses
-  its hold without knowing it, which is an [open question](open-questions.md#running).
-
-### Entities in the process
-
-An entity with nothing to do is unloaded, and the earliest of its stored timers wakes it
-([decision 0029](decisions/archive/0029-an-idle-entity-is-unloaded.md)); how long it stays loaded is an option of the
-runtime. A launch checks each of its options, and one that is no number of the kind it names is the launcher's
-defect. Only an option left out, or a field of it left out, takes the default, and a `null` is refused.
-`retry`, `passivate` and `warn` are integers, since a time becomes the text of a duration, and
-Effect reads no `Infinity millis` and no `NaN millis`
-([decision 0208](decisions/0208-a-launch-checks-every-option.md)). `retry` and `passivate` are a millisecond at
-least, since the waker, a sender, Cluster's round and an entity's wait each try again when their sleep ends, and
-under 0 each would try again at once, for ever. `warn` may be 0
-([decision 0251](decisions/0251-a-retry-and-a-passivation-are-a-millisecond-at-least.md)). A timer fires once its time has come on the
-wall clock, and never before. A host suspended while a timer sleeps delays it by an hour at most once the host runs
-again, as [fibers and locks](#fibers-and-locks) says. An event the runtime cannot finish — a write that fails — crashes its entity alone: it leaves the
-process, its callers are given the defect, and the next one loads it from what is stored
-([decision 0042](decisions/archive/0042-an-event-the-runtime-cannot-finish-crashes-its-entity.md)); nothing else waits
-for its operations to stop ([decision 0056](decisions/archive/0056-nothing-waits-for-an-operation-under-the-permit.md)).
-The entity is not loaded again in that process while the stop of its work runs. A caller and a door's step are given
-a defect that says so, to try again, and a stop that outlives `retry` is logged once. The waker leaves the entity out
-of its readings until the stop ends, and the stop's end pokes it. The stop is work of the process, so `settled` does not
-return while it runs. On Cluster a shard lost is let go only once every stop of its entities has ended. So the runner
-that gains the shard runs no entity beside a fiber of its former run. A run whose entity crashed sends nothing: its
-operations' `send` and `create` die, and one already waiting ends with the defect, so that no stop waits for a load
-or a shard its own stop holds back. A droppable operation dropped before the crash is the exception. Its stop is not
-the crash's, and its finalizer may still run beside the next run, as it may beside the next step without a crash
-([decision 0274](decisions/0274-an-entity-is-not-loaded-while-the-stop-of-its-former-run-is-running.md)).
-An activation the waker cannot finish crashes its entity alone too, and the waker tries it again after `retry`
-([decision 0077](decisions/archive/0077-the-waker-tries-an-entity-it-cannot-load-again.md)). The waker's own reading
-of the timers goes on alike: a stored time it refuses leaves its entity out until `retry`, and a reading that fails is
-read again after `retry`, each logged once
-([decision 0259](decisions/0259-a-reading-of-the-waker-that-fails-is-read-again-after-the-retry.md)). Every crash does the
-same, whatever the entity's timers: the waker activates the entity again after `retry`, so that an operation or a
-message it stored runs with no caller coming. A crash that hands a shard to another runner is the one exception. On
-Cluster an entity is not unloaded while a door's step is not known to be committed, and a door's step that loaded
-the entity and rolled back leaves it to be crashed and loaded again by the next step
-([decision 0252](decisions/0252-the-waker-activates-an-entity-a-crash-took-out-after-the-retry.md)).
+  tests only a server runs: two steps of one entity, two creations of one entity, a deadlock, the overlaps of a
+  receiver's step and its asker's, the levels of a page, a role whose `search_path` is set by `ALTER ROLE`, and two
+  runs of `createTables` at once.
 
 ### Deployments
 
-Everything a deployment runs runs in a scope of its own: a deploy that cannot finish before it registers its
-deployment, interrupted included, stops what it started, is never seen by other programs, and gives its name back
-([decisions 0051](decisions/archive/0051-a-deploy-that-fails-leaves-nothing-running.md),
-[0102](decisions/archive/0102-a-deploy-interrupted-before-it-registers-undoes-itself.md)); one interrupted after keeps its
-name, with its deployment and its waker
-([decision 0078](decisions/archive/0078-a-timer-due-is-no-spare-entity-and-a-registered-deploy-keeps-its-name.md)). A process deploys a name once: a new version, a fix included, is deployed by
+A deployment's waker, its sweep and its operations run in the scope the runtime was launched in, and stop when
+that scope closes. A process deploys a name once: a new version, a fix included, is deployed by
 a new process ([decision 0075](decisions/archive/0075-a-name-is-deployed-once-in-a-process.md)).
-
-### A planned stop
-
-A process launched with `drain: { millis }` drains its at-most-once operations when the scope it was launched in
-closes, so that a deploy does not deliver `unknown` for each one under way. During the drain, the runtime takes no
-caller's message, creation, resume or discard: a caller that arrives waits, is interrupted when the drain ends, and
-its retry is answered by the next process. The timers, the waker, and the operations that run again at the next
-activation stop at once, and a step of the drain starts no such operation and arms no timer. The drain waits, up to
-`millis`, for the at-most-once operations under way and the commits of their completions, for an at-most-once
-operation such a step starts, and for a creation committed whose work has not started. Whatever is under way after
-`millis` stops as in a crash. A process launched without the option ends with a crash, as it always did
-([decision 0119](decisions/archive/0119-a-planned-stop-drains-the-at-most-once-operations.md)). The drain reaches a
-deploy still activating as it reaches a deployment registered: the deploy activates no entity once the drain began,
-and registers with no waker running, and the next process activates the entities left
-([decision 0261](decisions/0261-the-drain-reaches-a-deployment-still-activating.md)). The runtime closes a sequential
-scope of its own, so that the drain runs first and the database is let go last whatever the strategy of the scope it
-was launched in ([decision 0120](decisions/archive/0120-the-runtime-closes-a-sequential-scope-of-its-own.md)). The drain
-holds whether that scope is closed by `Scope.close` or by the interruption of the fiber that launched the runtime, as
-`runMain` stops a process on a signal. On Cluster it ends before the runner lets its shards go, when the runtime is
-launched in a layer built over the runner's `Sharding`
-([decision 0219](decisions/0219-a-drain-holds-when-an-interrupted-fiber-closes-its-scope.md)).
-
-A signal often reaches a process while its main fiber still deploys. The interruption then reaches the deploy before
-the drain begins, and the deploy undoes itself. With a drain, the undo of a deploy drains its own deployment first: it
-stops the deployment's timers, waker and operations that run again, and waits up to `millis` for its at-most-once
-operations, then closes the deployment's scope. The same holds of a deploy that fails while the process goes on, and
-the process's other callers are not held meanwhile. So a stop during a deploy may wait `millis` twice, once in the
-undo and once in the drain
-([decision 0280](decisions/0280-the-undo-of-a-deploy-drains-its-deployment.md)).
-
-### What a tracer sees
-
-The runtime records spans and metrics through Effect's `Tracer` and `Metric`, which an application exports with
-`OtlpTracer`, `OtlpMetrics` or `PrometheusMetrics` of `effect/observability`
-([decision 0220](decisions/0220-the-runtime-records-a-span-for-each-step-and-each-operation.md)). Each event the
-machine steps is a span `tea.step`, with the entity's `tea.entity.name` and `tea.entity.id`, the event's tag as
-`tea.event`, and the tags of what the step set going as `tea.outputs`. A completion, a firing and a defect of work
-name its `tea.key` and its `tea.incarnation`. A step that suspends its entity has `tea.suspended`, and says in
-`tea.suspension.on` what the entity died on. The run of an operation is a span `tea.operation`, with its tag and its
-delivery. Every span of the runtime is a root span. The step of a caller's request links the caller's span, and an
-operation links the step that started it, so a trace follows a request into the work it set going by links. Three
-metrics count by program: `tea.mailbox.length`, a histogram of the mailbox each step that writes leaves,
-`tea.suspensions`, the steps that suspend an entity, and `tea.operations.running`, the operations running in the
-process. No attribute holds a message, a state or a projection.
-
-### On Effect Cluster
-
-On Effect Cluster, each runner runs the runtime beside Cluster's tables, in one SQLite file that every runner
-shares, on one machine. `sharding(programs)` builds a runner's `Sharding`, and `launch` of the entry on Cluster gives its runtime,
-whose `deploy` serves each program through the program's door
-([decisions 0081](decisions/archive/0081-on-cluster-a-step-commits-with-its-reply.md),
-[0159](decisions/archive/0159-on-cluster-an-older-version-serves-no-shard-once-a-newer-one-launches.md)). A step commits
-only where its commit checks the shard. On Cluster that is SQLite, until Cluster has a fence, so the runtime does
-not run on Cluster across machines yet
-([decision 0084](decisions/archive/0084-a-step-commits-only-where-the-commit-checks-the-shard.md)).
-[`examples/order/cluster.test.ts`](../examples/order/cluster.test.ts) shows a runner inside a test's process.
-[`examples/server`](../examples/server) runs the orders as a deployment does: a process that serves them over HTTP,
-killed during a charge and started again on the same file, and two runners on one file, of which the one that survives
-finishes the orders of the one killed, or of the one stopped by `SIGTERM`
-([decision 0178](decisions/archive/0178-a-server-of-the-orders-on-cluster-is-run-as-a-process.md)). What Cluster gives and what
-it leaves to the runtime is in [`cluster.md`](cluster.md).
-
-#### A runner and its versions
-
-- `sharding` records the version of each program the runner names, before Cluster registers the runner. A launch
-  older than the newest version recorded dies, so a rollback is refused.
-- A runner is alive, for the `RunnerHealth` the runtime gives Cluster, only while it runs the newest version of
-  every program it names, and while the launcher's own `RunnerHealth` says so. A rolling deploy then moves every
-  shard to the newer runners.
-- Every step on Cluster, a door's, a step of the entity's loop and an activation, commits only while its program's
-  version is the newest recorded, which it reads in its transaction
-  ([decision 0159](decisions/archive/0159-on-cluster-an-older-version-serves-no-shard-once-a-newer-one-launches.md)).
-- Every step on Cluster commits only while the lease of its entity's shard, a row of `cluster_locks`, names its
-  runner and has not expired, which it reads in its transaction too. The condition is the exact complement of the
-  one under which Cluster lets another runner take the lease
-  ([decision 0175](decisions/archive/0175-on-cluster-every-step-checks-the-newest-version-and-the-shards-lease.md)).
-- A step that either check refuses dies and rolls back. Cluster delivers a door's request again, a step of the loop
-  crashes its entity, and an activation is tried again after `retry`, until a runner of the newest version that
-  holds the shard steps it. The checks are a guard beside the count of the steps that wrote the entity's row.
-- Each door is registered without `disableFatalDefects`, so that a step that dies restarts the door's entity and
-  saves no reply, and its request is delivered again. With it, the defect would be saved as the request's reply,
-  and the message lost.
-- Where every runner of the newest version stops, an older runner takes the shards again, since Cluster never marks
-  its last healthy runner unhealthy. Its steps die, and the messages wait in storage for a runner of the newest
-  version. What runs on Cluster rests on, and what checks it, is in [`premises.md`](premises.md), under The tables of
-  versions.
-- A deploy dies unless the runner's `sharding` named its program at the version deployed. A process with no
-  `runnerAddress` is a client of the cluster alone: it holds no shard, and deploys any program
-  ([decision 0174](decisions/archive/0174-on-cluster-a-runner-deploys-only-the-programs-its-sharding-names.md)).
-
-How a door steps an entity, how a runner holds its shards, and how the runtime deletes Cluster's rows is under
-[Effect Cluster inside the runtime](#effect-cluster-inside-the-runtime).
-
-#### Requests through the door's client
-
-- A caller's `create` and `send`, an operator's `resume` and `discard`, and an operation's requests go through
-  Cluster's client of the door, from whatever runner they are on. A message answered `Suspended` or `NotFound` is
-  reset once and sent again, and a caller is never answered `Full`
-  ([decisions 0165](decisions/archive/0165-on-cluster-a-caller-sends-through-the-doors-client-and-is-never-answered-full.md),
-  [0166](decisions/archive/0166-on-cluster-an-operator-resumes-and-discards-through-the-doors-client.md)).
-- The door's RPCs are uninterruptible for the client. A caller that stops waiting, an operation's fiber stopped or a
-  caller's timeout, stops only its wait: the request is handled when its turn comes, its answer is stored as any
-  other, and a retry under the same key gets it
-  ([decision 0091](decisions/archive/0091-on-cluster-an-interrupted-caller-leaves-its-request-alone.md)).
-- An operation answered `Suspended` registers for the receiver's resumption before it sends. The step that resumes or
-  discards the receiver tells `Resumed` to the entities whose operations it answered `Suspended`
-  ([decisions 0167](decisions/archive/0167-on-cluster-an-operation-sends-through-the-doors-client-and-is-woken-by-resumed.md),
-  [0172](decisions/archive/0172-on-cluster-the-two-interleavings-of-decision-0104-are-read-again.md)).
-- A failure Cluster saved of its own, for an entity type no runner registered in time, is reset before the client
-  gives it, so that a retry is delivered again. An operation's client keeps the request's id first
-  ([decisions 0168](decisions/archive/0168-on-cluster-a-failure-cluster-saved-is-reset-before-it-is-given.md),
-  [0170](decisions/archive/0170-on-cluster-an-operations-client-keeps-the-request-id-before-it-resets-a-saved-failure.md)).
 
 ### The public surface
 
@@ -1498,20 +1051,15 @@ what a program, a test and an operator use, and nothing the runtime alone uses: 
 their helpers may change without a note, and a runtime on another store imports them from their modules, as the
 tests do ([decision 0055](decisions/archive/0055-the-public-surface-is-what-its-users-use.md)).
 
-The surface is four entries of the package `@fgaudo/effect-tea-persistent`
-([decisions 0193](decisions/0193-the-public-surface-is-four-entries.md),
-[0195](decisions/0195-the-package-is-effect-tea-persistent.md)):
+The surface is three entries of the package `@fgaudo/effect-tea-persistent`:
 
-- `.`, [`src/index.ts`](../src/index.ts), gives what a program, its boundary and an operator use on one process;
+- `.`, [`src/index.ts`](../src/index.ts), gives what a program, its boundary and an operator use;
 - `./program`, [`src/index.program.ts`](../src/index.program.ts), gives what declares a program and nothing that
   runs it, so that a browser imports a program's module for its schemas, and `.` gives it too;
 - `./testing`, [`src/index.testing.ts`](../src/index.testing.ts), gives `rehearse` with the replies
-  `accepted` and `rejected`, `projectionViolations`, `migrationViolations` and `digestOf`, for a user's tests;
-- `./cluster`, [`src/index.cluster.ts`](../src/index.cluster.ts), gives `sharding` and `launch`, for a launcher on
-  Effect Cluster, with `Recorded` as a type alone.
+  `accepted` and `rejected`, `projectionViolations`, `migrationViolations` and `digestOf`, for a user's tests.
 
-A process on one machine imports neither Cluster nor the checks of a test, and a browser reaches no module of Node
-through `./program`. A test of the form of `src/` checks both.
+A process imports none of the checks of a test, and a browser reaches no module of Node through `./program`. A test of the form of `src/` checks both.
 
 What a caller may leave out of a call comes last: the call's last argument, or an object that is its last argument.
 TypeScript allows no optional parameter before a required one, and Effect's own calls end with their options too. So
@@ -1521,8 +1069,7 @@ a request leaves out a sender that is `null`, and `create` leaves out flags that
 
 The library gives no map of an answer to a status of a protocol, since the status is the boundary's choice, and a
 boundary may not speak HTTP. A boundary matches on the `_tag` of `Creation`, `Answer` and `Operated`, with one
-entry for each tag that the compiler checks, so that a tag the library adds fails to compile in the boundary.
-[`examples/server/server.ts`](../examples/server/server.ts) is the template over HTTP
+entry for each tag that the compiler checks, so that a tag the library adds fails to compile in the boundary
 ([decision 0190](decisions/0190-a-boundary-maps-each-answer-to-its-protocol.md)).
 
 ## How the runtime keeps it
@@ -1534,7 +1081,7 @@ tests rely on none of it. It is for whoever changes the runtime, the storage or 
 
 What an event writes is the machine's: besides the next machine, a transition gives the rows it writes, already
 encoded — the state when it changed, the keys that changed, the messages that leave the mailbox and the ones
-queued, the replies added, the work that ended, the read model's row and the outbox's rows — and the storage writes
+queued, the replies added, the work that ended, the read model's row and the outbox's row — and the storage writes
 them and decides nothing. Each value is encoded once, and the projection of a state computed once
 ([decision 0057](decisions/archive/0057-the-machine-gives-what-is-written.md)).
 
@@ -1545,12 +1092,11 @@ names, or in the one that stores it, if that work has already ended: only the st
 An answer no entity stores, given to another entity's operation, lies in a table of its own, `effecttea_answers`, and
 is deleted as a reply to another entity is. A row is keyed by the receiver, the request's text, and whether the
 request was a creation or a message, since an operation may give both one name. The answer is kept before the
-operation is given it: on one process `create` and `send` of `src/runtime/callers.ts` keep it in a transaction of
-their own, and on Cluster the door's step keeps it in the door's transaction, so that Cluster saves the answer and the
-runtime keeps it in one commit. An operation's request holds the sender's address, key, incarnation and name, and
-nothing a version of either program writes, so a kept answer is found by its text across a deploy, and its column
-`version` says only how the reason is read. A rename moves the answers with the receiver's and the sender's other
-rows ([decision 0253](decisions/archive/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)).
+operation is given it, in the transaction of the receiver that `create` and `send` of
+[`src/runtime.ts`](../src/runtime.ts) run. An operation's request holds the sender's address, key, incarnation and
+name, and nothing a version of either program writes, so a kept answer is found by its text across a deploy, and
+its column `version` says only how the reason is read
+([decision 0253](decisions/archive/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)).
 
 A statement of the storage that writes or deletes a row on a condition reads the condition from a row it has
 locked. On a pool of PostgreSQL the statement then waits for the transaction that holds the row, and reads the
@@ -1560,25 +1106,7 @@ commit has moved past. On SQLite one transaction writes at a time, so the rule h
 SQLite, beside `lockingTheConditionSkipping`, so that the rule is in one place. The row locked is the row the
 condition is about, since a reply is not always its entity's own
 ([decision 0284](decisions/archive/0284-a-statement-reads-its-condition-from-a-row-it-has-locked.md)). Its cases are
-`reindex`, the batches of `expire` and of `prune`, the trigger of the outbox and the reading of the log, below and
-under [the order of the log](#the-order-of-the-log).
-
-A step's publication goes with the last row of the outbox that names it. A trigger of `effecttea_outbox` drops it,
-in the statement that drops the row, so that no statement that drops rows of the outbox leaves a publication no
-topic reads ([decision 0154](decisions/archive/0154-a-steps-projection-is-stored-once-in-the-outbox.md)). A step
-writes a publication only where it writes a row of the outbox, so every publication is named by a row when it is
-written. On SQLite the trigger runs once for each row dropped, and drops the row's publication where no other row
-names it. One transaction writes at a time there, so no other transaction holds a row of the publication. On
-PostgreSQL the trigger runs once for each statement, on the rows the statement dropped. It first locks the
-publications of those rows, `FOR UPDATE`, in the order of their keys. It then drops, in a statement of its own, each
-of those publications that no row of the outbox names. On a pool, a statement that dropped another row of a
-publication waits for the transaction that holds the publication's lock, and its second statement reads a snapshot
-taken after the lock, which sees that transaction's rows gone. The order of the keys keeps two statements from
-locking two publications in opposite orders. A trigger once for each row read the other transaction's row as still
-there, so two transactions that each dropped one row of a publication kept the publication for ever
-([decision 0286](decisions/archive/0286-the-trigger-of-the-outbox-locks-the-publications-in-order.md)). A batch of
-`prune` runs in a transaction of its own, so that the rows it drops and the publications its trigger drops commit
-together.
+`reindex` and the batches of `expire`, below.
 
 On a pool of PostgreSQL the receiver's step that stores a reply or an answer, and the asker's step that ends the
 work, may run at once, and each reads the other's row only once it is committed. Both then leave the row. `expire`
@@ -1593,19 +1121,17 @@ A batch of `expire` of the replies past their time locks the rows it selects, by
 PostgreSQL and by nothing on SQLite, where one transaction writes at a time. The clause is
 `lockingTheConditionSkipping` of [`src/storage/held.ts`](../src/storage/held.ts). A reply that a step answering a
 retry holds, and writes again with a new time, is left to a later batch, and a reply committed after the batch's
-snapshot is read again on the row committed. So no batch deletes a reply under the new time of its retry. The batch of
-Cluster's ids in `effecttea_given_requests` takes no lock, since Cluster runs on one file of SQLite
+snapshot is read again on the row committed. So no batch deletes a reply under the new time of its retry
 ([decision 0285](decisions/archive/0285-a-batch-of-expire-skips-the-replies-a-step-holds.md)).
 
 A wait of an operation for a resumption lies in `effecttea_waiting`, one row for each run and name, keyed by the
 receiver, the sender's entity, key, parameter and incarnation, and the name. The step that takes the entity out of its
-suspension deletes its waits before it writes its own, and a wait answered twice is written once. On Cluster the door
-reads the waiting entities before the step, and tells each `Resumed` from that transaction
+suspension deletes its waits before it writes its own, and a wait answered twice is written once
 ([decision 0265](decisions/archive/0265-the-operations-that-wait-for-a-resumption-are-stored-by-the-step-that-answers.md)).
 
 The machine holds no reply. A message that arrives is given the reply stored under its request, which the runtime
 reads by the request just before the step, where no other event of the entity is applied; an activation reads
-none, and what a loaded entity holds grows with its mailbox and its keys only. A deletion changes no machine, so
+none. A deletion changes no machine, so
 only a step changes one ([decision 0065](decisions/archive/0065-the-machine-holds-no-replies.md)).
 
 A reply's row is keyed by its request's text and by the version that wrote it: a migration of the sender may give
@@ -1642,193 +1168,49 @@ The two dialects hold the same rows in the same columns:
 
 ### Fibers and locks
 
-A timer sleeps by `Effect.sleep` for an hour at most at a time, and reads the wall clock after each sleep. A loaded
-entity's timer sleeps again for the time left until the time it stores has come, and the waker reads the stored
-timers again. So a wall clock set back fires no timer early, and a host suspended delays one by an hour at most
-([decision 0221](decisions/0221-a-timer-sleeps-an-hour-at-most-and-reads-the-wall-clock-again.md)). An hour is shorter
-than the host's limit of 2^31 − 1 milliseconds, past which Effect sets a time as timers of the host in turn
+Each event is one transaction of its entity, and the database's lock of the entity is the only lock. On PostgreSQL a
+step takes `pg_advisory_xact_lock` of the program's name and the entity's id first, so that two creations of one id
+wait for each other though neither has a row yet. On SQLite the transaction begins with `BEGIN IMMEDIATE`, which
+holds the one writer. The process holds no lock of an entity, and no entity between two transactions.
+
+The commit and what follows it are one region no interruption divides. So a caller that gives up after the commit
+still leaves the operations its step stored running. The runs a transaction stores are claimed in the process
+before the commit. Another transaction of the entity may begin between the commit and the fork of the fibers, and
+would otherwise restart the entity as after a crash. Every fork of the runtime runs without the transaction of the
+fiber that forks it, since a caller may call within a transaction of its own. Every fork is interruptible, so that
+the closing of the scope the runtime was launched in stops it.
+
+The process's bookkeeping, the fibers of the operations that run and the entities it activated, is plain values,
+changed in one synchronous step and never across a yield. A sender's wait takes the process's signal of a
+resumption before it sends, so that a resumption between the answer `Suspended` and the wait ends the wait.
+
+The waker sleeps by `Effect.sleep` until the earliest time stored, or until a step arms an earlier timer. It then
+reads the wall clock and the due timers again, so a wall clock set back fires no timer early. A due timer whose fire
+failed is read again after `retry`, and not at once. A sleep past the host's limit of 2^31 − 1 milliseconds is set
+by Effect as timers of the host in turn
 ([decision 0194](decisions/0194-a-timer-months-away-sleeps-on-effects-promise-of-a-duration.md)).
-
-Each entity is found, loaded, unloaded and crashed under a lock of its own, so the callers of one entity never
-wait on another's activation ([decision 0067](decisions/archive/0067-each-entity-is-held-by-its-own-lock.md)). An
-activation and a creation run detached from their caller, which only waits for them: one that gives up leaves
-them to finish, and only a crash of the process stops them halfway
-([decision 0079](decisions/archive/0079-what-a-caller-sets-going-is-finished-without-it.md)). What runs detached is
-counted until it ends, however it ends, by a fiber forked with it
-([decision 0110](decisions/archive/0110-detached-work-is-counted-until-it-ends-however-it-ends.md)); a fiber forked from
-the runtime says it is interruptible, wherever it is forked and whatever Effect's default, so that its scope stops it
-([decision 0271](decisions/0271-every-fork-of-the-runtime-says-it-is-interruptible.md)).
-Bookkeeping another fiber reads changes in one synchronous step, never across a yield: a fiber is held only while
-it has not ended, and an entity leaves the process in one step
-([decision 0068](decisions/archive/0068-what-another-fiber-reads-changes-in-one-step.md)). That bookkeeping stays in
-plain values, changed in one `Effect.sync`, and in none of Effect's `Tx` modules: each wait of the runtime depends on
-I/O or on the time, which no transaction waits for, and an entity's lock stays a `Semaphore`, which serves its waiters
-in order ([decision 0177](decisions/archive/0177-the-runtimes-bookkeeping-stays-in-synchronous-steps.md)). An idle entity's wait
-ends with an item a sleep puts in the entity's queue, and nothing races its take, so an event offered as the wait
-runs out is not lost ([decision 0116](decisions/archive/0116-an-entitys-wait-ends-with-an-item-of-its-queue.md)).
-Every fork of the runtime runs without the transaction of the fiber that forks it, through `forkApart` or
-`forkChildApart`, which also make it interruptible, and a count another fiber reads
-is raised and lowered by one `Effect.acquireUseRelease`, unless a comment says why two fibers raise and lower it. A
-test of the suite reads the code and fails on any other form
-([decision 0164](decisions/archive/0164-two-rules-of-the-runtime-are-kept-by-the-form-of-the-code-and-a-test-reads-it.md)).
-An entity's loop yields after a step that leaves it more to do, so that another entity waits for one step of a busy
-one at most. Effect yields a fiber after a count of operations, and a step whose encoding and write take long is few
-operations. A loop with nothing to do starts its wait at once
-([decision 0134](decisions/archive/0134-an-entitys-loop-yields-between-two-steps.md)).
-
-A caller's `Receive` is recorded under its request's key, in `offers` of the loaded entity, as its caller is
-registered, with nothing between the two that yields, so that no reply falls between them. A step's `Replied` marks
-every `Receive` recorded under its key, in `answered`, and takes the key out. The loop skips the step of a marked
-`Receive`, since its caller was registered before the offer and the reply already reached it, gives its permit back,
-and counts it as done. So a retry offered before its request is answered is answered by that answer and not applied,
-under any `keep`, a caller that gave up after its offer included. Only a caller's request is recorded, since an
-operation's reply is kept while its work holds, with no time
-([decision 0282](decisions/archive/0282-a-callers-message-offered-before-its-answer-is-answered-by-it.md)).
-
-### Effect Cluster inside the runtime
-
-#### A door and its step
-
-- A program's door is Cluster's entity of the program's name, with the RPCs `Create`, `Message`, `Resume`,
-  `Discard` and `Resumed`. Each is persisted, and its handler steps the runtime's entity in Cluster's transaction, so
-  a step commits with its reply ([decision 0081](decisions/archive/0081-on-cluster-a-step-commits-with-its-reply.md)). A
-  rename ([decision 0156](decisions/archive/0156-a-program-is-renamed-by-its-launch-and-keeps-its-keys.md)) moves none of
-  Cluster's rows, which are stored under the entity's type. The program's door is registered under each old name
-  too, and steps what Cluster saved there ([decision 0176](decisions/archive/0176-on-cluster-a-rename-marks-the-old-name-and-keeps-its-door.md)).
-- A request is keyed by the version that keyed it and its `requestKey`. Cluster answers a retry within a version, and
-  the runtime's replies answer one across versions
-  ([decision 0085](decisions/archive/0085-on-cluster-a-request-is-keyed-and-answered-as-on-one-process.md)).
-  A caller's request is keyed with the text of the message it carries too, so that Cluster answers from its saved
-  reply only a retry of the same message, and another message reaches the door, which answers it `Reused`. An
-  operation's request keeps the key of its run and name alone, so that a run after a crash is answered from the reply
-  saved. A `Reused` Cluster saved is no reply: the caller's client resets it and sends the request once more, and a
-  creator's client resets it before it sends, since the reply it was compared with may be past its time at the retry
-  ([decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)).
-- Everything a step answers is a success of the RPC, as text
-  ([decision 0160](decisions/archive/0160-on-cluster-a-door-answers-as-text-and-a-creation-the-program-dies-on-waits-for-a-fix.md)).
-  A creation the program dies on stores nothing, and is answered `Died` with its cause. The creator's client resets
-  a `Died` Cluster saved before it sends, and gives it as the creator's defect, as one process does: a caller is
-  given the defect, an operation's sender is suspended, and a retry runs `init` again
-  ([decision 0291](decisions/archive/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md)).
-- What a door's step sets going starts once the step has committed. The entity's row counts the steps that wrote it,
-  and the next step of the entity settles the uncommitted machine by that count. On Cluster an entity's lock is
-  taken only inside a transaction, or by code that touches no database while it holds it, so nothing holds the lock
-  while it waits for the connection a transaction holds
-  ([decision 0161](decisions/archive/0161-on-cluster-a-step-settles-the-machine-by-the-count-of-the-steps-that-wrote-it.md)).
-  On SQLite a runner runs one transaction at a time, so two loaders of one entity never wait for its lock at once, and
-  the lock's rule of one process holds all the same
-  ([decision 0172](decisions/archive/0172-on-cluster-the-two-interleavings-of-decision-0104-are-read-again.md)).
-
-#### Shards
-
-- An entity's shard is its partition of the log. Each deployment registers a singleton per shard, and a shard is held
-  while its singleton runs on this runner. The waker reads the timers of the shards held, a shard lost crashes its
-  entities on this runner, and the runner that gains it activates its entities left with work
-  ([decision 0162](decisions/archive/0162-on-cluster-an-entitys-shard-is-its-partition-and-each-deployment-serves-its-shards.md)).
-- Passivation, the capacity and the timers stay the runtime's: a door's `maxIdleTime` is the runtime's passivation,
-  and Cluster's `maxResidentEntities` is left unbounded
-  ([decision 0092](decisions/archive/0092-on-cluster-the-runtime-keeps-its-entities-and-learns-its-shards.md)).
-
-#### A reading that waits
-
-A runner learns of another runner's commit from the file: while a reading of the log waits, it reads SQLite's
-`data_version` at Cluster's interval of replies, and wakes every reading that waits where the version moved
-([decision 0163](decisions/archive/0163-on-cluster-a-reading-that-waits-learns-of-another-runners-commit-from-the-file.md)).
-
-#### Cluster's rows
-
-- Cluster deletes no reply of its own, so the runtime deletes Cluster's rows by statements of its own
-  ([decision 0090](decisions/archive/0090-on-cluster-a-reply-is-deleted-as-on-one-process.md)). A statement deletes,
-  under a request id, the request's row of `cluster_messages`, its replies in `cluster_replies` and any envelope
-  stored under the id. The tables are those of the prefix `SqlMessageStorage` takes by default, `cluster`. A launcher
-  that gives `SqlMessageStorage` another prefix keeps Cluster's rows for ever.
-- An operation's request ids are kept under its work, in `effecttea_sent_requests`, and the step whose work ends
-  deletes Cluster's rows under them
-  ([decision 0169](decisions/archive/0169-on-cluster-an-operations-request-ids-are-kept-under-its-work-and-deleted-with-it.md)).
-- A caller's client keeps its request's id once it has the answer, in `effecttea_given_requests`, with a time. The
-  next step of the entity that answers a caller deletes Cluster's rows under each id of the entity whose time is
-  past, and so does `Handle.expire`, for the ids of the program
-  ([decision 0171](decisions/archive/0171-on-cluster-a-callers-rows-go-once-its-client-has-the-answer-and-its-time-is-past.md)).
-  The client reads the id and keeps it without interruption, so a caller that stops waiting once its answer came
-  keeps the id all the same. A message sent with `keep: 'forever'` keeps its rows for ever.
-- The time is the message's `keep`, or the least time where the `keep` is shorter. The least time is two of
-  Cluster's polls of replies and a second, `2 × entityReplyPollInterval + 1 000` ms, 1.4 s by default, read from the
-  `ShardingConfig` of the runner whose client keeps the id. Another client of the same request, on another runner,
-  reads the reply from Cluster's table only at its poll, and would wait for ever once the rows are gone. The first
-  poll covers the reply's commit, and the second a read that failed, which Cluster logs at the level `Debug`
-  ([decision 0248](decisions/archive/0248-on-cluster-a-callers-rows-are-kept-for-every-clients-poll.md)).
-- A creation's client keeps its id for the least time, and a retry after its rows go is answered `Created` from the
-  entity's row ([decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md)).
-- The runtime's own reply, in `effecttea_replies`, is still deleted past its `keep`, and only Cluster's rows wait
-  for the least time. So a retry of a message under the same request id, within the least time of a shorter `keep`,
-  is given the reply Cluster saved, and is not applied again.
-- A request's id is kept once per answer, and not again. A second client given the same answer keeps nothing new,
-  and the time counts from the first answer.
-- A reset of a request's answer deletes the id its caller's client kept, before `Sharding.reset`, and none of
-  Cluster's rows. Every reset does so: of a `Rejected` or a `Died` before a creation is sent, of a `Suspended`, a
-  `NotFound` or a `Reused` after a message's first answer, and of a failure Cluster saved of its own. A reset runs only
-  where the latest answer is one to reset, so an id whose answer is a reply is not dropped by the client that reads
-  it. The retry's answer keeps the id anew. So nothing deletes the request between the reset and Cluster's delivery,
-  and the step that answers the retry finds no kept id of its own request
-  ([decision 0249](decisions/archive/0249-on-cluster-a-reset-drops-the-id-a-callers-client-kept.md)).
-- A door answers an operator's `Resume` or `Discard` with the Cluster id of its request, under the key `request` of
-  the answer's text. The operator's client keeps the id for the least time once it has the answer, without
-  interruption, as a caller's creation keeps its own, and a step of the entity or `Handle.expire` deletes Cluster's
-  rows of the event past that time. The key is optional, so that a client decodes the answer of a door of a release
-  before it, and an answer with no id keeps nothing
-  ([decision 0290](decisions/archive/0290-on-cluster-an-operators-client-keeps-the-id-the-doors-answer-carries.md)).
-- A creation the program dies on is answered `Died`, which a caller's client keeps as any answer. A `Died` is not
-  kept for an operation's work in `effecttea_answers`, since a resume after a fix must create the entity. The door
-  keeps the operation's request id before `init` runs, as for any creation, so that the work's end deletes Cluster's
-  rows of it ([decision 0291](decisions/archive/0291-on-cluster-a-creation-the-program-dies-on-is-answered-died-and-reset.md)).
-- A reply Cluster saves of its own after its request's rows are gone is left
-  ([decision 0173](decisions/archive/0173-on-cluster-a-reply-cluster-saves-after-its-request-is-gone-is-left.md)).
-- Three cases leave Cluster's rows for ever: a caller or an operator that stops waiting before its answer, a
-  failure Cluster saved for an operator's event, and a `Resumed` no runner delivers. They are the
-  [open question](open-questions.md#running) The rows of operators' events on Cluster, and bug 59 of
-  [`bugs.md`](bugs.md). What the rows on Cluster rest on, and what checks it, is in [`premises.md`](premises.md),
-  under The tables of Cluster's requests.
 
 ### How the machine and the runtime are tested
 
 The machine is tested with properties, under random orders of messages, completions, timers, crashes and
 defects ([`src/machine.test.ts`](../src/machine.test.ts)). The promises a caller and a runner see are checked on
 histories of [`src/machine.test_histories.ts`](../src/machine.test_histories.ts), which any target plays, and which
-[`src/machine.histories.test.ts`](../src/machine.histories.test.ts) plays on the machine. The runtime is tested against the machine
-([`src/runtime/loop.test.ts`](../src/runtime/loop.test.ts)): a scenario, and then random sequences of events, are driven
-on the real runtime with the process dying at each point of the table of
-[what survives a crash](#what-survives-a-crash), and what the database holds
-afterwards is compared with where the machine ends on the events that committed. They run on Effect's
-`TestClock`, and move time instead of waiting for it
-([decision 0066](decisions/archive/0066-the-runtimes-tests-move-time.md)). A moved clock gives a fiber it did not wake
-one turn, so a test that moves the points where fibers yield asserts what holds once the clock has passed, not
-when ([decision 0101](decisions/archive/0101-a-moved-clock-gives-a-fiber-it-did-not-wake-one-turn.md)); a test may run
-the wall clock ahead of the sleeps, to stand for a clock that moved between two steps
-([decision 0103](decisions/archive/0103-a-test-moves-the-wall-clock-ahead-of-the-sleeps.md)). The runtime's tests choose
-where fibers yield: a scheduler of the tests' answers Effect's `Scheduler` from a schedule it records, so a run
-that fails is replayed exactly, and explores by random priorities over many seeds, or by delay bounding around one
-point; none runs under budgets of steps
-([decision 0104](decisions/archive/0104-the-runtimes-tests-choose-where-fibers-yield.md)). The scheduler preempts a
-fiber from the second step of a run, where Effect yields under a budget of 2, and lets it through at the task of the
-yield it made
-([decision 0244](decisions/0244-the-scheduler-of-the-tests-lets-a-fiber-through-at-the-task-of-its-yield.md)). A fiber that began
-its run on another fiber's stack, started or resumed inline, is asked whether it yields even with no task ready, so
-that a run reaches the orders in which Effect's budgets give a parent back before its child's run goes on
-([decision 0117](decisions/archive/0117-a-fiber-on-another-s-stack-yields-with-no-task-ready.md)). PCT finds a bug of depth
-`d` with a probability of at least `1 / (n k^(d - 1))`, for `n` fibers and `k` steps; the explored tests have 3 to 48
-fibers and 79 to 3,584 steps in their window, so no number of seeds guarantees a bug of depth 2, but the bound is the
-worst case, and a bug most schedules reach is found in a few runs. A run of the tests runs one seed in twenty of each
-explored test, and a release every one, as [`AGENTS.md`](../AGENTS.md) says; a schedule is drawn from its seed alone,
-so a failure in either names a seed that replays it in both. What the runtime did is told
-to a probe, a reference in the context with a default that does nothing, which a test provides and the library
-does not export ([decision 0073](decisions/archive/0073-what-the-runtime-did-is-told-to-a-probe.md)). A test waits for the
-process to settle, with nothing under way, an entity unloading included
-([decision 0109](decisions/archive/0109-settled-waits-for-an-entity-unloading.md)). The machine's properties check
-that what an event writes, applied to the rows before it, gives the rows after it, and
+[`src/machine.histories.test.ts`](../src/machine.histories.test.ts) plays on the machine.
+[`src/runtime.histories.test.ts`](../src/runtime.histories.test.ts) plays them on the runtime, over SQLite, PGlite
+and a pool of the CI's server of PostgreSQL. Each history has a database of its own and the test's clock, and a
+restart kills the process and launches it again on the same database.
+
+[`src/runtime.crash.test.ts`](../src/runtime.crash.test.ts) kills a process at each line of the table of
+[what survives a crash](#what-survives-a-crash), on a file of SQLite. A new runtime on the same file then ends where
+the machine ends from what the killed process stored. The launch's `probe` is the test's hook, and runs at three
+points of an event's transaction: `Recorded`, `BeforeCommit` and `AfterCommit`.
+[`src/runtime.processes.test.ts`](../src/runtime.processes.test.ts) runs two runtimes on one file, and checks that
+they lose no step. [`src/runtime.pool.test.ts`](../src/runtime.pool.test.ts) holds the tests only a server runs, and
+[`src/runtime.talk.test.ts`](../src/runtime.talk.test.ts) runs the booking and the inventory of `src/fixtures/`,
+which talk. A test waits for `settled`, which ends once no operation runs in the process and no stored timer is due.
+
+The machine's properties check that what an event writes, applied to the rows before it, gives the rows after it, and
 [`src/storage.test.ts`](../src/storage.test.ts) that the storage writes those rows as given
 ([decision 0057](decisions/archive/0057-the-machine-gives-what-is-written.md)).
-The tests of [`src/runtime/callers.test.ts`](../src/runtime/callers.test.ts) under `two entities that talk` run the booking and
-the inventory of `src/fixtures/` on it, on the test's clock, with a probe and values frozen through.
 [`examples/booking/runtime.test.ts`](../examples/booking/runtime.test.ts) runs the example's booking on real time,
 through the public surface alone.
-

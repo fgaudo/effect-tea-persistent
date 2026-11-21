@@ -1,14 +1,13 @@
 {
   "$schema": "https://typedoc.org/schema.json",
   "name": "effect-tea-persistent",
-  "entryPoints": ["../src/index.program.ts", "../src/index.ts", "../src/index.testing.ts", "../src/index.cluster.ts"],
+  "entryPoints": ["../src/index.program.ts", "../src/index.ts", "../src/index.testing.ts"],
   "tsconfig": "tsconfig.json",
   "out": "dist",
   "validation": { "notExported": false, "notDocumented": true },
   "requiredToBeDocumented": ["Function", "Variable", "Interface", "TypeAlias", "Class", "Enum"],
   "intentionallyNotDocumented": [
     "@fgaudo/effect-tea-persistent/program.program.__type.Indexes",
-    "@fgaudo/effect-tea-persistent/program.program.__type.Topics",
     "@fgaudo/effect-tea-persistent/program.program.__type.__type.services.__type.run",
     "@fgaudo/effect-tea-persistent/program.part.__type.__type.services.__type.run"
   ],

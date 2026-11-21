@@ -5,11 +5,7 @@ This repository is a design and its pure core, not a library yet. Read [`README.
 step of [`docs/roadmap.md`](docs/roadmap.md). [`docs/review-2026-11.md`](docs/review-2026-11.md) says why the work
 starts again from the pure core, and what the maintainer chose.
 
-## The old runtime is frozen
-
-The runtime of today is built on an entity loaded in memory, and step 4 of the roadmap builds it again on the
-transaction. Until step 4 takes them out, `src/runtime.ts`, `src/runtime/`, `src/cluster.ts`,
-`src/storage/cluster.ts` and `src/testing.ts` change only to be removed. Their tests run as they are.
+## The notes are frozen
 
 The notes of `docs/decisions/`, `docs/premises.md` and `docs/rejected.md` are frozen: none is added, moved or
 edited, and the notes still `proposed` stay so. A comment keeps its citation of a note until its code is written
@@ -60,8 +56,8 @@ again, and code written again cites no note. Step 9 of the roadmap deletes the n
 ## Code and tests
 
 - The examples import the library as a user does, by the package's name and its entries:
-  `@fgaudo/effect-tea-persistent`, `@fgaudo/effect-tea-persistent/program`, `@fgaudo/effect-tea-persistent/testing`
-  and `@fgaudo/effect-tea-persistent/cluster`. The `exports` of `package.json` resolve each to its file of `src/`, so
+  `@fgaudo/effect-tea-persistent`, `@fgaudo/effect-tea-persistent/program` and
+  `@fgaudo/effect-tea-persistent/testing`. The `exports` of `package.json` resolve each to its file of `src/`, so
   the examples run on the sources with no build. A module that declares a program imports from
   `@fgaudo/effect-tea-persistent/program`, the import a browser can load. When the design changes, the code, its
   tests and the examples change with it, and `bun run typecheck`, `bun test` and `bun run links` pass.
@@ -86,13 +82,12 @@ again, and code written again cites no note. Step 9 of the roadmap deletes the n
 - Bun is pinned by `packageManager` in `package.json`, as the workflow installs it. A move of Bun runs the spikes.
 - A move of Effect's version pins `effect` and every `@effect/` package together, the drivers `@effect/sql-pg` and
   `@effect/sql-pglite` among them, as a test of `src/form.test.ts` checks. The move runs
-  `bun scripts/compare-docs.ts <old> <new>`, runs the spikes, writes the fixture of the new release with
-  `scripts/write-cluster-fixture.ts`, and reads Effect's release policy again. A move to a new major reads every rule
+  `bun scripts/compare-docs.ts <old> <new>`, runs the spikes, and reads Effect's release policy again. A move to a new major reads every rule
   that rests on Effect again.
 - The workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the checks on Linux on every push and pull
   request: `bun audit`, `bun run typecheck`, `bun run links`, and the audit and the build of the site. It runs
-  `bun test` in four jobs, each with `--shard`, and jobs of their own run `bun run test:spikes`,
-  `bun run test:slow`, `bun run test:pins` and `bun run test:postgres` against a container of PostgreSQL. A test of
+  `bun test` in four jobs, each with `--shard`, and jobs of their own run `bun run test:spikes` and
+  `bun run test:postgres` against a container of PostgreSQL. A test of
   `src/form.test.ts` checks that the jobs run every shard and every script. A change of the storage or of a statement
   passes the job of PostgreSQL on the push of `main`, since PGlite runs one session and hides what a pool does. Run by
   hand from the repository's Actions, the workflow also runs `bun run test:release`. The site's audit ignores one
@@ -109,7 +104,7 @@ again, and code written again cites no note. Step 9 of the roadmap deletes the n
 - The design follows effect-tea's Guide (`README.md` of `github.com/fgaudo/effect-tea`) wherever the Guide applies.
   `docs/design.md` says where a server departs from it, and why.
 - The site is built by [`site/build.ts`](site/build.ts) with TypeDoc, pinned in `site/package.json`. A warning of
-  TypeDoc fails the build, so every export of the four entries has a doc comment that says what it takes and gives.
+  TypeDoc fails the build, so every export of the three entries has a doc comment that says what it takes and gives.
   An inferred name no declaration holds is excused in `site/typedoc.json`, and an export never is. A change of
   `src/`, of the guide or of an example builds the site before it is committed. The workflow
   [`.github/workflows/docs.yml`](.github/workflows/docs.yml) deploys the site from `main` once `ci.yml` passes.

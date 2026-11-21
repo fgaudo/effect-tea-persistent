@@ -17,7 +17,6 @@ import {
   type IdempotencyKey,
   idempotencyKey,
   indexesOf,
-  topicsOf,
   InvariantDefect,
   isRejected,
   isText,
@@ -245,21 +244,17 @@ const encodeWork = <T extends Types>(
 export type Shown = Readonly<{ projection: Json; indexes: Readonly<Record<string, Scalar>> }>
 
 /**
- * What callers read of a state, with its canonical text, and the canonical text of what each topic of the log
- * selects of it, which a step compares with the step before to decide what it publishes (decision 0138).
+ * What callers read of a state, with its canonical text, which a step compares with the step before to decide
+ * whether it writes a row of the outbox.
  */
-export type ShownRow = Shown & Readonly<{
-  text: string
-  topics: ReadonlyArray<Readonly<{ topic: string; text: string }>>
-}>
+export type ShownRow = Shown & Readonly<{ text: string }>
 
 const shown = new WeakMap<object, WeakMap<object, ShownRow>>()
 
 /**
- * What callers read of `state`, computed once for each program: the step that publishes compares it with the one
- * the step before computed, topic by topic (decisions 0038, 0057, 0138). A projection that does not encode, a topic
- * that selects what JSON does not hold, an index that is no scalar, an index that is a number JSON does not hold, or
- * an index that is a string a database does not hold, is a defect (decisions 0040, 0157, 0206).
+ * What callers read of `state`, computed once for each program: a step compares its text with the one the step
+ * before computed. A projection that does not encode, an index that is no scalar, an index that is a number JSON
+ * does not hold, or an index that is a string a database does not hold, is a defect.
  */
 export const shownOf = <T extends Types>(
   program: Program<T>,
@@ -289,14 +284,7 @@ export const shownOf = <T extends Types>(
     }
   }
   const json = encodeBy(program.schemas.projection, projection, 'projection')
-  const text = canonical(json)
-  const topics = topicsOf(program).map(({ topic, select }) => ({
-    topic,
-    text: select === null
-      ? text
-      : canonical(encodeBy(Schema.Json, byProgram(() => select(projection)), `topic '${topic}'`)),
-  }))
-  const row = { projection: json, indexes, text, topics }
+  const row = { projection: json, indexes, text: canonical(json) }
   held.set(state, row)
   return row
 }
@@ -438,11 +426,6 @@ export type Run<T extends Types> = Readonly<{
 export type Stored<T extends Types> = Readonly<{
   /** The name of the program the entity was created by: with its id, the entity's address (decision 0022). */
   name: string
-  /**
-   * The name the entity's idempotency keys are drawn from, once a launch has renamed its program: the name it held
-   * before its first rename. Absent for an entity never renamed, whose keys are drawn from `name` (decision 0156).
-   */
-  keyedAs?: string
   id: string
   state: T['state']
   /** The work under way, by the `keyText` of each key, which each run carries as data (decision 0136). */
@@ -612,15 +595,13 @@ export type ReplyRow = Readonly<{
 }>
 
 /**
- * What other systems learn of a step: the message it handled, what callers read after it, and the topics of the
- * log it is written in, those whose selection changed in the step, or every topic for a creation, which handles
- * no message (decisions 0038, 0138). It names one topic at least.
+ * What other systems learn of a step whose projection changed, or of a creation: the message the step handled, null
+ * for a creation, which handles none, and what callers read after it.
  */
 export type Publication = Readonly<{
   kind: 'Inbound' | 'Internal' | 'Creation'
   message: Json | null
   projection: Json
-  topics: ReadonlyArray<string>
 }>
 
 /**
@@ -654,7 +635,7 @@ export type Written = Readonly<{
   woken: boolean
   /** The row a query reads, when the state changed (decision 0032). */
   shown: Shown | null
-  /** The row of the outbox, in each topic whose selection changed, or null where none did (decisions 0038, 0138). */
+  /** The row of the outbox, for a creation and a step whose projection changed, or null for any other event. */
   published: Publication | null
 }>
 
@@ -693,11 +674,10 @@ export const digestOf = (key: IdempotencyKey): IdempotencyKey =>
 
 /**
  * The idempotency key a runner of `delivery` is given for the work under `key` in `incarnation`: the readable one,
- * or its digest. It is a pure function of what is stored, so a restart gives the same one (decision 0123), and so
- * does a rename, which keeps the name the keys are drawn from (decision 0156).
+ * or its digest. It is a pure function of what is stored, so a restart gives the same one.
  */
 const givenKey = <T extends Types>(stored: Stored<T>, key: Key, incarnation: number, delivery?: Delivery) => {
-  const readable = idempotencyKey({ name: stored.keyedAs ?? stored.name, id: stored.id }, key, incarnation)
+  const readable = idempotencyKey({ name: stored.name, id: stored.id }, key, incarnation)
   return delivery === 'IdempotentDigest' ? digestOf(readable) : readable
 }
 
@@ -1280,14 +1260,9 @@ export const writes = <T extends Types>(
   }
   const row = changed ? shownOf(program, after.state) : null
   let published: Publication | null = null
-  // A step is written in a topic where what the topic selects changed, as the program deployed computes the
-  // projection before and after, and in every topic at a creation. The topics are in the same order in both rows,
-  // the order the program declares them.
-  const shownBefore = row === null || before === null ? null : shownOf(program, before.state).topics
-  const topics = row === null
-    ? []
-    : row.topics.filter((topic, at) => shownBefore === null || shownBefore[at]?.text !== topic.text)
-  if (row !== null && topics.length > 0) {
+  // A step is written in the outbox where its projection changed, as the program deployed computes the projection
+  // before and after, and so is every creation. A state that changed under a projection that did not is no news.
+  if (row !== null && (before === null || shownOf(program, before.state).text !== row.text)) {
     if (before !== null && handled === null) {
       throw new Error(`the state of '${after.name}' '${after.id}' changed with no message handled`)
     }
@@ -1295,7 +1270,6 @@ export const writes = <T extends Types>(
       kind: handled === null ? 'Creation' : handled._tag,
       message: handled === null ? null : envelopeRow(program, handled).message,
       projection: row.projection,
-      topics: topics.map(({ topic }) => topic),
     }
   }
   if (

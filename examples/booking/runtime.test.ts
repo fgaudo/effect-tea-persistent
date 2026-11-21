@@ -8,16 +8,30 @@
 import { SqliteClient } from '@effect/sql-sqlite-bun'
 import { expect, test } from 'bun:test'
 import * as Effect from 'effect/Effect'
-import type { SqlClient } from 'effect/sql'
+import { SqlClient } from 'effect/sql'
 import { create, launch, operation, send } from '@fgaudo/effect-tea-persistent'
 import { booking } from './booking.ts'
 import { inventory } from './inventory.ts'
 
-/** A limit no reading of this test reaches: a reading says how many rows it takes (decision 0141). */
-const all = 100
-
 const organizer = { _tag: 'Organizer' } as const
 const ann = { _tag: 'Customer', id: 'ann' } as const
+
+/**
+ * The rows of the outbox the program `name` wrote, in the order of their steps: each its kind, the tag of the message
+ * its step handled, or null for a creation, and the projection the step left.
+ */
+const outbox = (name: string) =>
+  Effect.gen(function*() {
+    const sql = yield* SqlClient.SqlClient
+    const rows = yield* sql<{ kind: string; message: string | null; projection: string }>`
+      SELECT kind, message, projection FROM effecttea_outbox WHERE name = ${name} ORDER BY step
+    `
+    return rows.map(({ kind, message, projection }) => ({
+      kind,
+      tag: message === null ? null : (JSON.parse(message) as { _tag: string })._tag,
+      projection: JSON.parse(projection) as Readonly<Record<string, unknown>>,
+    }))
+  })
 
 const database = <A, E>(test: Effect.Effect<A, E, SqlClient.SqlClient>) =>
   Effect.runPromise(
@@ -30,9 +44,10 @@ const database = <A, E>(test: Effect.Effect<A, E, SqlClient.SqlClient>) =>
 test('a booking holds its seats in the inventory, and confirms them', () =>
   database(Effect.scoped(Effect.gen(function*() {
     const runtime = yield* launch()
-    // Neither program needs a service of its own: the booking talks to the inventory, which the runtime routes.
-    const inventories = yield* runtime.deploy(inventory)
-    const bookings = yield* runtime.deploy(booking)
+    // Neither program needs a service of its own: the booking talks to the inventory, which the runtime routes. Both
+    // write what other systems learn of them in the outbox.
+    const inventories = yield* runtime.deploy(inventory, { outbox: true })
+    const bookings = yield* runtime.deploy(booking, { outbox: true })
 
     expect(yield* inventories.create('gig', { flags: { capacity: 10 }, requestId: 'c-gig', sender: organizer }))
       .toEqual({ _tag: 'Created' })
@@ -52,25 +67,18 @@ test('a booking holds its seats in the inventory, and confirms them', () =>
     // The seats are sold, not held: the booking's confirmation moved them.
     expect(yield* inventories.read('gig')).toMatchObject({ available: 7 })
 
-    // What other systems learn: the booking's whole story, step by step (decision 0038).
-    expect(
-      (yield* bookings.published('projection', [], all)).map(({ kind, message, value }) =>
-        [kind, message?._tag ?? null, value.status]
-      ),
-    ).toEqual([
+    // What other systems learn: the booking's whole story, step by step.
+    expect((yield* outbox('Booking')).map(({ kind, tag, projection }) => [kind, tag, projection.status])).toEqual([
       ['Creation', null, 'Holding'],
       ['Internal', 'SeatsHeld', 'Held'],
       ['Inbound', 'ConfirmRequested', 'Confirming'],
       ['Internal', 'SeatsConfirmed', 'Confirmed'],
     ])
     // Of the inventory, only the hold. Confirming the seats moves them from held to sold, which leaves
-    // `available` where it was: a fact no caller can read is not published, and an inventory whose sales must
+    // `available` where it was: a fact no caller can read is not written, and an inventory whose sales must
     // be is one that shows them.
-    expect(
-      (yield* inventories.published('projection', [], all)).map(({ kind, message, value }) =>
-        [kind, message?._tag ?? null, value.available]
-      ),
-    ).toEqual([['Creation', null, 10], ['Inbound', 'HoldRequested', 7]])
+    expect((yield* outbox('Inventory')).map(({ kind, tag, projection }) => [kind, tag, projection.available]))
+      .toEqual([['Creation', null, 10], ['Inbound', 'HoldRequested', 7]])
   }))))
 
 test('a booking of more seats than are left is cancelled with the inventory’s reason', () =>

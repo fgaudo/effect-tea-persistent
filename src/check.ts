@@ -7,8 +7,7 @@ import * as Effect from 'effect/Effect'
 import { SqlClient } from 'effect/sql'
 import * as Machine from './machine.ts'
 import { checkProgram, InvariantDefect, type Program, type Types } from './program.ts'
-import { renamesOf } from './runtime.ts'
-import { defaultPartitions, storage, tablesMade } from './storage.ts'
+import { storage, tablesMade } from './storage.ts'
 
 /** An entity the program checked would not run: where it fails, and the cause, as a suspension renders it. */
 export type CheckFailure = Readonly<{
@@ -46,7 +45,7 @@ export type Checked = Readonly<{
 /**
  * Reads every stored entity of `program`, as an activation of the deploy would, and gives those the program would
  * not run, with the cause of each: an entity whose rows a migration or a schema dies on, and an entity whose
- * activation would suspend it. That covers `work`, `project`, the indexes and the topics on the stored state, the
+ * activation would suspend it. That covers `work`, `project` and the indexes on the stored state, the
  * operations under way against the new `work`, and the `unknown` of an at-most-once operation. A suspended entity
  * is checked as a resume would activate it.
  *
@@ -58,15 +57,14 @@ export type Checked = Readonly<{
  * a moment: an entity created while it runs is read or not by its id, and an operation under way that ends before
  * the deploy fails nothing then.
  *
- * `limit`, a non-negative integer, is how many failures each kind gives at most. `renames` are the launch's: the
- * entities of each name renamed to the program's are read as the program's too, as the launch would rename them. A
- * program that cannot run as written, a limit or renames the launch would refuse, and tables a migration of another
- * release made are the caller's defect, as is what the runtime throws, a corrupted row included (decisions 0122,
- * 0247). The program's functions run on live data, and must be pure, as they must anyway.
+ * `limit`, a non-negative integer, is how many failures each kind gives at most. A program that cannot run as
+ * written, a limit that is no non-negative integer, and tables a migration of another release made are the caller's
+ * defect, as is what the runtime throws, a corrupted row included. The program's functions run on live data, and
+ * must be pure, as they must anyway.
  */
 export const check = <T extends Types>(
   program: Program<T>,
-  options: Readonly<{ limit: number; renames?: Readonly<Record<string, string>> }>,
+  options: Readonly<{ limit: number }>,
 ): Effect.Effect<Checked, never, SqlClient.SqlClient> =>
   Effect.gen(function*() {
     // What a deploy and a launch refuse is refused before any row is read (decisions 0054, 0156).
@@ -76,49 +74,35 @@ export const check = <T extends Types>(
       const reason = `the check is given a limit of ${limit}, which is no non-negative integer`
       return yield* Effect.die(new InvariantDefect({ reason }))
     }
-    const renames = yield* Effect.sync(() => renamesOf(options.renames))
-    const renamedTo = renames.find(([from]) => from === program.name)?.[1]
-    if (renamedTo !== undefined) {
-      const reason = `the program '${program.name}' is checked, and the launch renames it to '${renamedTo}'`
-      return yield* Effect.die(new InvariantDefect({ reason }))
-    }
     yield* tablesMade
     const sql = yield* SqlClient.SqlClient
-    const names = [program.name, ...renames.filter(([, to]) => to === program.name).map(([from]) => from)]
     const active = { checked: 0, failing: 0, failed: [] as Array<CheckFailure> }
     const suspended = { checked: 0, failing: 0, failed: [] as Array<CheckFailure> }
-    for (const name of names) {
-      const store = storage(program, sql, defaultPartitions, false, name)
-      let after = ''
-      while (true) {
-        const page = yield* store.entities(after)
-        if (page.length === 0) break
-        for (const listed of page) {
-          after = listed.id
-          const examined = yield* store.examine(listed.id)
-          // An entity gone since its page was read is no entity of the program any more.
-          if (examined === null) continue
-          let failure: CheckFailure | null
-          let kind: typeof active
-          if (examined._tag === 'Unread') {
-            failure = { id: listed.id, on: 'Load', cause: examined.cause }
-            kind = listed.suspended ? suspended : active
-          } else {
-            // The launch's rename gives the rows the program's name, and keys the entity's work by the old one
-            // (decision 0156).
-            const { stored } = examined
-            const renamed = name === program.name
-              ? stored
-              : { ...stored, name: program.name, keyedAs: stored.keyedAs ?? name }
-            const cause = activated(program, renamed)
-            failure = cause === null ? null : { id: listed.id, on: 'Activation', cause }
-            kind = stored.suspension === null ? active : suspended
-          }
-          kind.checked++
-          if (failure === null) continue
-          kind.failing++
-          if (kind.failed.length < limit) kind.failed.push(failure)
+    const store = storage(program, sql)
+    let after = ''
+    while (true) {
+      const page = yield* store.entities(after)
+      if (page.length === 0) break
+      for (const listed of page) {
+        after = listed.id
+        const examined = yield* store.examine(listed.id)
+        // An entity gone since its page was read is no entity of the program any more.
+        if (examined === null) continue
+        let failure: CheckFailure | null
+        let kind: typeof active
+        if (examined._tag === 'Unread') {
+          failure = { id: listed.id, on: 'Load', cause: examined.cause }
+          kind = listed.suspended ? suspended : active
+        } else {
+          const { stored } = examined
+          const cause = activated(program, stored)
+          failure = cause === null ? null : { id: listed.id, on: 'Activation', cause }
+          kind = stored.suspension === null ? active : suspended
         }
+        kind.checked++
+        if (failure === null) continue
+        kind.failing++
+        if (kind.failed.length < limit) kind.failed.push(failure)
       }
     }
     return { active, suspended } satisfies Checked

@@ -48,8 +48,8 @@ a field of the parent's own state instead.
 
 ## A line is a part
 
-A child is declared as a **part**, with `part(schemas)(…)`. A part is a program without a name, topics, indexes
-or migrations, which are its parent's:
+A child is declared as a **part**, with `part(schemas)(…)`. A part is a program without a name, indexes or
+migrations, which are its parent's:
 
 ```ts
 // What the line tells the cart: it is gone, and the cart drops it from its state.

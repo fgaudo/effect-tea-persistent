@@ -6,9 +6,8 @@ its id, and its state survives crashes, restarts and deploys. A program is writt
 [effect-tea](https://github.com/fgaudo/effect-tea), on [Effect](https://effect.website) v4, and is tested without a
 database or a clock.
 
-**Experimental, and not published yet.** It runs on one process, on SQLite or PostgreSQL, and on Effect Cluster with
-every runner on one machine. It is not for production while it depends on Effect's unstable modules
-([status](#status)).
+**Experimental, and not published yet.** It runs on SQLite or PostgreSQL, with every step a transaction of the
+database. It is not for production while it depends on Effect's unstable modules ([status](#status)).
 
 ## Contents
 
@@ -52,8 +51,8 @@ an **incarnation**, a number that never goes back. The answer of a charge carrie
 runtime drops an answer whose run is no longer the current one.
 
 Callers read a **projection**, data made from the state, such as `{ status: 'Paid' }`. A query across entities reads
-the projection too. The **outbox** publishes it for other systems, by **topic**: a topic is a part of the projection
-that a program names, and the outbox gets a row each time that part changes.
+the projection too. The **outbox** publishes it for other systems: a program deployed with it gets a row in one
+table each time its projection changes, which another system reads with its own SQL.
 
 ```mermaid
 flowchart LR
@@ -67,7 +66,7 @@ flowchart LR
   timers -->|a firing, with its incarnation| update
   state --> project
   project -->|projection| reads[reads and queries]
-  project -->|a row in each topic that changed| outbox
+  project -->|a row when the projection changed| outbox
 ```
 
 **The state is the only truth, and nothing is replayed.** A durable execution engine, such as Temporal or Restate,
@@ -197,9 +196,8 @@ what the one before stored. This library writes it once, so that a program holds
   start with `effecttea_`, which the runtime keeps for its own tables.
 - **A reply that carries data.** A reply says whether a message applied, or why it did not. A caller reads the
   projection after, and an entity that needs a value of another one receives it in the message itself.
-- **Entities spread across machines.** On Effect Cluster every runner shares one file of SQLite, so the runners are
-  on one machine, until Cluster has a fence
-  ([Effect-TS/effect#10058](https://github.com/Effect-TS/effect/issues/10058)).
+- **Entities spread across machines.** The runtime runs where its database is, and nothing assigns the entities to
+  machines yet.
 - **One entity under a high rate of messages.** An entity handles one message at a time, and each message is one
   transaction, so one entity goes no faster than the database commits.
 - **Production**, while the library is experimental.
@@ -230,24 +228,22 @@ Each example is a program with its scenarios as tests. If an example reads badly
 | Example                                      | What it is                                  | What it shows                                                                                                                 |
 | -------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | [`quick-start`](examples/quick-start)        | a seat held until a deadline                | a state, a timer derived from it, a rejection, a rehearsal, a launch on SQLite                                               |
-| [`order`](examples/order)                    | an order, from its payment to its shipment  | operations with idempotency keys, an email sent at most once, a query across orders, topics of the outbox, a report from the log, a runner of Effect Cluster |
+| [`order`](examples/order)                    | an order, from its payment to its shipment  | operations with idempotency keys, an email sent at most once, a query across orders, a report from the outbox |
 | [`subscription`](examples/subscription)      | a subscription billed every month           | a timer that repeats, a declined charge tried again behind a timer, with its attempts counted in the state                   |
 | [`cart`](examples/cart)                      | a cart whose lines reserve their stock      | children by id, each with work of its own                                                                                     |
 | [`booking`](examples/booking)                | a booking that holds seats of an event      | two entities that talk, rehearsed together and run on the runtime                                                             |
 | [`rental`](examples/rental)                  | bikes rented by the minute                  | the guide's running example: a value sent with the request and refused once changed, an id derived from the request id, an email carried into the end, a window a timer closes, a table of the application, a migration, a ride suspended and resumed by a fix |
 | [`stream`](examples/stream)                  | meters fed by a stream of readings          | a boundary that acknowledges an item once its answer is stored, an offset kept in the state, a meter suspended and fixed while the feed waits |
-| [`server`](examples/server)                  | the orders served over HTTP                 | a runner of Effect Cluster as a process, killed during a charge and started again; two runners on one file                   |
 
 ## Status
 
-The library is experimental, as long as it depends on Effect's unstable modules `effect/sql`, `effect/cluster` and
-`effect/rpc` ([decision 0099](docs/decisions/archive/0099-a-library-on-unstable-modules-is-released-as-experimental.md)).
+The library is experimental, as long as it depends on Effect's unstable module `effect/sql`
+([decision 0099](docs/decisions/archive/0099-a-library-on-unstable-modules-is-released-as-experimental.md)).
 An API that changes under it costs an update of the runtime, never of the pure core or of a program. It pins Effect
 4.1.3.
 
-- **What runs:** a program and its rehearsals, the runtime on one process on SQLite or PostgreSQL, and the runtime on
-  Effect Cluster with its runners on one machine.
-- **What does not yet:** a published package, and the runtime on Cluster across machines. [`docs/roadmap.md`](docs/roadmap.md) lists the steps in order.
+- **What runs:** a program and its rehearsals, and the runtime on SQLite or PostgreSQL.
+- **What does not yet:** a published package, and the entities assigned to several machines. [`docs/roadmap.md`](docs/roadmap.md) lists the steps in order.
 
 ## Documentation
 
@@ -255,8 +251,8 @@ The [site](https://fgaudo.github.io/effect-tea-persistent/) holds the guide, the
 the examples and the API's reference.
 
 - [`docs/guide/README.md`](docs/guide/README.md): the guide, from a requirement to a program, on the rental of
-  bikes. Read it first. Its pages by topic, on children, the outbox, schemas that change, Effect Cluster and the
-  operator's calls, are read when a program needs them.
+  bikes. Read it first. Its pages by topic, on children, the outbox, schemas that change and the operator's
+  calls, are read when a program needs them.
 - [`docs/concepts.md`](docs/concepts.md): the pieces of a program, what each call answers, and the life of an
   entity, on one page.
 - [`docs/design.md`](docs/design.md): the specification. It says what each piece of a program does, how the runtime

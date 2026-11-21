@@ -9,7 +9,7 @@
  *   the modules of `src/` and of Effect that it imports (decision 0192), nor does `src/index.program.ts`, the entry
  *   a browser imports it through (decision 0193);
  * - `src/index.ts`, the main entry, reaches through `src/` neither Effect's Cluster nor the modules of a test, which
- *   the entries `index.cluster.ts` and `index.testing.ts` give (decision 0193);
+ *   the entry `index.testing.ts` gives (decision 0193);
  * - a count, a name the module both raises and lowers, is raised in the acquisition and lowered in the release of one
  *   `Effect.acquireUseRelease`, whose raise no interruption splits from its lowering (decision 0163);
  * - a module of a group, a folder of `src/` beside a module of its name, is imported only by that module and by the
@@ -23,15 +23,13 @@
  * A fork that must keep the transaction is preceded by a line comment that says `Keeps the transaction:` and why,
  * and still passes the option, which no comment excuses. A
  * count that one fiber raises and another lowers is preceded, at each raise and lowering, by a line comment that says
- * `Raised and lowered by two fibers:` and why. It is a test, so that `bun test` runs it, and a mutation that writes
- * the other form of a rule is killed by the suite in `scripts/mutate.ts`, which copies `src/`.
+ * `Raised and lowered by two fibers:` and why. It is a test, so that `bun test` runs it.
  */
 import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, posix, relative, sep } from 'node:path'
 import type { Returned } from './index.program.ts'
-import { pins } from './runtime.test_pins.ts'
 
 /** `text` with what is not code as spaces: comments, strings, regular expressions, and the text of templates. */
 export const codeOf = (text: string): string => {
@@ -330,7 +328,6 @@ const each = (check: (text: string) => ReadonlyArray<string>) =>
 describe('the form of src', () => {
   test('every fork of src runs without the transaction of the fiber that forks it, and can be interrupted', () => {
     expect(modules).toContain('runtime.ts')
-    expect(modules).toContain('runtime/loop.ts')
     expect(each(forksAmiss)).toEqual([])
   })
 
@@ -358,7 +355,7 @@ describe('the form of src', () => {
     expect(found.map((line) => relative(import.meta.dir, line))).toEqual([])
   })
   test('src/index.ts reaches neither Cluster nor the modules of a test, through src', () => {
-    const apart = ['cluster.ts', 'rehearse.ts', 'testing.ts', 'index.cluster.ts', 'index.testing.ts']
+    const apart = ['rehearse.ts', 'testing.ts', 'index.testing.ts']
       .map((file) => join(import.meta.dir, file))
     const found = platformModulesReached(
       join(import.meta.dir, 'index.ts'),
@@ -383,7 +380,7 @@ describe('the form of src', () => {
   })
   // The library's tests run on its own programs, in `src/fixtures/`, so that a change of an example breaks none.
   test('a module of a group of src is imported only by the entry of the group and by the files of its folder', () => {
-    expect(modules).toContain('runtime/process.ts')
+    expect(modules).toContain('storage/entities.ts')
     const texts = new Map(filesOfSrc.map((file) => [file, readFileSync(join(import.meta.dir, file), 'utf8')]))
     expect(groupsCrossed(texts)).toEqual([])
   })
@@ -487,9 +484,8 @@ type Workflow = Readonly<Record<string, unknown>>
 /**
  * What the workflow `ci.yml` does not keep, given as parsed (decisions 0242, 0250, 0254). It runs on every push and
  * pull request, and by hand. The jobs `test` and `release` run `bun test` and `bun run test:release`, each divided by
- * its matrix into every shard. The jobs `spikes`, `slow` and `postgres` run `bun run test:spikes`,
- * `bun run test:slow`, and `bun run test:postgres` with the spike of the full volume, and the job `pins` runs
- * `bun run test:pins`. The job `check` runs no test.
+ * its matrix into every shard. The jobs `spikes` and `postgres` run `bun run test:spikes` and
+ * `bun run test:postgres`. The job `check` runs no test.
  * Every key the workflow holds is one of `keysRead`, and a job's `if` is the one `conditions` gives it.
  */
 export const workflowRefused = (workflow: Workflow): ReadonlyArray<string> => {
@@ -519,7 +515,7 @@ export const workflowRefused = (workflow: Workflow): ReadonlyArray<string> => {
     keys(`${name}.strategy.matrix`, strategy['matrix'], keysRead.matrix)
     steps(name).forEach((step, at) => keys(`${name}.steps[${at}]`, step, keysRead.step))
   }
-  for (const name of [...Object.keys(conditions), 'test', 'check', 'spikes', 'slow', 'pins', 'postgres']) {
+  for (const name of [...Object.keys(conditions), 'test', 'check', 'spikes', 'postgres']) {
     if (!(name in jobs)) found.push(`${name}: missing`)
   }
   const divided = (name: string, command: string) => {
@@ -538,9 +534,7 @@ export const workflowRefused = (workflow: Workflow): ReadonlyArray<string> => {
     for (const command of commands) if (!runs(name).includes(command)) found.push(`${name}: does not run ${command}`)
   }
   ran('spikes', ['bun run test:spikes'])
-  ran('slow', ['bun run test:slow'])
-  ran('pins', ['bun run test:pins'])
-  ran('postgres', ['bun run test:postgres', "bun test '--path-ignore-patterns=node_modules/**' ./spikes/full-volume.test.ts"])
+  ran('postgres', ['bun run test:postgres'])
   for (const run of runs('check')) if (run.includes('test')) found.push(`check: runs ${run}`)
   return found
 }
@@ -588,34 +582,6 @@ export const postgresMissed = (texts: ReadonlyMap<string, string>, command: stri
   return [...texts.keys()].filter((file) => runByBunTest(file) && reached(file) && !runs(file)).sort()
 }
 
-/** A pin of `src/runtime.test_pins.ts`, as the check of the pins reads it. */
-type Pinned = Readonly<{ id: string; test: string; name: string }>
-
-/**
- * The explored tests that pin a seed or a deviation and have no pin, and the pins that name no test that pins one,
- * given the text of each file of the tests by its path from the root (decision 0254). A test is a call of `test` that
- * begins a line after its indentation, inside a `describe` too. It is explored where a line of its body begins with
- * a call of `explored`, so that the samples of a test of this check, written in strings, are not read as tests. It
- * pins one where its body holds `pinned: [` followed by a value.
- */
-export const pinsUnmatched = (texts: ReadonlyMap<string, string>, pins: ReadonlyArray<Pinned>): ReadonlyArray<string> => {
-  const pinning = [...texts].flatMap(([file, text]) =>
-    text.split(/^(?=[ \t]*test\()/m).flatMap((body) => {
-      const quoted = /^[ \t]*test\((?:'([^']*)'|"([^"]*)"|`([^`]*)`)/.exec(body)
-      const name = quoted?.[1] ?? quoted?.[2] ?? quoted?.[3]
-      return name !== undefined && /^[ \t]*explored\(/m.test(body) && /\bpinned: \[\s*[^\]\s]/.test(body)
-        ? [{ file, name }]
-        : []
-    })
-  )
-  return [
-    ...pinning.filter(({ file, name }) => !pins.some((pin) => pin.test === file && pin.name === name))
-      .map(({ file, name }) => `${file}: ${name}: no pin`),
-    ...pins.filter((pin) => !pinning.some(({ file, name }) => pin.test === file && pin.name === name))
-      .map((pin) => `${pin.id}: no test of ${pin.test} pins under that name`),
-  ]
-}
-
 const workflowOfTheRepository = () =>
   Bun.YAML.parse(readFileSync(join(import.meta.dir, '..', '.github', 'workflows', 'ci.yml'), 'utf8')) as Workflow
 
@@ -643,28 +609,18 @@ describe('the form of the workflow', () => {
     expect(postgresMissed(texts, scripts['test:postgres']!)).toEqual([])
   })
 
-  test('every explored test that pins a seed has a pin that runs it against its rule, and every pin such a test', () => {
-    const root = join(import.meta.dir, '..')
-    const texts = new Map(filesOfSrc.filter((file) => file.endsWith('.test.ts'))
-      .map((file) => [`src/${file}`, readFileSync(join(root, 'src', file), 'utf8')] as const))
-    expect(pins.length).toBeGreaterThan(1)
-    expect(pinsUnmatched(texts, pins)).toEqual([])
-  })
-
   test('every package of Effect is pinned at the version of effect', () => {
     const manifest = JSON.parse(readFileSync(join(import.meta.dir, '..', 'package.json'), 'utf8')) as Manifest
     expect(Object.keys(manifest.devDependencies ?? {})).toContain('@effect/sql-pg')
     expect(effectPackagesApart(manifest)).toEqual([])
   })
 
-  // `bun test` runs no spike, and skips the tests over two seconds on a clock that is real, so jobs of their own run
-  // them (decision 0250).
-  test('the scripts the jobs run take every spike, and every test on a clock that is real, which bun test leaves out', () => {
+  // `bun test` runs no spike, so a job of its own runs them (decision 0250).
+  test('the script the job of the spikes runs takes every spike, which bun test leaves out', () => {
     const root = join(import.meta.dir, '..')
     const scripts = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts: Record<string, string> })
       .scripts
     expect(scripts['test:spikes']).toBe("bun test '--path-ignore-patterns=node_modules/**' ./spikes")
-    expect(scripts['test:slow']).toBe('SCHEDULES=all bun test src/cluster.test.ts examples/server/server.test.ts')
     expect(readFileSync(join(root, 'bunfig.toml'), 'utf8')).toContain('pathIgnorePatterns = ["spikes/**"]')
   })
 })
@@ -761,45 +717,6 @@ describe('the check of the form', () => {
     }
   })
 
-  test('an explored test that pins a seed with no pin, and a pin with no such test, are found', () => {
-    const texts = new Map([
-      ['src/a.test.ts', [
-        "test('one', () => {",
-        '  explored(() => run, ended, { open: false, pinned: [661] })',
-        '})',
-        "test('two', () => {",
-        '  explored(() => run, ended, { pinned: [] })',
-        '})',
-        'test("three\'s", () => {',
-        '  explored(() => run, ended, { bound: 1, pinned: [{ decision: 3, choice: 1 }] })',
-        '})',
-        "test('four', () => {",
-        '  // pinned: [7], in a comment of a test that explores nothing',
-        '})',
-        "describe('five', () => {",
-        "  test('six', () => {",
-        '    explored(() => run, ended, { pinned: [0] })',
-        '  })',
-        '})',
-      ].join('\n')],
-    ])
-    expect(pinsUnmatched(texts, [])).toEqual([
-      'src/a.test.ts: one: no pin',
-      "src/a.test.ts: three's: no pin",
-      'src/a.test.ts: six: no pin',
-    ])
-    expect(pinsUnmatched(texts, [
-      { id: '1', test: 'src/a.test.ts', name: 'one' },
-      { id: '2', test: 'src/a.test.ts', name: 'two' },
-      { id: '3', test: 'src/b.test.ts', name: "three's" },
-    ])).toEqual([
-      "src/a.test.ts: three's: no pin",
-      'src/a.test.ts: six: no pin',
-      '2: no test of src/a.test.ts pins under that name',
-      '3: no test of src/b.test.ts pins under that name',
-    ])
-  })
-
   test('a file of the tests that reaches the databases and that the run does not take is found', () => {
     const texts = new Map([
       ['src/storage.test_databases.ts', ''],
@@ -840,11 +757,11 @@ describe('the check of the form', () => {
     expect(changed(() => {})).toEqual([])
     expect(changed((w) => w.jobs.test.if = 'false')).toEqual(['test: if false'])
     expect(changed((w) => w.jobs.release.if = 'false')).toEqual(['release: if false'])
-    expect(changed((w) => w.jobs.slow['continue-on-error'] = true)).toEqual(['slow: continue-on-error'])
+    expect(changed((w) => w.jobs.spikes['continue-on-error'] = true)).toEqual(['spikes: continue-on-error'])
     expect(changed((w) => w.jobs.test.strategy.matrix.exclude = [{ shard: 4 }])).toEqual(['test.strategy.matrix: exclude'])
     expect(changed((w) => w.jobs.release.strategy.matrix.include = [{ shard: 5 }]))
       .toEqual(['release.strategy.matrix: include'])
-    expect(changed((w) => w.jobs.postgres.steps.at(-1).if = 'false')).toEqual(['postgres.steps[5]: if'])
+    expect(changed((w) => w.jobs.postgres.steps.at(-1).if = 'false')).toEqual(['postgres.steps[3]: if'])
     expect(changed((w) => w.jobs.spikes.steps.at(-1)['continue-on-error'] = true)).toEqual(['spikes.steps[3]: continue-on-error'])
     expect(changed((w) => w.on.push = { branches: ['main'] })).toEqual(['on.push: filtered'])
     expect(changed((w) => delete w.on.pull_request)).toEqual(['on: push, workflow_dispatch'])
@@ -853,7 +770,7 @@ describe('the check of the form', () => {
       .toEqual(['test: runs ["bun test --shard=${{ matrix.shard }}/3"]'])
     expect(changed((w) => w.jobs.spikes.steps.at(-1).run = 'bun run test:spikes || true'))
       .toEqual(['spikes: does not run bun run test:spikes'])
-    expect(changed((w) => delete w.jobs.slow)).toEqual(['slow: missing', 'slow: does not run bun run test:slow'])
+    expect(changed((w) => delete w.jobs.spikes)).toEqual(['spikes: missing', 'spikes: does not run bun run test:spikes'])
     expect(changed((w) => w.jobs.check.steps.push({ run: 'bun test' }))).toEqual(['check: runs bun test'])
   })
 
