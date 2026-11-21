@@ -715,8 +715,11 @@ family gets a fix of its own.
     2026-11-21, and passed in 0.5 s in the run of `dabeb35` and in a run of `0fbff80` again. It timed out in the run
     of `6f90cd5`, the only test of the job to fail, and passed when the job ran again. The commits between
     change no code it runs, and the other tests of the file take milliseconds. The cause is not known. The first
-    database the job makes on the server, or the first connection of its pool, is the first place to look. The fix
-    begins with a run that logs where the test waits.
+    database the job makes on the server, or the first connection of its pool, is the first place to look. It timed
+    out again in the run of `71ea59c`, and once more when the job ran again. The suspect is the first
+    `CREATE DATABASE` of a fresh server, which copies the template through the WAL. `src/storage.test_databases.ts`
+    now makes a first database in a hook with a timeout of its own, and logs how long it took. The bug is fixed once
+    that line shows seconds and the test passes in the runs after it.
 114. **Noticed: the waker never reads the entities whose time `due` refuses.** The doc comment of `Due.refused`, in
     `src/storage/entities.ts`, says the waker tries each again after `retry`. `waking` of `src/runtime.ts` reads
     `ready` and `next` alone, and sleeps until `next`. So a refused row is neither logged nor read again before

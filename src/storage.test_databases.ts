@@ -68,6 +68,18 @@ export const database = (url: string): Effect.Effect<string, never, Scope.Scope>
     )
   })
 
+// The first database a fresh server makes may take seconds, which bug 113 of docs/bugs.md suspects. A test that made it
+// would spend its own timeout on it, so every file that imports this module makes one first, in a hook with a timeout
+// of its own, as for PGlite. The line it logs says how long it took.
+if (server !== undefined) {
+  const url = server
+  beforeAll(async () => {
+    const started = performance.now()
+    await Effect.runPromise(Effect.scoped(database(url)))
+    console.log(`the first database on the server took ${Math.round(performance.now() - started)} ms`)
+  }, 60_000)
+}
+
 /** A pool of connections to the database at `url`, with the options of `PgClient` given. */
 export const pool = (url: string, options: Omit<PgClient.PgPoolConfig, 'url'> = {}) =>
   PgClient.layer({ ...options, url: Redacted.make(url) }).pipe(Layer.orDie)
