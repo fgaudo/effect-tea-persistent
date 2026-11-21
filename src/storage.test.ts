@@ -1242,17 +1242,17 @@ test('a query pages past, and finds by its value, a row whose index is an intege
         .toEqual({ id: 'c', projection: '1152921504606847000', indexes: { rank: 2 ** 60 } })
     }).pipe(Effect.orDie)))
 
-// The warning of a large step counts the projection it writes in the outbox, and the outbox is the deploy's choice.
-test('a step counts the projection it writes in the outbox, and writes none without the outbox', () =>
+// The outbox is the deploy's choice.
+test('a step writes its row of the outbox only where the storage keeps the outbox', () =>
   database((sql) =>
     Effect.gen(function*() {
       const step = written({ published: { kind: 'Inbound', message: 'm', projection: 'projected' } })
       const kept = storage(receiver, sql, true)
       yield* kept.write('a', created(), 0)
-      expect(yield* kept.write('a', step, 0)).toBe(JSON.stringify('projected').length)
+      yield* kept.write('a', step, 0)
       const unkept = storage(receiver, sql)
       yield* unkept.write('b', created(), 0)
-      expect(yield* unkept.write('b', step, 0)).toBe(0)
+      yield* unkept.write('b', step, 0)
       const rows = yield* sql<{ id: string }>`SELECT id FROM effecttea_outbox ORDER BY id`
       expect(rows.map(({ id }) => id)).toEqual(['a'])
     }).pipe(Effect.orDie)))

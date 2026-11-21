@@ -98,8 +98,6 @@ export type Operated =
 /** How long a caller's reply is kept from the step that answers: `millis`, a non-negative integer, or `'forever'`. */
 export type Keep = Readonly<{ millis: number }> | 'forever'
 
-export { type Suspended, type Waiting } from './storage.ts'
-
 /**
  * A point of an event's transaction where a test stops the process, to see what a crash there leaves. `Recorded` is
  * inside the transaction, after an event queued a message and before the message is handled. `BeforeCommit` is at
@@ -447,17 +445,12 @@ const operating = <T extends Types>(
   const recorded = Effect.flatMap(
     Effect.exit(Effect.provideService(ran, Entities, sending)),
     (exit): Effect.Effect<unknown> =>
-      Exit.isSuccess(exit)
-        ? persisting(
-          p,
-          inEntity(p, d, id, (tx) => tx.apply({ _tag: 'Complete', key, incarnation, message: exit.value })),
-        )
-        : Cause.hasInterruptsOnly(exit.cause)
+      Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)
         ? Effect.void
-        : persisting(
-          p,
-          inEntity(p, d, id, (tx) => tx.apply({ _tag: 'Die', key, incarnation, cause: Cause.squash(exit.cause) })),
-        ),
+        : persisting(p, inEntity(p, d, id, (tx) =>
+          tx.apply(Exit.isSuccess(exit)
+            ? { _tag: 'Complete', key, incarnation, message: exit.value }
+            : { _tag: 'Die', key, incarnation, cause: Cause.squash(exit.cause) }))),
   )
   return d.provide(Effect.asVoid(recorded) as Effect.Effect<void, never, T['services']>).pipe(
     Effect.ensuring(Effect.sync(() => {
@@ -757,11 +750,15 @@ const checked = <A>(
     },
   )
 
+/** Whether `millis` is an integer of milliseconds of at least `least`. */
+const isMillis = (millis: unknown, least: number): millis is number =>
+  typeof millis === 'number' && Number.isSafeInteger(millis) && millis >= least
+
 /** The time a caller's reply is kept, in milliseconds, or undefined for ever. Anything else is the caller's defect. */
 const keptFor = (keep: Keep): number | undefined => {
   if (keep === 'forever') return undefined
   const millis = (keep as { millis?: unknown } | null | undefined)?.millis
-  if (typeof millis === 'number' && Number.isSafeInteger(millis) && millis >= 0) return millis
+  if (isMillis(millis, 0)) return millis
   throw new InvariantDefect({ reason: `the reply is kept ${JSON.stringify(keep)}, which is no non-negative integer of milliseconds` })
 }
 
@@ -772,15 +769,12 @@ const keptFor = (keep: Keep): number | undefined => {
 export const launch = (options: Options = {}): Effect.Effect<Runtime, never, SqlClient.SqlClient | Scope.Scope> =>
   Effect.gen(function*() {
     const retry = options.retry?.millis ?? 50
-    if (!Number.isSafeInteger(retry) || retry <= 0) {
+    if (!isMillis(retry, 1)) {
       return yield* Effect.die(new InvariantDefect({ reason: `the retry is ${retry} milliseconds, and it is a positive integer` }))
     }
     // Only a sweep left out is the default: a `null` from JavaScript is refused.
     const sweep = options.sweep === undefined ? { millis: 300_000 } : options.sweep
-    if (
-      sweep !== 'none' &&
-      !(typeof sweep === 'object' && sweep !== null && Number.isSafeInteger(sweep.millis) && sweep.millis > 0)
-    ) {
+    if (sweep !== 'none' && !(typeof sweep === 'object' && sweep !== null && isMillis(sweep.millis, 1))) {
       const reason = `the sweep is ${JSON.stringify(sweep)}, which is neither 'none' nor a positive integer of millis`
       return yield* Effect.die(new InvariantDefect({ reason }))
     }

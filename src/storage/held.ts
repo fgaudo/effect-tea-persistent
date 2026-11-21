@@ -19,7 +19,7 @@ import {
   versionOf,
 } from '../program.ts'
 import { type Guard, json, reasonOf, Suspended, unguarded, workOf } from './rows.ts'
-import { dialectOf } from './tables.ts'
+import { dialectOf, transaction } from './tables.ts'
 
 /** What the storage of one program holds, as `heldOf` makes it. */
 export type Held<T extends Types> = ReturnType<typeof heldOf<T>>
@@ -125,12 +125,7 @@ export const heldOf = <T extends Types>(program: Program<T>, sql: SqlClient.SqlC
    * first (decision 0157). The level is read where the transaction is the outermost: inside a transaction the caller
    * left open, the statements read at the caller's level (decision 0158).
    */
-  const snapshot = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    sql.withTransaction(effect).pipe(
-      dialect === 'pg'
-        ? Effect.provideService(SqlClient.BeginTransaction, 'BEGIN ISOLATION LEVEL REPEATABLE READ')
-        : (self) => self,
-    )
+  const snapshot = <A, E, R>(effect: Effect.Effect<A, E, R>) => transaction(sql, effect, 'REPEATABLE READ')
 
   /**
    * The clause that locks the rows a statement reads its condition from, on PostgreSQL. A statement that writes or
@@ -152,11 +147,10 @@ export const heldOf = <T extends Types>(program: Program<T>, sql: SqlClient.SqlC
     name,
     version,
     dialect,
-    codecs: { state, inbound, internal, flags, request, work, reason, suspended, projection },
+    codecs: { state, inbound, internal, request, reason, suspended, projection },
     upsert,
     rows,
     up,
-    upWork,
     upRequest,
     upReason,
     readWork,

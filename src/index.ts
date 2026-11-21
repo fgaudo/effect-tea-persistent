@@ -16,8 +16,6 @@ export {
   type Operated,
   type Options,
   type Runtime,
-  type Suspended,
-  type Waiting,
 } from './runtime.ts'
 export {
   type After,
@@ -27,5 +25,7 @@ export {
   type Found,
   type Query,
   type Reindexed,
+  type Suspended,
   type Suspension,
+  type Waiting,
 } from './storage.ts'

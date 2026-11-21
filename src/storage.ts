@@ -20,14 +20,7 @@ import { type Due, entitiesOf, type Examined, type Inspection, type Suspended } 
 import { heldOf } from './storage/held.ts'
 import { type Found, projectionsOf, type Query, type Reindexed } from './storage/projections.ts'
 
-export {
-  type Due,
-  type Examined,
-  type Inspection,
-  type Suspended,
-  type Suspension,
-  type Waiting,
-} from './storage/entities.ts'
+export { type Suspended, type Suspension, type Waiting } from './storage/entities.ts'
 export { batch } from './storage/rows.ts'
 export { type After, type Comparison, type Criterion, type Found, type Query, type Reindexed } from './storage/projections.ts'
 export { createTables, type Dialect, dialectOf, migrate, tablesMade, transaction } from './storage/tables.ts'
@@ -76,10 +69,9 @@ export interface Storage<T extends Types> {
    * Writes what an event wrote, as the machine encoded it (decision 0057). The caller wraps it in the transaction
    * of the event (decision 0007). `at` is the time of the event, in milliseconds: the time the entity suspended,
    * where the event suspends it (decision 0114). It writes the step's row of the outbox where the storage was made
-   * with the outbox. It gives how many characters it wrote of the state and of the projection, in the read model
-   * and in the outbox.
+   * with the outbox.
    */
-  readonly write: (id: string, written: Machine.Written, at: number) => Effect.Effect<number>
+  readonly write: (id: string, written: Machine.Written, at: number) => Effect.Effect<void>
   /**
    * The entities whose state holds an operation, or whose mailbox holds a message: what a process activates when
    * it starts, without waiting for a caller. So an operation a crash interrupted runs again, and a message a

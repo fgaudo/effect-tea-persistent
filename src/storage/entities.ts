@@ -12,7 +12,7 @@ import type { Address, Json, Key, Request, Types } from '../program.ts'
 import type { Storage } from '../storage.ts'
 import type { Held } from './held.ts'
 import { rowOf } from './projections.ts'
-import { batch, callerOf, Count, type Guard, keyOfRow, keyRow, reasonOf, Rows, unguarded } from './rows.ts'
+import { batch, callerOf, type Guard, keyOfRow, keyRow, reasonOf, Rows, unguarded } from './rows.ts'
 import { transaction } from './tables.ts'
 
 /**
@@ -30,7 +30,6 @@ export type Suspension = Readonly<{
   since: DateTime.Utc
 }>
 
-/** What is stored of one entity, as an operator sees it: the suspension as `suspended` lists it (decision 0185). */
 /**
  * An operation of another entity whose `send` waits for the entity's resumption: its run, and the name it sent
  * under (decisions 0114, 0265).
@@ -93,9 +92,17 @@ export const entitiesOf = <T extends Types>(held: Held<T>, outbox: boolean): Pic
 > => {
   const { program, sql, name, version, upsert, rows, up, upRequest, upReason, readWork, snapshot } = held
   const { lockingTheConditionSkipping, dialect } = held
-  const { state, inbound, internal, flags, request, reason, suspended } = held.codecs
+  const { state, inbound, internal, request, reason, suspended } = held.codecs
   const row = rowOf(held)
   const encodeReason = Schema.encodeSync(reasonOf(program.schemas.rejection))
+
+  /** The condition that the work `asker` names has ended: its key holds no longer the incarnation that asked. */
+  const endedWork = (asker: Readonly<Record<'name' | 'id' | 'key' | 'parameter' | 'incarnation', unknown>>) =>
+    sql`NOT EXISTS (
+      SELECT 1 FROM effecttea_entity_keys AS asking
+      WHERE asking.name = ${asker.name} AND asking.id = ${asker.id} AND asking.key = ${asker.key}
+        AND asking.parameter = ${asker.parameter} AND asking.incarnation = ${asker.incarnation}
+    )`
 
   /**
    * The entity's rows, read through the migrations, and its cause and the time it suspended, if it is. What the
@@ -206,6 +213,10 @@ export const entitiesOf = <T extends Types>(held: Held<T>, outbox: boolean): Pic
       Effect.orDie,
     )
 
+  /** The reason a stored rejection carries, read through the migrations of the version that stored it. */
+  const reasonIn = (held: Readonly<{ reason: string | null; version: number }>) =>
+    held.reason === null ? null : reason.read(held.reason, upReason(held.version))
+
   const entities = (after: string) =>
     rows('effecttea_entities', Rows.listed)(sql`
       SELECT id, CASE WHEN suspended_on IS NULL THEN 0 ELSE 1 END AS suspended FROM effecttea_entities
@@ -224,10 +235,7 @@ export const entitiesOf = <T extends Types>(held: Held<T>, outbox: boolean): Pic
       if (Machine.requestKey(program, request.read(held.request, upRequest(held.version))) !== key) continue
       const reply = held.tag === 'Accepted'
         ? { _tag: 'Accepted' } as const
-        : {
-          _tag: 'Rejected',
-          reason: held.reason === null ? null : reason.read(held.reason, upReason(held.version)),
-        } as const
+        : { _tag: 'Rejected', reason: reasonIn(held) } as const
       // What the request carried is read through the migrations, and not decoded, as the creation's flags are
       // (decision 0269).
       const carried = held.carried === null ? null : up('inbound', held.version)(JSON.parse(held.carried) as Json)
@@ -273,10 +281,7 @@ export const entitiesOf = <T extends Types>(held: Held<T>, outbox: boolean): Pic
       if (held === undefined) return null
       return held.tag === 'NotFound'
         ? { _tag: 'NotFound' } as const
-        : {
-          _tag: 'Rejected',
-          reason: held.reason === null ? null : reason.read(held.reason, upReason(held.version)),
-        } as const
+        : { _tag: 'Rejected', reason: reasonIn(held) } as const
     }).pipe(Effect.orDie)
 
   // Written in the caller's transaction. The answer of work that already ended goes as it is written, as a reply
@@ -307,11 +312,7 @@ export const entitiesOf = <T extends Types>(held: Held<T>, outbox: boolean): Pic
       yield* sql`
         DELETE FROM effecttea_answers
         WHERE name = ${name} AND id = ${id} AND request = ${request} AND kind = ${kind}
-          AND NOT EXISTS (
-            SELECT 1 FROM effecttea_entity_keys AS asking
-            WHERE asking.name = ${asked.entity.name} AND asking.id = ${asked.entity.id} AND asking.key = ${asking.key}
-              AND asking.parameter = ${asking.parameter} AND asking.incarnation = ${asked.incarnation}
-          )
+          AND ${endedWork({ ...asked.entity, ...asking, incarnation: asked.incarnation })}
       `
     }).pipe(Effect.orDie)
 
@@ -319,7 +320,6 @@ export const entitiesOf = <T extends Types>(held: Held<T>, outbox: boolean): Pic
     Effect.gen(function*() {
       const { entity, suspension } = written
       const state = entity === null ? null : JSON.stringify(entity.state)
-      let characters = state?.length ?? 0
       const on = suspension === null ? null : JSON.stringify(suspension.on)
       const cause = suspension === null ? null : suspension.cause
       if (written.created) {
@@ -339,34 +339,22 @@ export const entitiesOf = <T extends Types>(held: Held<T>, outbox: boolean): Pic
             steps: 1,
           })
         }`
-      } else if (entity !== null) {
+      } else {
         // The request that created the entity is written with the state, at the version that reads both. The time
         // of the suspension is the first step's that suspended the entity, kept while it stays suspended (decision
         // 0114).
+        const changed = entity === null ? sql`` : sql`
+          state = ${state}, version = ${version},
+          creation = ${JSON.stringify(entity.creation)}, flags = ${JSON.stringify(entity.flags)},`
         yield* sql`
           UPDATE effecttea_entities
-          SET state = ${state}, version = ${version},
-              creation = ${JSON.stringify(entity.creation)}, flags = ${JSON.stringify(entity.flags)},
-              incarnations = ${written.incarnations},
-              suspended_on = ${on}, suspended_cause = ${cause},
-              suspended_at = CASE WHEN CAST(${on} AS TEXT) IS NULL THEN NULL WHEN suspended_at IS NULL THEN ${at} ELSE suspended_at END,
-              steps = steps + 1
-          WHERE name = ${name} AND id = ${id}
-        `
-      } else {
-        yield* sql`
-          UPDATE effecttea_entities
-          SET incarnations = ${written.incarnations}, suspended_on = ${on}, suspended_cause = ${cause},
+          SET ${changed} incarnations = ${written.incarnations}, suspended_on = ${on}, suspended_cause = ${cause},
               suspended_at = CASE WHEN CAST(${on} AS TEXT) IS NULL THEN NULL WHEN suspended_at IS NULL THEN ${at} ELSE suspended_at END,
               steps = steps + 1
           WHERE name = ${name} AND id = ${id}
         `
       }
-      if (written.shown !== null) {
-        const projection = JSON.stringify(written.shown.projection)
-        characters += projection.length
-        yield* row(id, written.shown, projection)
-      }
+      if (written.shown !== null) yield* row(id, written.shown)
       for (const held of written.keys) {
         yield* upsert('effecttea_entity_keys', ['name', 'id', 'key', 'parameter'], {
           name,
@@ -400,34 +388,23 @@ export const entitiesOf = <T extends Types>(held: Held<T>, outbox: boolean): Pic
         const first = (last[0]?.seq ?? -1) + 1
         for (const [at, envelope] of written.queued.entries()) {
           yield* sql`INSERT INTO effecttea_mailbox ${
-            sql.insert(
-              envelope._tag === 'Inbound'
+            sql.insert({
+              name,
+              id,
+              seq: first + at,
+              tag: envelope._tag,
+              version,
+              message: JSON.stringify(envelope.message),
+              ...(envelope._tag === 'Inbound'
                 ? {
-                  name,
-                  id,
-                  seq: first + at,
-                  tag: 'Inbound',
-                  version,
-                  message: JSON.stringify(envelope.message),
                   request: JSON.stringify(envelope.request),
                   keep: envelope.keep,
                   key: null,
                   parameter: null,
                   incarnation: null,
                 }
-                : {
-                  name,
-                  id,
-                  seq: first + at,
-                  tag: 'Internal',
-                  version,
-                  message: JSON.stringify(envelope.message),
-                  request: null,
-                  keep: null,
-                  ...keyRow(envelope.key),
-                  incarnation: envelope.incarnation,
-                },
-            )
+                : { request: null, keep: null, ...keyRow(envelope.key), incarnation: envelope.incarnation }),
+            })
           }`
         }
       }
@@ -460,25 +437,18 @@ export const entitiesOf = <T extends Types>(held: Held<T>, outbox: boolean): Pic
         yield* sql`
           DELETE FROM effecttea_replies
           WHERE name = ${name} AND id = ${id} AND request = ${reply.request} AND version = ${version}
-            AND NOT EXISTS (
-              SELECT 1 FROM effecttea_entity_keys AS asking
-              WHERE asking.name = ${asked.name} AND asking.id = ${asked.id} AND asking.key = ${asking.key}
-                AND asking.parameter = ${asking.parameter} AND asking.incarnation = ${asked.incarnation}
-            )
+            AND ${endedWork({ ...asked, ...asking })}
         `
       }
       for (const { key, incarnation } of written.ended) {
         const ended = keyRow(key)
-        yield* sql`
-          DELETE FROM effecttea_replies
-          WHERE sender_name = ${name} AND sender_id = ${id} AND sender_key = ${ended.key}
-            AND sender_parameter = ${ended.parameter} AND sender_incarnation = ${incarnation}
-        `
-        yield* sql`
-          DELETE FROM effecttea_answers
-          WHERE sender_name = ${name} AND sender_id = ${id} AND sender_key = ${ended.key}
-            AND sender_parameter = ${ended.parameter} AND sender_incarnation = ${incarnation}
-        `
+        for (const table of ['effecttea_replies', 'effecttea_answers']) {
+          yield* sql`
+            DELETE FROM ${sql(table)}
+            WHERE sender_name = ${name} AND sender_id = ${id} AND sender_key = ${ended.key}
+              AND sender_parameter = ${ended.parameter} AND sender_incarnation = ${incarnation}
+          `
+        }
       }
       // The step that takes the entity out of its suspension takes its waits with it, before the step's own are
       // written (decision 0265).
@@ -509,83 +479,84 @@ export const entitiesOf = <T extends Types>(held: Held<T>, outbox: boolean): Pic
       // The row of the outbox takes its `step` from the entity's row, which the step wrote first.
       if (outbox && written.published !== null) {
         const { kind, message } = written.published
-        const projection = JSON.stringify(written.published.projection)
-        characters += projection.length
         yield* sql`
           INSERT INTO effecttea_outbox (name, id, step, kind, version, written_at, message, projection)
-          SELECT name, id, steps, ${kind}, version, ${at}, ${message === null ? null : JSON.stringify(message)}, ${projection}
+          SELECT name, id, steps, ${kind}, version, ${at}, ${message === null ? null : JSON.stringify(message)},
+            ${JSON.stringify(written.published.projection)}
           FROM effecttea_entities WHERE name = ${name} AND id = ${id}
         `
       }
-      return characters
     }).pipe(Effect.orDie)
 
   // Each batch is a transaction of its own, so that a sweep holds SQLite's one writer for a batch at a time
-  // (decision 0245). A batch is read in the order of the times, by the
-  // index of each table by program and time. A batch locks the rows it selects and skips those a step holds, so that
-  // a reply a step wrote again with a new time is read again on the row committed (decision 0285). A batch may then
-  // give fewer rows than `batch` with rows left, so the sweep ends at a batch that deletes nothing.
-  const expire = (at: number) =>
+  // (decision 0245). A batch whose rows a step holds may delete fewer than `batch` with rows left, so the sweep ends
+  // at a batch that deletes nothing.
+  const untilEmpty = <E>(deleting: Effect.Effect<number, E>) =>
     Effect.gen(function*() {
       let count = 0
       while (true) {
-        const replies = yield* transaction(sql, Effect.gen(function*() {
-          const gone = yield* rows('effecttea_replies', Rows.id)(sql`
-            DELETE FROM effecttea_replies
-            WHERE name = ${name} AND (id, request, version) IN (
-              SELECT id, request, version FROM effecttea_replies
-              WHERE name = ${name} AND until IS NOT NULL AND until <= ${at}
-              ORDER BY until LIMIT ${batch} ${lockingTheConditionSkipping}
-            )
-            RETURNING id
-          `)
-          return gone.length
-        }))
-        count += replies
-        if (replies === 0) break
+        const deleted = yield* transaction(sql, deleting)
+        count += deleted
+        if (deleted === 0) return count
       }
-      return count + (yield* ended('effecttea_replies', ['id', 'request', 'version'], Rows.replyKey)) +
+    })
+
+  // A batch is read in the order of the times, by the index of each table by program and time. A batch locks the
+  // rows it selects and skips those a step holds, so that a reply a step wrote again with a new time is read again on
+  // the row committed (decision 0285).
+  const expire = (at: number) =>
+    Effect.gen(function*() {
+      const replies = yield* untilEmpty(Effect.map(
+        rows('effecttea_replies', Rows.id)(sql`
+          DELETE FROM effecttea_replies
+          WHERE name = ${name} AND (id, request, version) IN (
+            SELECT id, request, version FROM effecttea_replies
+            WHERE name = ${name} AND until IS NOT NULL AND until <= ${at}
+            ORDER BY until LIMIT ${batch} ${lockingTheConditionSkipping}
+          )
+          RETURNING id
+        `),
+        (gone) => gone.length,
+      ))
+      return replies + (yield* ended('effecttea_replies', ['id', 'request', 'version'], Rows.replyKey)) +
         (yield* ended('effecttea_answers', ['id', 'request', 'kind'], Rows.answerKey))
     }).pipe(Effect.orDie)
+
+  const kept = (column: string) => sql.literal(`kept.sender_${column}`)
+  const keptEnded = endedWork({
+    name: kept('name'),
+    id: kept('id'),
+    key: kept('key'),
+    parameter: kept('parameter'),
+    incarnation: kept('incarnation'),
+  })
 
   // The replies and the answers kept for work that has ended, which the asker's step did not see: on a pool its step
   // and the receiver's run at once, and each reads the other's row only once committed (decision 0289). A work that
   // ended never holds again, so a key absent from what is committed stays absent. The first statement locks a batch
   // and skips the rows a step holds. The second deletes them on the condition read again from its own snapshot, taken
   // once the rows are locked, so that a row whose sender was written again after the first snapshot is read as
-  // committed. The sweep ends at a batch that deletes nothing, since a batch whose rows another holds may delete fewer.
+  // committed.
   const ended = <K extends Readonly<{ id: string; request: string }>>(
     table: 'effecttea_replies' | 'effecttea_answers',
     keys: ReadonlyArray<string>,
     decode: (held: unknown) => Effect.Effect<ReadonlyArray<K>, Schema.SchemaError>,
   ) =>
-    Effect.gen(function*() {
-      const gone = sql`NOT EXISTS (
-        SELECT 1 FROM effecttea_entity_keys AS asking
-        WHERE asking.name = kept.sender_name AND asking.id = kept.sender_id AND asking.key = kept.sender_key
-          AND asking.parameter = kept.sender_parameter AND asking.incarnation = kept.sender_incarnation
-      )`
-      let count = 0
-      while (true) {
-        const deleted = yield* transaction(sql, Effect.gen(function*() {
-          const locked = yield* rows(table, decode)(sql`
-            SELECT ${sql.literal(keys.join(', '))} FROM ${sql(table)} AS kept
-            WHERE name = ${name} AND sender_name IS NOT NULL AND ${gone}
-            ORDER BY ${sql.literal(keys.join(', '))} LIMIT ${batch} ${lockingTheConditionSkipping}
-          `)
-          if (locked.length === 0) return 0
-          const these = sql.or(locked.map((row) =>
-            sql.and(keys.map((key) => sql`${sql(key)} = ${(row as Record<string, string | number>)[key]!}`))
-          ))
-          const removed = yield* sql`
-            DELETE FROM ${sql(table)} AS kept WHERE name = ${name} AND (${these}) AND ${gone} RETURNING 1 AS gone
-          `
-          return removed.length
-        }))
-        count += deleted
-        if (deleted === 0) return count
-      }
-    })
+    untilEmpty(Effect.gen(function*() {
+      const locked = yield* rows(table, decode)(sql`
+        SELECT ${sql.literal(keys.join(', '))} FROM ${sql(table)} AS kept
+        WHERE name = ${name} AND sender_name IS NOT NULL AND ${keptEnded}
+        ORDER BY ${sql.literal(keys.join(', '))} LIMIT ${batch} ${lockingTheConditionSkipping}
+      `)
+      if (locked.length === 0) return 0
+      const these = sql.or(locked.map((row) =>
+        sql.and(keys.map((key) => sql`${sql(key)} = ${(row as Record<string, string | number>)[key]!}`))
+      ))
+      const removed = yield* sql`
+        DELETE FROM ${sql(table)} AS kept WHERE name = ${name} AND (${these}) AND ${keptEnded} RETURNING 1 AS gone
+      `
+      return removed.length
+    }))
 
   /** The entities of the program an operator has to resume: nothing of theirs is handled, and no timer of theirs fires. */
   const onHold = sql`(SELECT id FROM effecttea_entities WHERE name = ${name} AND suspended_on IS NOT NULL)`
@@ -607,19 +578,11 @@ export const entitiesOf = <T extends Types>(held: Held<T>, outbox: boolean): Pic
     Effect.map(rows('effecttea_entity_keys', decode)(Effect.succeed([row])), (read) => read[0] as A)
   const due = (now: number) =>
     Effect.gen(function*() {
-      const ready: Array<string> = []
-      let after = ''
-      while (ready.length < batch) {
-        const page = yield* rows('effecttea_entity_keys', Rows.id)(sql`
-          SELECT DISTINCT id FROM effecttea_entity_keys
-          WHERE name = ${name} AND due IS NOT NULL AND due <= ${now}
-            AND id > ${after} AND id NOT IN ${onHold}
-          ORDER BY id LIMIT ${batch}
-        `)
-        for (const { id } of page) if (ready.length < batch) ready.push(id)
-        if (page.length < batch) break
-        after = page[page.length - 1]?.id ?? after
-      }
+      const ready = (yield* rows('effecttea_entity_keys', Rows.id)(sql`
+        SELECT DISTINCT id FROM effecttea_entity_keys
+        WHERE name = ${name} AND due IS NOT NULL AND due <= ${now} AND id NOT IN ${onHold}
+        ORDER BY id LIMIT ${batch}
+      `)).map(({ id }) => id)
       // The earliest time of an entity, read in the order of the times. A row whose time
       // is refused is its entity's alone: the entity is given back with the reason, and the reading goes on to the
       // next row, so that one row an operator wrote by hand stops no other entity's timer (decision 0259).

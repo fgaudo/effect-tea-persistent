@@ -26,21 +26,21 @@ export const dialectOf = (sql: SqlClient.SqlClient): Dialect => {
 }
 
 /**
- * Runs `effect` in a transaction of the runtime's, begun by `onSqlite` on SQLite where it is given. On PostgreSQL the
- * transaction begins at `READ COMMITTED` whatever level the role or the database sets by default. A step's first
- * statement waits for the lock of its entity, and at this level each statement after it reads what the transaction
- * that held the lock committed. At a higher level the step would read the snapshot taken before it waited, and its
- * write over a row the other transaction wrote would fail with `SerializationError`. A reading of one snapshot begins
- * its own transaction at `REPEATABLE READ` instead.
+ * Runs `effect` in a transaction of the runtime's. On PostgreSQL the transaction begins at `level` whatever level the
+ * role or the database sets by default. A step's first statement waits for the lock of its entity, and at
+ * `READ COMMITTED` each statement after it reads what the transaction that held the lock committed. At a higher level
+ * the step would read the snapshot taken before it waited, and its write over a row the other transaction wrote would
+ * fail with `SerializationError`. A reading of one snapshot begins its own transaction at `REPEATABLE READ` instead.
  */
 export const transaction = <A, E, R>(
   sql: SqlClient.SqlClient,
   effect: Effect.Effect<A, E, R>,
-  onSqlite?: string,
+  level: 'READ COMMITTED' | 'REPEATABLE READ' = 'READ COMMITTED',
 ): Effect.Effect<A, E | SqlError.SqlError, R> => {
-  const begin = dialectOf(sql) === 'pg' ? 'BEGIN ISOLATION LEVEL READ COMMITTED' : onSqlite
   const run = sql.withTransaction(effect)
-  return begin === undefined ? run : Effect.provideService(run, SqlClient.BeginTransaction, begin)
+  return dialectOf(sql) === 'pg'
+    ? Effect.provideService(run, SqlClient.BeginTransaction, `BEGIN ISOLATION LEVEL ${level}`)
+    : run
 }
 
 /**

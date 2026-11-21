@@ -110,6 +110,17 @@ export const keyOfRow = (name: string, parameter: string): Key =>
 const decoder = <S extends Schema.Top & { readonly DecodingServices: never }>(row: S) =>
   Schema.decodeUnknownEffect(Schema.Array(row))
 
+/** The columns of an entity's row that a suspension leaves as they are. */
+const entityRow = {
+  state: Schema.String,
+  version: Version,
+  creation: Schema.String,
+  flags: Schema.String,
+  incarnations: Count,
+}
+/** The columns of a reply's row whatever its tag. */
+const replyRow = { request: Schema.String, carried: Schema.NullOr(Schema.String), version: Version }
+
 /**
  * The rows of each table as the runtime writes them, which a reading takes through their schema. A row that is
  * none of them fails the call that meets it, as a row no version reads does (decisions 0043, 0062). The JSON a
@@ -118,26 +129,8 @@ const decoder = <S extends Schema.Top & { readonly DecodingServices: never }>(ro
 export const Rows = {
   /** A suspension's event and its cause are written together, or not at all. */
   entity: decoder(Schema.Union([
-    Schema.Struct({
-      state: Schema.String,
-      version: Version,
-      creation: Schema.String,
-      flags: Schema.String,
-      incarnations: Count,
-      suspended_on: Schema.Null,
-      suspended_cause: Schema.Null,
-      suspended_at: Schema.Null,
-    }),
-    Schema.Struct({
-      state: Schema.String,
-      version: Version,
-      creation: Schema.String,
-      flags: Schema.String,
-      incarnations: Count,
-      suspended_on: Schema.String,
-      suspended_cause: Schema.String,
-      suspended_at: Count,
-    }),
+    Schema.Struct({ ...entityRow, suspended_on: Schema.Null, suspended_cause: Schema.Null, suspended_at: Schema.Null }),
+    Schema.Struct({ ...entityRow, suspended_on: Schema.String, suspended_cause: Schema.String, suspended_at: Count }),
   ])),
   /** A suspended entity, with the tag of its mailbox's first message, if any (decision 0114). */
   suspended: decoder(Schema.Struct({
@@ -191,20 +184,8 @@ export const Rows = {
   ])),
   /** Only a rejection carries a reason, and null for a bare `reject` (decision 0010). */
   reply: decoder(Schema.Union([
-    Schema.Struct({
-      request: Schema.String,
-      carried: Schema.NullOr(Schema.String),
-      tag: Schema.Literal('Accepted'),
-      version: Version,
-      reason: Schema.Null,
-    }),
-    Schema.Struct({
-      request: Schema.String,
-      carried: Schema.NullOr(Schema.String),
-      tag: Schema.Literal('Rejected'),
-      version: Version,
-      reason: Schema.NullOr(Schema.String),
-    }),
+    Schema.Struct({ ...replyRow, tag: Schema.Literal('Accepted'), reason: Schema.Null }),
+    Schema.Struct({ ...replyRow, tag: Schema.Literal('Rejected'), reason: Schema.NullOr(Schema.String) }),
   ])),
   /** An answer an operation was given that no entity stores: a creation's `Rejected`, or `NotFound` (decision 0253). */
   answer: decoder(Schema.Union([

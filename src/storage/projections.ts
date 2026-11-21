@@ -110,13 +110,14 @@ const indexesText = (indexes: Machine.Shown['indexes']) =>
   }}`
 
 /** The row of the read model the machine computed of a state, written over the entity's (decision 0032). */
-export const rowOf = <T extends Types>(held: Held<T>) => {
-  const { name, version, upsert } = held
-  /** The row a query reads, as the machine computed it from a state (decision 0032). */
-  const row = (id: string, shown: Machine.Shown, projection: string = JSON.stringify(shown.projection)) =>
-    upsert('effecttea_projections', ['name', 'id'], { name, id, projection, indexes: indexesText(shown.indexes), version })
-  return row
-}
+export const rowOf = <T extends Types>({ name, version, upsert }: Held<T>) => (id: string, shown: Machine.Shown) =>
+  upsert('effecttea_projections', ['name', 'id'], {
+    name,
+    id,
+    projection: JSON.stringify(shown.projection),
+    indexes: indexesText(shown.indexes),
+    version,
+  })
 
 /** The part of the storage of one program that reads and writes its read model. */
 export const projectionsOf = <T extends Types>(held: Held<T>): Pick<
@@ -174,14 +175,10 @@ export const projectionsOf = <T extends Types>(held: Held<T>): Pick<
       // its cursor as a range (decision 0145). PostgreSQL takes an expression of an index in parentheses, and cuts a name past
       // 63 bytes, so the storage cuts a longer name itself, and ends it with a hash of the whole (decision 0157). Every
       // deploy makes the indexes its program declares, so an index is made only where it is missing (decision 0218).
-      if (dialect === 'pg') {
-        const on = `effecttea_projections (name, ${expressionsOf(index).join(', ')}, id)`
-        const named = quoted(indexName(`effecttea_projections ${name} ${index} by id`))
-        yield* sql.unsafe(`CREATE INDEX IF NOT EXISTS ${named} ON ${on}`)
-        continue
-      }
-      const on = `effecttea_projections (name, ${expressionsOf(index)[0]}, id)`
-      yield* sql.unsafe(`CREATE INDEX IF NOT EXISTS ${quoted(`effecttea_projections ${name} ${index} by id`)} ON ${on}`)
+      const whole = `effecttea_projections ${name} ${index} by id`
+      const named = quoted(dialect === 'pg' ? indexName(whole) : whole)
+      const on = `effecttea_projections (name, ${expressionsOf(index).join(', ')}, id)`
+      yield* sql.unsafe(`CREATE INDEX IF NOT EXISTS ${named} ON ${on}`)
     }
   }).pipe(Effect.orDie)
 
@@ -230,15 +227,10 @@ export const projectionsOf = <T extends Types>(held: Held<T>): Pick<
     if (typeof after !== 'object' || after === null) {
       throw new InvariantDefect({ reason: `the row after is ${String(after)}, which is no row` })
     }
-    if (typeof after.id !== 'string') {
-      throw new InvariantDefect({ reason: `the id after is ${String(after.id)}, which is no string` })
-    }
     // No row holds an id that is no text a database holds, and PostgreSQL takes no U+0000 in a parameter of text
     // (decision 0207).
-    if (!isText(after.id)) {
-      throw new InvariantDefect({
-        reason: `the id after is ${JSON.stringify(after.id)}, which is no text a database holds`,
-      })
+    if (typeof after.id !== 'string' || !isText(after.id)) {
+      throw new InvariantDefect({ reason: `the id after is ${shownValue(after.id)}, which is no text a database holds` })
     }
     if (index === undefined) return null
     const value: unknown = (after.indexes as Readonly<Record<string, unknown>> | undefined)?.[index]
@@ -336,7 +328,6 @@ export const projectionsOf = <T extends Types>(held: Held<T>): Pick<
     }).pipe(Effect.orDie)
 
   /**
-   * The value of each index of the program in a stored row  /**
    * The value of each index of the program in a stored row, as a query reads it: an index the row lacks, one a
    * later version added, is null, as `json_extract` gives it.
    */
