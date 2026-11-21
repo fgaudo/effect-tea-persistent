@@ -5,7 +5,8 @@
  * and it may forget one at no cost but an activation.
  *
  * It grows here beside the runtime of `src/runtime.ts`, and takes that file's place once step 4 of
- * `docs/roadmap.md` removes the old one. A reading of the storage that steps nothing, as `inspect`, is not here yet.
+ * `docs/roadmap.md` removes the old one. A reading that steps nothing, as `query` or `inspect`, reads the storage
+ * outside any lock of an entity.
  */
 import * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
@@ -42,8 +43,19 @@ import {
   type Types,
 } from './program.ts'
 // The types of what a caller is answered stay in the old runtime's module until step 4 removes it.
-import type { Answer, Keep, Operated } from './runtime.ts'
-import { createTables, defaultPartitions, partitioned, type Storage, storage, transaction } from './storage.ts'
+import type { Answer, Inspected, Keep, Operated } from './runtime.ts'
+import {
+  createTables,
+  defaultPartitions,
+  type Found,
+  partitioned,
+  type Query,
+  type Reindexed,
+  type Storage,
+  storage,
+  type Suspended,
+  transaction,
+} from './storage.ts'
 
 /**
  * A point of an event's transaction where a test stops the process, to see what a crash there leaves. `Recorded` is
@@ -59,6 +71,12 @@ export interface Options {
    * milliseconds, 50 by default. A receiver resumed in this process ends the wait sooner.
    */
   readonly retry?: Readonly<{ millis: number }>
+  /**
+   * How often the runtime runs `expire` on each program deployed: every `millis`, a positive integer, 300 000 by
+   * default. `'none'` leaves `expire` to an operator. A sweep that fails logs a warning with its cause, and the next
+   * one runs at the next interval.
+   */
+  readonly sweep?: Readonly<{ millis: number }> | 'none'
   /** What runs at each point of an event's transaction, given the entity of the event: a test's hook. */
   readonly probe?: (point: Point, entity: Address) => Effect.Effect<void>
 }
@@ -89,6 +107,29 @@ export interface Handle<T extends Types> {
   ) => Effect.Effect<Answer<T['rejection']>>
   /** What callers read of the entity `id`, or null when there is none. */
   readonly read: (id: string) => Effect.Effect<T['projection'] | null>
+  /**
+   * What callers read of the entities whose indexes match, at most `query.limit` of them, as `Handle.query` of the
+   * library gives it. A query that is no object, or a limit that is no non-negative integer, is the caller's defect.
+   */
+  readonly query: (query: Query<T>) => Effect.Effect<ReadonlyArray<Found<T>>>
+  /**
+   * Writes the read model of every entity of the program again from its stored state, as `Handle.reindex` of the
+   * library does. A row is written only where the state it was computed from is still the one stored, so it takes no
+   * lock of an entity.
+   */
+  readonly reindex: Effect.Effect<Reindexed>
+  /**
+   * Deletes the callers' replies past their time, and the replies and the answers kept for work that has ended, and
+   * gives how many went. No step reads them again. The sweep runs it at an interval.
+   */
+  readonly expire: Effect.Effect<number>
+  /** The suspended entities of the program, the longest suspended first, read from what is stored. */
+  readonly suspended: Effect.Effect<ReadonlyArray<Suspended>>
+  /**
+   * What is stored of the entity `id`, read from one snapshot, or null when there is none. It steps nothing and
+   * activates nothing, so an operator reads it to decide between `resume` and `discard`.
+   */
+  readonly inspect: (id: string) => Effect.Effect<Inspected<T> | null>
   /** Resumes the suspended entity `id`, and says what the resumption did. */
   readonly resume: (id: string) => Effect.Effect<Operated>
   /** Discards the inbound message the suspended entity `id` died on, and says what the discard did. */
@@ -582,6 +623,57 @@ const waking = <T extends Types>(p: Process, d: Deployment<T>): Effect.Effect<ne
   }))
 
 /**
+ * Runs `expire` on a program's entities every `millis`, for ever. A sweep that fails is logged with its cause, and
+ * the deployment goes on.
+ */
+const sweeping = <T extends Types>(d: Deployment<T>, millis: number): Effect.Effect<never> =>
+  Effect.forever(Effect.andThen(
+    Effect.sleep(`${millis} millis`),
+    Effect.catchCause(expiring(d), (cause) =>
+      Cause.hasInterruptsOnly(cause)
+        ? Effect.failCause(cause)
+        : Effect.logWarning('a sweep failed; the next one runs at the next interval', cause).pipe(
+          Effect.annotateLogs({ name: d.program.name }),
+        )),
+  ))
+
+const expiring = <T extends Types>(d: Deployment<T>) =>
+  Effect.flatMap(DateTime.now, (now) => d.storage.expire(DateTime.toEpochMillis(now)))
+
+/** What `inspect` gives of what the storage read: the work under way ordered by incarnation, the oldest first. */
+const inspected = <T extends Types>(
+  id: string,
+  stored: Machine.Stored<T>,
+  suspension: Suspended | null,
+): Inspected<T> => ({
+  id,
+  state: stored.state,
+  mailbox: stored.mailbox.map((envelope) =>
+    envelope._tag === 'Inbound' ? { _tag: 'Inbound', request: envelope.request, message: envelope.message } : envelope
+  ),
+  work: Object.values(stored.keys)
+    .map(({ key, incarnation, work }) => ({ key, incarnation, work }))
+    .sort((one, other) => one.incarnation - other.incarnation),
+  suspension,
+})
+
+/**
+ * Runs `effect` on a query the caller gave, once it is an object whose limit is a non-negative integer. The types do
+ * not hold a call from JavaScript, and a read of a field of no object would throw outside the effect.
+ */
+const asked = <T extends Types, A>(query: Query<T>, effect: Effect.Effect<A>): Effect.Effect<A> =>
+  Effect.suspend(() => {
+    if (typeof query !== 'object' || query === null) {
+      return Effect.die(new InvariantDefect({ reason: `the query is ${String(query)}, which is no object` }))
+    }
+    if (!Number.isSafeInteger(query.limit) || query.limit < 0) {
+      const reason = `the limit is ${query.limit}, which is no non-negative integer`
+      return Effect.die(new InvariantDefect({ reason }))
+    }
+    return effect
+  })
+
+/**
  * Runs `effect` once the id and the request id a caller gave, where it gave one, are text a database holds, and the
  * id is not empty. Where `sql` is given, `effect` steps the entity, and a call within a transaction of the client is
  * refused too: the step would commit with the caller's transaction, after the process started the operations the
@@ -619,6 +711,15 @@ export const launch = (options: Options = {}): Effect.Effect<Runtime, never, Sql
     const retry = options.retry?.millis ?? 50
     if (!Number.isSafeInteger(retry) || retry <= 0) {
       return yield* Effect.die(new InvariantDefect({ reason: `the retry is ${retry} milliseconds, and it is a positive integer` }))
+    }
+    // Only a sweep left out is the default: a `null` from JavaScript is refused.
+    const sweep = options.sweep === undefined ? { millis: 300_000 } : options.sweep
+    if (
+      sweep !== 'none' &&
+      !(typeof sweep === 'object' && sweep !== null && Number.isSafeInteger(sweep.millis) && sweep.millis > 0)
+    ) {
+      const reason = `the sweep is ${JSON.stringify(sweep)}, which is neither 'none' nor a positive integer of millis`
+      return yield* Effect.die(new InvariantDefect({ reason }))
     }
     const sql = yield* SqlClient.SqlClient
     yield* createTables
@@ -660,6 +761,7 @@ export const launch = (options: Options = {}): Effect.Effect<Runtime, never, Sql
         // An operation a crash interrupted has no fiber in this process, so a transaction of its entity restarts it.
         for (const id of yield* d.storage.interrupted) yield* inEntity(p, d, id, () => Effect.void)
         yield* apart(p, waking(p, d))
+        if (sweep !== 'none') yield* apart(p, sweeping(d, sweep.millis))
         const caller = (request: Readonly<{ requestId: string; sender?: unknown }>): Request<T['sender']> => ({
           _tag: 'Caller',
           sender: request.sender === undefined ? null : request.sender,
@@ -682,6 +784,17 @@ export const launch = (options: Options = {}): Effect.Effect<Runtime, never, Sql
               sql,
             ),
           read: (id) => checked(id, null, d.storage.projected(id)),
+          query: (query) => asked(query, d.storage.query(query)),
+          reindex: d.storage.reindex,
+          expire: expiring(d),
+          suspended: d.storage.suspended,
+          inspect: (id) =>
+            checked(
+              id,
+              null,
+              Effect.map(d.storage.inspect(id), (found) =>
+                found === null ? null : inspected(id, found.stored, found.suspension)),
+            ),
           resume: (id) => checked(id, null, operate(p, d, id, 'Resume'), sql),
           discard: (id) => checked(id, null, operate(p, d, id, 'Discard'), sql),
         }

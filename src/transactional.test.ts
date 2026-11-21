@@ -1,7 +1,7 @@
 /**
  * Rules of `transactional.ts` that the histories of one process do not reach: two runtimes on one database, an entity
- * that suspends between the waker's reading and its fire, and what a caller or a launcher gives that the runtime
- * refuses. Each test runs on SQLite and on PostgreSQL.
+ * that suspends between the waker's reading and its fire, what a caller or a launcher gives that the runtime
+ * refuses, and the readings and the sweep, which step nothing. Each test runs on SQLite and on PostgreSQL.
  */
 import { expect, test } from 'bun:test'
 import * as Cause from 'effect/Cause'
@@ -12,7 +12,7 @@ import * as Scope from 'effect/Scope'
 import { SqlClient } from 'effect/sql'
 import { TestClock } from 'effect/testing'
 import { first, type Operation, type T, toy } from './machine.test_histories.ts'
-import type { Address } from './program.ts'
+import { type Address, program } from './program.ts'
 import { type Handle, launch, type Point } from './transactional.ts'
 import { onEach } from './storage.test_databases.ts'
 import { clientOf, dialects, quiet, quietly } from './transactional.test_shared.ts'
@@ -127,8 +127,109 @@ test('an id, a request id or a time to keep a reply that is no such value is the
     yield* die
   })))
 
-test('a retry that is no positive integer of milliseconds is the launcher’s defect', () =>
+test('a retry or a sweep that is no positive integer of milliseconds is the launcher’s defect', () =>
   run(Effect.gen(function*() {
     const launched = Effect.scoped(launch({ retry: { millis: 0 } }))
     expect(yield* defect(launched)).toBe('the retry is 0 milliseconds, and it is a positive integer')
+    const swept = Effect.scoped(launch({ sweep: { millis: 1.5 } }))
+    expect(yield* defect(swept))
+      .toBe(`the sweep is {"millis":1.5}, which is neither 'none' nor a positive integer of millis`)
   })))
+
+/** A counter whose projection is its count times `factor`, indexed by what callers read of it. */
+const tally = (factor: number) =>
+  program({
+    state: Schema.Struct({ count: Schema.Int }),
+    flags: Schema.Struct({ count: Schema.Int }),
+    inbound: Schema.TaggedStruct('Add', { n: Schema.Int }),
+    projection: Schema.Struct({ count: Schema.Int }),
+  })({
+    name: 'Tally',
+    init: ({ count }) => ({ count }),
+    update: ({ n }) => (state) => ({ count: state.count + n }),
+    project: ({ count }) => ({ count: count * factor }),
+    indexes: { count: ({ count }) => count },
+  })
+
+test('a query reads the read model by its indexes, and a reindex writes it again with the program deployed', () =>
+  run(Effect.gen(function*() {
+    const deployed = (factor: number) =>
+      Effect.gen(function*() {
+        const scope = yield* Scope.make()
+        const runtime = yield* Effect.provideService(launch(), Scope.Scope, scope)
+        const handle = yield* Effect.provideService(runtime.deploy(tally(factor)), Scope.Scope, scope)
+        return { handle, die: Scope.close(scope, Exit.void) }
+      })
+    const once = yield* deployed(1)
+    for (const [id, count] of [['a', 1], ['b', 2], ['c', 3]] as const) {
+      yield* once.handle.create(id, { requestId: `c-${id}`, flags: { count } })
+    }
+    const over = (handle: typeof once.handle) =>
+      Effect.map(
+        handle.query({ where: [{ index: 'count', is: '>', value: 1 }], order: { index: 'count' }, limit: 10 }),
+        (found) => found.map(({ id, projection }) => [id, projection.count]),
+      )
+    expect(yield* over(once.handle)).toEqual([['b', 2], ['c', 3]])
+    expect(yield* defect(once.handle.query({ limit: -1 }))).toBe('the limit is -1, which is no non-negative integer')
+    yield* once.die
+    // A new `project` reaches a row at its entity's next step, or at a reindex.
+    const twice = yield* deployed(2)
+    expect(yield* over(twice.handle)).toEqual([['b', 2], ['c', 3]])
+    expect(yield* twice.handle.reindex).toEqual({ written: 3, failed: [] })
+    expect(yield* over(twice.handle)).toEqual([['a', 2], ['b', 4], ['c', 6]])
+    yield* twice.die
+  })))
+
+test('a suspended entity is listed and inspected from what is stored, and inspecting it steps nothing', () =>
+  run(Effect.gen(function*() {
+    const { handle, die } = yield* processOn
+    yield* handle.create('e', { requestId: 'creation' })
+    expect(yield* handle.send('e', { _tag: 'Break', nonce: 'n' }, { requestId: 'r', keep: 'forever' }))
+      .toEqual({ _tag: 'Suspended' })
+    const listed = yield* handle.suspended
+    expect(listed.map(({ id, on, waiting }) => ({ id, on, waiting }))).toEqual([
+      { id: 'e', on: { _tag: 'Message', kind: 'Inbound' }, waiting: [] },
+    ])
+    const found = yield* handle.inspect('e')
+    expect(found?.suspension).toEqual(listed[0] ?? null)
+    expect(found?.mailbox.map((envelope) => envelope.message._tag)).toEqual(['Break'])
+    expect(yield* handle.inspect('e')).toEqual(found)
+    expect(yield* handle.inspect('none')).toBeNull()
+    expect(yield* defect(handle.inspect(''))).toBe('the id is empty, and an id is not')
+    yield* die
+  })))
+
+const Replies = Schema.Array(Schema.Struct({ kept: Schema.Number }))
+
+/** How many replies to callers are stored for the toy's entities. */
+const repliesKept = (sql: SqlClient.SqlClient) =>
+  Effect.orDie(Effect.flatMap(
+    sql`SELECT CAST(count(*) AS INTEGER) AS kept FROM effecttea_replies WHERE name = 'Histories'`,
+    Schema.decodeUnknownEffect(Replies),
+  )).pipe(Effect.map((rows) => rows[0]?.kept ?? 0))
+
+test('a caller’s reply past its time is deleted by expire, and by the sweep at its interval', () =>
+  run(Effect.provide(
+    Effect.gen(function*() {
+      const sql = yield* SqlClient.SqlClient
+      const scope = yield* Scope.make()
+      const runtime = yield* Effect.provideService(launch({ sweep: { millis: 100 } }), Scope.Scope, scope)
+      const handle = yield* Effect.provideService(runtime.deploy(toy(first, () => Effect.never)), Scope.Scope, scope)
+      yield* handle.create('e', { requestId: 'creation' })
+      const refused = (requestId: string) =>
+        handle.send('e', { _tag: 'Refuse', nonce: requestId }, { requestId, keep: { millis: 10 } })
+      yield* refused('r1')
+      yield* refused('r2')
+      const before = yield* repliesKept(sql)
+      yield* TestClock.adjust(20)
+      expect(yield* handle.expire).toBe(before)
+      expect(yield* repliesKept(sql)).toBe(0)
+      yield* refused('r3')
+      expect(yield* repliesKept(sql)).toBe(1)
+      yield* TestClock.adjust(80)
+      yield* quiet
+      expect(yield* repliesKept(sql)).toBe(0)
+      yield* Scope.close(scope, Exit.void)
+    }),
+    TestClock.layer(),
+  )))

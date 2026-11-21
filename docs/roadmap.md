@@ -13,8 +13,8 @@ Each step names its model and effort, what it depends on, and how to tell it is 
 
 4. **The runtime on the transaction.** (Opus 5.5 · high) It depends on nothing. The spike of step 2 became
    [`src/transactional.ts`](../src/transactional.ts), beside the old runtime, on the machine and the storage of
-   today. When the old runtime goes, it takes the name `src/runtime.ts`, and the types `Answer`, `Keep` and
-   `Operated` it imports from the old module move into it. The histories of step 3 are its tests, run on SQLite,
+   today. When the old runtime goes, it takes the name `src/runtime.ts`, and the types `Answer`, `Inspected`, `Keep`
+   and `Operated` it imports from the old module move into it. The histories of step 3 are its tests, run on SQLite,
    on PGlite and on the CI's server of PostgreSQL with a pool. `src/rehearse.property.test.ts` goes with the old
    runtime. It keeps the six rules of the review's section Where it must be able to go, and a rule it cannot keep
    is written here with its reason.
@@ -29,9 +29,10 @@ Each step names its model and effort, what it depends on, and how to tell it is 
    - Done on 2026-11-21: `runningOf` arms no timer of a suspended entity, since the waker reads the due timers
      before it takes the lock. A test of `src/transactional.test.ts` fails without the rule. The rule that skipped
      work whose message is queued went, since only a suspended entity holds such a message as a step begins.
-   - Next: `query`, `reindex`, the outbox as one table, `inspect`, `suspended` and the sweep.
-   - Then the old runtime goes, with the integration of Cluster, the hold, the scheduler of the tests and every
-     parked piece. The tests of `spikes/transactional/` then move into `src/`, but `cost.test.ts`.
+   - Done on 2026-11-21: `query`, `reindex`, `expire`, `suspended`, `inspect`, and a sweep that runs `expire` alone.
+   - Next: the old runtime goes, with the integration of Cluster, the hold, the scheduler of the tests and every
+     parked piece. The outbox becomes one table a step writes in the same part, since the old runtime's tests read
+     the log of today. The tests of `spikes/transactional/` then move into `src/`, but `cost.test.ts`.
    - It is done when the histories and the examples pass on the three, the runtime and the storage are under 2,500
      lines without tests, and `bun test` runs within a minute.
 
@@ -65,7 +66,9 @@ Each step names its model and effort, what it depends on, and how to tell it is 
      caller's dies as its defect. `docs/design.md` says a deadlock crashes its entity, and says this when this step
      lands.
    - A reply or a `NotFound` stored while the asker's work ends is left on PostgreSQL. Neither step waits for the
-     other, and each misses the other's write. The sweep deletes the row, and the four overlaps then check it.
+     other, and each misses the other's write. The four overlaps check that `expire` deletes the row.
+   - The sweep runs no `prune`, since no consumer is stored, and a prune drops whole a topic no consumer holds. The
+     outbox of one table needs a way its rows go, and its shape is the maintainer's to choose before it lands.
    - `deploy`, `create`, `send`, `resume` and `discard` within a transaction of the client are the caller's defect,
      as in the old runtime. `read` is not.
 
