@@ -767,3 +767,8 @@ family gets a fix of its own.
     change no code it runs, and the other tests of the file take milliseconds. The cause is not known. The first
     database the job makes on the server, or the first connection of its pool, is the first place to look. The fix
     begins with a run that logs where the test waits.
+114. **Noticed: the waker never reads the entities whose time `due` refuses.** The doc comment of `Due.refused`, in
+    `src/storage/entities.ts`, says the waker tries each again after `retry`. `waking` of `src/runtime.ts` reads
+    `ready` and `next` alone, and sleeps until `next`. So a refused row is neither logged nor read again before
+    `next`. Only a test of `src/storage.test.ts` reads `refused`. The fix is the maintainer's choice: the waker logs
+    what is refused, or the refusal goes with the reading of decision 0259 and the comment with it.
