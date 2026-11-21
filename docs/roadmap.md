@@ -21,13 +21,14 @@ Each step names its model and effort, what it depends on, and how to tell it is 
      `bun test` runs in 52 s. `src/contract.test.ts` went, since it compared backends on pieces that went.
      `spikes/full-volume.test.ts` and `spikes/full-database.test.ts` went with the consumers they freed room for.
    - Next: the runtime and the storage are 2,903 lines without tests, over the budget of 2,500. The maintainer
-     chooses whether to cut further or to move the budget.
+     chose on 2026-11-21 to cut rather than move the budget, and approves each cut before it is made.
    - Done on 2026-11-21 on the CI's server: the histories, the test of `READ COMMITTED` and the deadlock pass.
    - Done on 2026-11-21: the four overlaps of `src/runtime.pool.test.ts` pass on the server. The row is stored
      under the receiver's name, so the receiver's `expire` deletes it, as the sweep of each program does. The
      first test of the job `postgres` times out now and then, which is bug 113 of `docs/bugs.md`.
-   - Next: no run has checked yet that the tests of two steps and of two creations of `src/runtime.pool.test.ts`
-     fail without the lock.
+   - Done on 2026-11-21 on the CI's server: without the advisory lock of `src/storage/entities.ts`, the tests of two
+     steps and of two creations of `src/runtime.pool.test.ts` fail, and so do the two overlaps with the asker held.
+     The second step loses the first one's write, and the second creation meets a duplicate key.
    - It is done when the histories and the examples pass on the three, the runtime and the storage are under their
      budget without tests, and `bun test` runs within a minute.
 
