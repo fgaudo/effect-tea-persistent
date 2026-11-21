@@ -703,12 +703,15 @@ const waking = <T extends Types>(p: Process, d: Deployment<T>): Effect.Effect<ne
     tell(p, 'changed')
     if (fired > 0) return
     d.next = due.next
-    // A timer that is due and did not fire is read again after `retry`, and not at once.
+    // A timer that is due and did not fire is read again after `retry`, and not at once. The time is read again
+    // after the reading of what is due, which waits on the network on a server: a clock that moved meanwhile would
+    // make the waker sleep past the time stored.
+    const after = DateTime.toEpochMillis(yield* DateTime.now)
     const wait = due.ready.length > 0
       ? p.retry
       : due.next === null
       ? null
-      : Math.max(0, due.next - DateTime.toEpochMillis(now))
+      : Math.max(0, due.next - after)
     yield* Effect.race(Queue.take(d.poke), wait === null ? Effect.never : Effect.sleep(`${wait} millis`))
   }))
 

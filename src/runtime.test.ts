@@ -54,6 +54,27 @@ test('an operation whose process died runs again at the next step of a process t
     yield* remembering.die
   })))
 
+// Bug 113 of docs/bugs.md. On a server the waker's reading of what is due waits on the network, and the test moves
+// the clock while it waits. A waker that slept from the time it read before that reading would sleep past the timer,
+// for ever under `TestClock`. Each round races the two, and SQLite and PGlite, which answer within microtasks, pass.
+test('fires a timer whose time passes while the waker reads what is due', () =>
+  run(Effect.provide(
+    Effect.gen(function*() {
+      for (let round = 0; round < 20; round++) {
+        const { handle, die } = yield* processOn
+        const id = `e${round}`
+        yield* handle.create(id, { requestId: 'creation' })
+        yield* handle.send(id, { _tag: 'Start', key: 't', nonce: 'n' }, { requestId: 'r', keep: 'forever' })
+        yield* TestClock.adjust('60 millis')
+        yield* quiet
+        const state = yield* handle.read(id)
+        expect(state?.seen.some(({ tag }) => tag === 'Rang')).toBe(true)
+        yield* die
+      }
+    }),
+    TestClock.layer(),
+  )))
+
 const Counted = Schema.Array(Schema.Struct({ queued: Schema.Number }))
 
 /** How many messages wait in the mailbox of the toy's entity `id`. */

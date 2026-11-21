@@ -35,17 +35,14 @@ const settled = Effect.gen(function*() {
     Effect.gen(function*() {
       const { layer } = yield* hands()
       const toy = yield* Effect.provide(runtime.deploy(program), layer)
-      console.log('bug 113: settled deployed')
       for (const id of ['t-1', 't-2', 't-3']) {
         yield* toy.create(id, { flags: { at }, requestId: `c-${id}`, sender: tester })
       }
-      console.log('bug 113: settled created')
       yield* toy.send('t-2', { _tag: 'Want', key: 't', on: true, nonce: 'n' }, {
         requestId: 'w',
         sender: tester,
         keep: 'forever',
       })
-      console.log('bug 113: settled sent')
       yield* runtime.settled
     }))
 })
@@ -59,18 +56,12 @@ const dying: Program<T> = {
 describe('the check of a program', () => {
   test('finds the entities whose activation the new program suspends, as a deploy then suspends them', () =>
     onBoth(Effect.gen(function*() {
-      // DIAGNOSTIC of bug 113: the time each phase ends at, removed once the bug is found.
-      const began = performance.now()
-      const phase = (name: string) => Effect.sync(() => console.log(`bug 113: ${name} at ${Math.round(performance.now() - began)} ms`))
-      yield* phase('begun')
       yield* settled
-      yield* phase('settled')
       const sql = yield* SqlClient.SqlClient
       const before = yield* sql`SELECT name, id, state, version, suspended_on FROM effecttea_entities ORDER BY id`
       // The old version holds the database while the new one is checked: the check launches nothing, and holds
       // nothing.
       const checked = yield* process({}, () => check(dying, { limit: all }))
-      yield* phase('checked')
       expect(checked).toEqual({
         active: {
           checked: 3,
@@ -91,13 +82,9 @@ describe('the check of a program', () => {
         Effect.gen(function*() {
           const { layer } = yield* hands()
           const toy = yield* Effect.provide(runtime.deploy(dying), layer)
-          yield* phase('deployed')
           for (const id of ['t-1', 't-2', 't-3']) yield* toy.read(id)
-          yield* phase('read')
           yield* TestClock.adjust('60 millis')
-          yield* phase('adjusted')
           yield* runtime.settled
-          yield* phase('settled again')
           const suspended = yield* toy.suspended
           expect(suspended.map(({ id, on, cause }) => ({ id, on, cause }))).toEqual([{
             id: 't-2',
