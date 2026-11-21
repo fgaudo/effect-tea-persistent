@@ -26,8 +26,10 @@ Each step names its model and effort, what it depends on, and how to tell it is 
      holds the tests only a server runs: two steps of an entity, two creations, a deadlock, and the four overlaps
      of a receiver's step and its asker's. The CI's job `postgres` passes them. No run has checked yet that the
      tests of two steps and of two creations fail without the lock.
-   - Next, PostgreSQL: the two rules of `runningOf` below are decided.
-   - Then `query`, `reindex`, the outbox as one table, `inspect`, `suspended` and the sweep.
+   - Done on 2026-11-21: `runningOf` arms no timer of a suspended entity, since the waker reads the due timers
+     before it takes the lock. A test of `src/transactional.test.ts` fails without the rule. The rule that skipped
+     work whose message is queued went, since only a suspended entity holds such a message as a step begins.
+   - Next: `query`, `reindex`, the outbox as one table, `inspect`, `suspended` and the sweep.
    - Then the old runtime goes, with the integration of Cluster, the hold, the scheduler of the tests and every
      parked piece. The tests of `spikes/transactional/` then move into `src/`, but `cost.test.ts`.
    - It is done when the histories and the examples pass on the three, the runtime and the storage are under 2,500
@@ -41,9 +43,6 @@ Each step names its model and effort, what it depends on, and how to tell it is 
    - A deploy activates only the entities with an operation or a message, so a deploy that makes a stored timer an
      operation starts it late. `docs/open-questions.md` asks it under Programs, for step 10. The target retries the
      creation after each deploy, so that the histories do not check it.
-   - Two rules of `runningOf` fail no test when taken out: it skips work whose message is queued, and arms no timer
-     of a suspended entity. Neither changes a history of one process. The part on PostgreSQL decides whether each
-     stays, with a test of two processes, or goes.
    - An entity is activated once a launch, and the process remembers the last 10,000 it activated. Activated at
      each step, a state of 0.5 MB took up to 2.0 times today's step. `spikes/transactional/cost.test.ts` holds the
      numbers.

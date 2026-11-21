@@ -1,15 +1,19 @@
 /**
- * Rules of `transactional.ts` that the histories of one process do not reach: two runtimes on one database, and what
- * a caller or a launcher gives that the runtime refuses. Each test runs on SQLite and on PostgreSQL.
+ * Rules of `transactional.ts` that the histories of one process do not reach: two runtimes on one database, an entity
+ * that suspends between the waker's reading and its fire, and what a caller or a launcher gives that the runtime
+ * refuses. Each test runs on SQLite and on PostgreSQL.
  */
 import { expect, test } from 'bun:test'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import * as Schema from 'effect/Schema'
 import * as Scope from 'effect/Scope'
 import { SqlClient } from 'effect/sql'
+import { TestClock } from 'effect/testing'
 import { first, type Operation, type T, toy } from './machine.test_histories.ts'
-import { type Handle, launch } from './transactional.ts'
+import type { Address } from './program.ts'
+import { type Handle, launch, type Point } from './transactional.ts'
 import { onEach } from './storage.test_databases.ts'
 import { clientOf, dialects, quiet, quietly } from './transactional.test_shared.ts'
 
@@ -49,6 +53,51 @@ test('an operation whose process died runs again at the next step of a process t
     ])
     yield* remembering.die
   })))
+
+const Counted = Schema.Array(Schema.Struct({ queued: Schema.Number }))
+
+/** How many messages wait in the mailbox of the toy's entity `id`. */
+const queuedIn = (sql: SqlClient.SqlClient, id: string) =>
+  Effect.orDie(Effect.flatMap(
+    sql`SELECT CAST(count(*) AS INTEGER) AS queued FROM effecttea_mailbox WHERE name = 'Histories' AND id = ${id}`,
+    Schema.decodeUnknownEffect(Counted),
+  )).pipe(Effect.map((rows) => rows[0]?.queued ?? 0))
+
+test('a timer read as due does not fire once its entity suspends before the fire', () =>
+  run(Effect.provide(
+    Effect.gen(function*() {
+      const sql = yield* SqlClient.SqlClient
+      const keep = 'forever' as const
+      // The fire of `e1` suspends `e2` after its commit, so the waker reads the timer of `e2` as due before the
+      // suspension, and fires it after.
+      const armed = { now: false }
+      let handle: Handle<T> | undefined
+      const probe = (point: Point, entity: Address) =>
+        Effect.suspend(() => {
+          if (!armed.now || point !== 'AfterCommit' || entity.id !== 'e1' || handle === undefined) return Effect.void
+          armed.now = false
+          const breaking = handle.send('e2', { _tag: 'Break', nonce: 'n3' }, { requestId: 'r3', keep })
+          return Effect.map(breaking, (answer) => expect(answer).toEqual({ _tag: 'Suspended' }))
+        })
+      const scope = yield* Scope.make()
+      const runtime = yield* Effect.provideService(launch({ probe }), Scope.Scope, scope)
+      handle = yield* Effect.provideService(runtime.deploy(toy(first, () => Effect.never)), Scope.Scope, scope)
+      for (const id of ['e1', 'e2']) {
+        yield* handle.create(id, { requestId: `c-${id}` })
+        yield* handle.send(id, { _tag: 'Start', key: 't', nonce: `t-${id}` }, { requestId: `t-${id}`, keep })
+      }
+      yield* quiet
+      armed.now = true
+      yield* TestClock.adjust(10)
+      yield* quiet
+      expect(armed.now).toBe(false)
+      expect((yield* handle.read('e1'))?.seen.map((seen) => seen.tag)).toEqual(['Rang'])
+      // The mailbox of `e2` holds the message it died on, and no firing of its timer.
+      expect(yield* queuedIn(sql, 'e2')).toBe(1)
+      yield* Scope.close(scope, Exit.void)
+    }),
+    TestClock.layer(),
+  )))
 
 /** The defect `effect` dies with, as its message. */
 const defect = <A, R>(effect: Effect.Effect<A, never, R>) =>

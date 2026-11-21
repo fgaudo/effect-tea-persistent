@@ -185,19 +185,17 @@ const remember = (p: Process, address: string) => {
 
 /**
  * What the process is doing for an entity, derived from what is stored and from the fibers of this process. A
- * stored timer is armed unless its entity is suspended, and a stored operation runs where this process holds its
- * fiber. Work whose message is already in the mailbox is done. `lost` says whether a stored operation has no fiber
- * in this process, as after a crash.
+ * stored timer is armed unless its entity is suspended. The waker reads the due timers before it takes the lock, so
+ * the entity it fires may have suspended since. A stored operation runs where this process holds its fiber. `lost`
+ * says whether a stored operation has no fiber in this process, as after a crash. Work whose message waits in the
+ * mailbox needs no check of its own. Each transaction handles the mailbox until it is empty or the entity is
+ * suspended, and a suspended entity arms no timer and is not restarted.
  */
 const runningOf = <T extends Types>(p: Process, address: string, stored: Machine.Stored<T>) => {
   const runs = p.operations.get(address)
   const running: Record<string, Machine.Running> = {}
   let lost = false
   for (const [text, { key, incarnation, work }] of Object.entries(stored.keys)) {
-    const queued = stored.mailbox.some((envelope) =>
-      envelope._tag === 'Internal' && envelope.incarnation === incarnation && Machine.keyText(envelope.key) === text
-    )
-    if (queued) continue
     if (isTimer(work)) {
       if (stored.suspension === null) running[text] = { kind: 'Timer', incarnation }
     } else if (runs?.has(under(key, incarnation)) === true) running[text] = { kind: 'Operation', incarnation }
