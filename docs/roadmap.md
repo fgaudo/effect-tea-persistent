@@ -11,34 +11,20 @@ Each step names its model and effort, what it depends on, and how to tell it is 
 
 ## Next
 
-2. **A spike of the runtime on the transaction.** (Fable 5.2 · high) It depends on nothing. It is the test of the
-   review's first finding, before anything is deleted. A runtime of at most 600 lines, in `spikes/transactional/`,
-   keeps one rule: every event is one transaction that reads the entity under a lock,
-   steps `Machine.step` from what it read, and writes. It passes when all of these hold on SQLite.
-   - It runs `src/machine.ts` as it is, or with changes it lists, each small.
-   - The runtime tests of `examples/quick-start`, `examples/subscription`, `examples/booking` and `examples/rental`
-     pass on it, and those of `examples/order` that use no parked piece.
-   - Two runtimes on one file lose no step, in a test that fails on the runtime of today.
-   - A process killed at each line of the table What survives a crash of `docs/design.md` ends where the machine
-     ends.
-   - A step takes at most half as long again as today's, on the states of `spikes/large-states.test.ts`.
-   - It is done when this file says whether it passed, and what it found. It says of each rule of the review's
-     section Where it must be able to go whether the spike keeps it, breaks it or does not reach it. It fails where
-     the machine needs state in memory that `Restart` cannot give back inside a step's transaction, or where an
-     operation that acts at most once is run twice.
+3. **Histories with invariants, on the rehearsal.** (Opus 5.5 · high) It depends on nothing. fast-check generates
+   histories: a message under a new request id or a retried one, an operation that completes or dies, time that
+   passes, a restart, a resume and a discard. After each history the test checks the promises of the design. A
+   message under a request id is applied at most once, and a retry is given the same reply. An operation that acts
+   at most once is given `unknown` only where it started. No answer of an earlier incarnation is delivered. It
+   begins beside `src/rehearse.property.test.ts`. It is done when the property passes, and each invariant fails
+   once its rule is taken out of the machine by hand.
 
-3. **Histories with invariants, on the rehearsal.** (Opus 5.5 · high) It depends on nothing, and may run beside
-   step 2. fast-check generates histories: a message under a new request id or a retried one, an operation that
-   completes or dies, time that passes, a restart, a resume and a discard. After each history the test checks the
-   promises of the design. A message under a request id is applied at most once, and a retry is given the same
-   reply. An operation that acts at most once is given `unknown` only where it started. No answer of an earlier
-   incarnation is delivered. It begins beside `src/rehearse.property.test.ts`. It is done when the property passes,
-   and each invariant fails once its rule is taken out of the machine by hand.
-
-4. **The runtime on the transaction.** (Opus 5.5 · high) It depends on steps 2 and 3. The spike becomes
-   `src/runtime.ts`, and the histories of step 3 are its tests, run on SQLite, on PGlite and on the CI's server of
-   PostgreSQL with a pool. It keeps the six rules of the review's section Where it must be able to go, and a rule
-   it cannot keep is written here with its reason.
+4. **The runtime on the transaction.** (Opus 5.5 · high) It depends on step 3. The spike of step 2 passed on
+   2026-11-21. [`spikes/transactional/`](../spikes/transactional) holds it with its tests: a runtime of 590 lines
+   on the machine and the storage of today, both unchanged. The spike becomes `src/runtime.ts`, and the histories
+   of step 3 are its tests, run on SQLite, on PGlite and on the CI's server of PostgreSQL with a pool. It keeps the
+   six rules of the review's section Where it must be able to go, and a rule it cannot keep is written here with
+   its reason.
    - First `create`, `send`, `read`, the timers, the operations, a suspension and its `resume`, on SQLite.
    - Then entities that talk, with a retry after a wait where a receiver is suspended.
    - Then PostgreSQL: the lock of the entity's row, and a test of two transactions held at a statement for each
@@ -48,6 +34,32 @@ Each step names its model and effort, what it depends on, and how to tell it is 
      parked piece.
    - It is done when the histories and the examples pass on the three, the runtime and the storage are under 2,500
      lines without tests, and `bun test` runs within a minute.
+
+   What the spike found, which this step keeps or decides:
+   - **The process holds the fibers of the operations that run, and no rule rests on anything else in memory.** A
+     transaction derives the machine's `running` from the rows and the fibers: a stored timer is armed, and a
+     stored operation runs where the process holds its fiber. An operation stored with no fiber is restarted by
+     the next transaction of its entity, and by the deploy after a crash. `settled` is no fiber and no timer due.
+   - **When an entity is activated is this step's choice.** Activated at each step, a step of a state of 0.5 MB
+     took up to 2.0 times today's, over the bound of 1.5. Activated once a launch, it took at most 1.5 times, and
+     the spike then remembers the entities it activated. The step chooses a bound for that set, or a mark in the
+     entity's row. What is left of the cost is the read of the state, and the projection of the state read, which
+     `Machine.writes` computes to compare each topic. `cost.test.ts` holds the numbers.
+   - **The crash table loses its last two lines.** A message is handled in the transaction that records it, so a
+     process killed between the two stored neither. The operation then runs again or is `unknown`, and the timer
+     fires again. `docs/design.md` says so when this step lands.
+   - **Two runtimes on one file lose no step, and each restarts the other's operations.** An operation that acts at
+     most once is then recorded `unknown` while it still runs, and is never run twice. Who runs an operation is
+     the claim the step under Later decides.
+   - **Of the review's six rules** the spike keeps the first, the third for a request, and the fourth. It breaks
+     the second where the storage of today does, and in no place of its own. It does not reach a sweep, the fifth
+     or the sixth. A step calls seven functions of the storage: `load`, `reply`, `write`, `answer`, `keepAnswer`,
+     `due` and `interrupted`.
+   - **The examples' tests run as they are** on a runtime under way, by the preload of `examples.preload.ts`.
+     `examples/subscription` has no test on a runtime, and every test of `examples/order` uses a parked piece or
+     a reading of the read model, which the spike took from the storage.
+   - The spike did not try PostgreSQL, a pool, a deploy of a changed program, or a receiver resumed while a sender
+     waits.
 
 5. **The rehearsal on the runtime's step.** (Opus 5.5 · high) It depends on step 4. `rehearse` runs the step of
    step 4 on a store in memory, with the test's clock and the test's answers, and reads what it stored back through
@@ -92,15 +104,6 @@ Each step names its model and effort, what it depends on, and how to tell it is 
 11. **The release, experimental.** (Opus 5.5 · medium) It depends on steps 9 and 10, and on ten open bugs at most.
     It decides what `exports` names, writes the metadata of `package.json`, and packs the package into a project
     outside Bun that runs and typechecks it.
-
-### If the spike fails
-
-These replace steps 4 and 5, and the steps after them stand.
-
-- **The integration of Cluster is taken out of the runtime as it is.** (Opus 5.5 · high) The doors,
-  `src/cluster.ts`, Cluster's tables and each branch that reads `cluster` go. It is done when
-  `bun run test:release` passes. How Cluster comes back is decided anew, since the step under Later rests on the spike.
-- **The process's state as a pure core.** (Fable 5.2 · high) It is the step of decision 0292, as git keeps it.
 
 ## Later
 

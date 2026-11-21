@@ -1,0 +1,590 @@
+/**
+ * A spike of the runtime on the transaction, for step 2 of `docs/roadmap.md`. It keeps one rule: every event is one
+ * transaction that reads the entity under a lock, steps `Machine.step` from what it read, and writes. No entity is
+ * held in memory. The process holds the fibers of the operations that run. It also remembers which entities it has
+ * activated, and it may forget one at no cost but an activation.
+ *
+ * It runs `src/machine.ts` and the storage of `src/storage.ts` as they are, and builds no piece the roadmap parks.
+ * A reading of the storage that steps nothing, as `inspect`, is not here. It is a spike: it checks no argument of a
+ * caller, and it logs and traces nothing.
+ */
+import * as Cause from 'effect/Cause'
+import * as DateTime from 'effect/DateTime'
+import * as Deferred from 'effect/Deferred'
+import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
+import * as Fiber from 'effect/Fiber'
+import * as Queue from 'effect/Queue'
+import type * as Scope from 'effect/Scope'
+import { SqlClient } from 'effect/sql'
+import * as Machine from '../../src/machine.ts'
+import {
+  type Address,
+  checkProgram,
+  type Creation,
+  encode,
+  Entities,
+  type Flagged,
+  type FlagsOf,
+  idFault,
+  InvariantDefect,
+  isTimer,
+  type Key,
+  type Program,
+  type Receiver,
+  type Reply,
+  type Request,
+  type Reused,
+  runnerOf,
+  type SenderOf,
+  type Types,
+} from '../../src/program.ts'
+import type { Answer, Keep, Operated } from '../../src/runtime.ts'
+import {
+  createTables,
+  defaultPartitions,
+  partitioned,
+  type Storage,
+  storage,
+  transaction,
+} from '../../src/storage.ts'
+
+/**
+ * A point of an event's transaction where a test stops the process, to see what a crash there leaves. `Recorded` is
+ * inside the transaction, after an event queued a message and before the message is handled. `BeforeCommit` is at
+ * the transaction's end, and `AfterCommit` is after the commit and before the process starts the work it stored.
+ */
+export type Point = 'Recorded' | 'BeforeCommit' | 'AfterCommit'
+
+/** What a launch takes. */
+export interface Options {
+  /** How long an operation waits before it sends again to a receiver that has no reply yet, in milliseconds. */
+  readonly retry?: number
+  /** What runs at each point of an event's transaction, given the entity of the event. */
+  readonly probe?: (point: Point, entity: Address) => Effect.Effect<void>
+  /**
+   * When an entity with no operation in this process is activated by the program deployed, as after a crash:
+   * `'step'` is in each of its transactions, and `'launch'` is in the first one of this process alone. An entity
+   * that holds an operation with no fiber in this process is activated in either case. It is `'launch'` by default.
+   */
+  readonly activation?: 'step' | 'launch'
+}
+
+/** What a caller does with one program's entities. */
+export interface Handle<T extends Types> {
+  /** Creates the entity `id`, as `Handle.create` of the library does. */
+  readonly create: (
+    id: string,
+    request: Readonly<{ requestId: string } & FlagsOf<T> & SenderOf<T>>,
+  ) => Effect.Effect<Creation<T['rejection']> | Reused>
+  /** Sends an inbound message and gives its reply, as `Handle.send` of the library does. It never answers `Full`. */
+  readonly send: (
+    id: string,
+    message: T['inbound'],
+    request: Readonly<{ requestId: string; keep: Keep } & SenderOf<T>>,
+  ) => Effect.Effect<Answer<T['rejection']>>
+  /** What callers read of the entity `id`, or null when there is none. */
+  readonly read: (id: string) => Effect.Effect<T['projection'] | null>
+  /** Resumes the suspended entity `id`, and says what the resumption did. */
+  readonly resume: (id: string) => Effect.Effect<Operated>
+  /** Discards the inbound message the suspended entity `id` died on, and says what the discard did. */
+  readonly discard: (id: string) => Effect.Effect<Operated>
+}
+
+/** A runtime launched on one client. */
+export interface Runtime {
+  /** Deploys a program with its services, restarts the operations a crash interrupted, and gives its handle. */
+  readonly deploy: <T extends Types>(
+    program: Program<T>,
+  ) => Effect.Effect<Handle<T>, never, Exclude<T['services'], Entities>>
+  /** Ends once no operation runs in this process and no stored timer is due. */
+  readonly settled: Effect.Effect<void>
+}
+
+interface Deployment<T extends Types> {
+  readonly program: Program<T>
+  readonly storage: Storage<T>
+  /** Gives an operation the services the program was deployed with. */
+  readonly provide: (operation: Effect.Effect<void, never, T['services']>) => Effect.Effect<void>
+  /** Wakes the fiber that fires the stored timers, once a step arms one due before the time it sleeps until. */
+  readonly poke: Queue.Queue<void>
+  /** The time the fiber that fires the timers sleeps until, in milliseconds, or null where it waits for a poke. */
+  next: number | null
+}
+
+interface Process {
+  readonly sql: SqlClient.SqlClient
+  readonly retry: number
+  readonly probe: (point: Point, entity: Address) => Effect.Effect<void>
+  readonly scope: Scope.Scope
+  // The types of each deployment are those of its program, which a map by name cannot say.
+  readonly deployments: Map<string, Deployment<any>>
+  /**
+   * The operations that run in this process, by entity and by run: all the process holds of an entity. A run's fiber
+   * is null from the transaction that stores the run until the process starts the fiber after the commit.
+   */
+  readonly operations: Map<string, Map<string, Fiber.Fiber<void> | null>>
+  /** The entities this process activated, where an entity is activated once a launch, and null otherwise. */
+  readonly activated: Set<string> | null
+  /** Done when an operation ends in this process or a timer fires, and then made anew: what `settled` waits on. */
+  changed: Deferred.Deferred<void>
+  /** Done when an entity is resumed or a program deployed, and then made anew: what a sender's retry waits on. */
+  resumed: Deferred.Deferred<void>
+}
+
+const addressOf = (entity: Address) => JSON.stringify([entity.name, entity.id])
+
+/** The run of the work under `key` in `incarnation`, as the process names an operation's fiber. */
+const under = (key: Key, incarnation: number) => `${Machine.keyText(key)}@${incarnation}`
+
+const tell = (p: Process, signal: 'changed' | 'resumed') => {
+  const was = p[signal]
+  p[signal] = Deferred.makeUnsafe<void>()
+  Deferred.doneUnsafe(was, Effect.void)
+}
+
+/** Forgets the run of an operation that ended, and its entity once no operation of the entity runs. */
+const release = (p: Process, address: string, run: string) => {
+  const runs = p.operations.get(address)
+  if (runs === undefined) return
+  runs.delete(run)
+  if (runs.size === 0) p.operations.delete(address)
+}
+
+/**
+ * What the process is doing for an entity, derived from what is stored and from the fibers of this process. A
+ * stored timer is armed unless its entity is suspended, and a stored operation runs where this process holds its
+ * fiber. Work whose message is already in the mailbox is done. `lost` says whether a stored operation has no fiber
+ * in this process, as after a crash.
+ */
+const runningOf = <T extends Types>(p: Process, address: string, stored: Machine.Stored<T>) => {
+  const runs = p.operations.get(address)
+  const running: Record<string, Machine.Running> = {}
+  let lost = false
+  for (const [text, { key, incarnation, work }] of Object.entries(stored.keys)) {
+    const queued = stored.mailbox.some((envelope) =>
+      envelope._tag === 'Internal' && envelope.incarnation === incarnation && Machine.keyText(envelope.key) === text
+    )
+    if (queued) continue
+    if (isTimer(work)) {
+      if (stored.suspension === null) running[text] = { kind: 'Timer', incarnation }
+    } else if (runs?.has(under(key, incarnation)) === true) running[text] = { kind: 'Operation', incarnation }
+    else lost = true
+  }
+  return { running, lost }
+}
+
+/** What an event's transaction is given: the entity as it read it, and how to step an event of it. */
+interface Transaction<T extends Types> {
+  /** The entity as the transaction read it and as its events left it, or null where none is stored. */
+  machine: Machine.Machine<T> | null
+  /** The time of the transaction, read once. */
+  readonly now: DateTime.Utc
+  /** What the machine gave for the events stepped so far. */
+  readonly outputs: Array<Machine.Output<T>>
+  /**
+   * Steps an event and writes what it gives, then handles the mailbox until it is empty or the entity is suspended.
+   * It gives the entity as the event left it, before the mailbox was handled.
+   */
+  readonly apply: (event: Machine.Event<T>) => Effect.Effect<Machine.Machine<T>>
+  /** Writes the entity a creation started. */
+  readonly created: (started: Extract<Machine.Start<T>, Readonly<{ _tag: 'Created' }>>) => Effect.Effect<void>
+}
+
+/**
+ * One transaction of the entity `id`, and then what the process does for what the transaction stored. The
+ * transaction takes the write lock as it begins, reads the entity, runs `body` and commits. An entity that is not
+ * suspended is restarted first where one of its operations has no fiber in this process, which runs the operation
+ * again as after a crash. It is restarted too where it has no operation here and `Options.activation` says so: the
+ * restart then checks the stored work against the program deployed, and writes nothing where the two agree.
+ */
+const inEntity = <T extends Types, A>(
+  p: Process,
+  d: Deployment<T>,
+  id: string,
+  body: (tx: Transaction<T>) => Effect.Effect<A>,
+): Effect.Effect<A> =>
+  Effect.suspend(() => {
+    const entity: Address = { name: d.program.name, id }
+    const address = addressOf(entity)
+    const outputs: Array<Machine.Output<T>> = []
+    const claimed: Array<string> = []
+    let woken = false
+    const stepped = Effect.gen(function*() {
+      const now = yield* DateTime.now
+      const millis = DateTime.toEpochMillis(now)
+      const stored = yield* d.storage.load(id)
+      const write = (moved: Machine.Transition<T>) =>
+        Effect.gen(function*() {
+          tx.machine = moved.machine
+          outputs.push(...moved.outputs)
+          if (moved.written !== null) yield* d.storage.write(id, moved.written, millis)
+          if (moved.written?.woken === true) woken = true
+          return moved.machine
+        })
+      const held = stored === null ? null : runningOf(p, address, stored)
+      const tx: Transaction<T> = {
+        machine: stored === null || held === null ? null : { stored, running: held.running },
+        now,
+        outputs,
+        apply: (event) =>
+          Effect.gen(function*() {
+            if (tx.machine === null) return yield* Effect.die(new Error(`an event of '${id}', which is not stored`))
+            const after = yield* write(Machine.step(d.program, tx.machine, event))
+            let machine = after
+            while (machine.stored.suspension === null && machine.stored.mailbox.length > 0) {
+              yield* p.probe('Recorded', entity)
+              machine = yield* write(Machine.step(d.program, machine, { _tag: 'Handle', at: now }))
+            }
+            return after
+          }),
+        created: (started) => Effect.asVoid(write(started)),
+      }
+      const unseen = !p.operations.has(address) && p.activated?.has(address) !== true
+      if (stored !== null && stored.suspension === null && (held?.lost === true || unseen)) {
+        yield* tx.apply({ _tag: 'Restart' })
+      }
+      const result = yield* body(tx)
+      // The runs the transaction stored are claimed before the commit. Another transaction of the entity may begin
+      // between the commit and the fork of the fibers, and would otherwise restart the entity as after a crash.
+      const runs = p.operations.get(address) ?? new Map<string, Fiber.Fiber<void> | null>()
+      for (const output of outputs) {
+        if (output._tag !== 'Started') continue
+        const run = under(output.key, output.incarnation)
+        runs.set(run, null)
+        claimed.push(run)
+      }
+      if (runs.size > 0) p.operations.set(address, runs)
+      yield* p.probe('BeforeCommit', entity)
+      return result
+    })
+    const unclaim = Effect.sync(() => claimed.forEach((run) => release(p, address, run)))
+    // The commit and what follows it are one region no interruption divides, so that a caller that gives up after
+    // the commit still leaves the stored operations running.
+    return Effect.uninterruptible(Effect.gen(function*() {
+      const result = yield* transaction(p.sql, stepped).pipe(Effect.onError(() => unclaim), Effect.orDie)
+      yield* p.probe('AfterCommit', entity)
+      p.activated?.add(address)
+      for (const output of outputs) {
+        if (output._tag === 'Started') {
+          const run = under(output.key, output.incarnation)
+          const runs = p.operations.get(address)
+          if (runs?.has(run) === true) runs.set(run, yield* Effect.forkIn(operating(p, d, id, output), p.scope))
+        } else if (output._tag === 'Disarmed') {
+          // A droppable operation the step dropped or changed stops. A timer has no fiber.
+          const run = under(output.key, output.incarnation)
+          const fiber = p.operations.get(address)?.get(run)
+          if (fiber === undefined) continue
+          release(p, address, run)
+          if (fiber !== null) yield* Effect.forkIn(Fiber.interrupt(fiber), p.scope)
+        } else if (output._tag === 'Armed') {
+          const at = DateTime.toEpochMillis(output.timer.at)
+          if (d.next === null || at < d.next) yield* Queue.offer(d.poke, undefined)
+        }
+      }
+      // A sender that was answered `Suspended` sends again once an entity leaves its suspension.
+      if (woken) tell(p, 'resumed')
+      return result
+    }))
+  })
+
+/**
+ * The fiber of one run of an operation. It runs the operation with the program's services, and then steps its
+ * completion or its death in a transaction of the entity. An operation that was only interrupted records nothing:
+ * its step dropped it, or the process is stopping.
+ */
+const operating = <T extends Types>(
+  p: Process,
+  d: Deployment<T>,
+  id: string,
+  started: Extract<Machine.Output<T>, Readonly<{ _tag: 'Started' }>>,
+): Effect.Effect<void> => {
+  const entity: Address = { name: d.program.name, id }
+  const { key, incarnation, operation } = started
+  const runner = runnerOf(d.program, operation)
+  if (runner === undefined) return Effect.die(new Error(`no runner for the operation under '${Machine.shownKey(key)}'`))
+  const ran = runner.delivery === 'Idempotent' || runner.delivery === 'IdempotentDigest'
+    ? runner.run(operation, started.idempotencyKey)
+    : runner.run(operation)
+  const sending = entitiesOf(p, entity, key, incarnation, runner.delivery === 'Droppable')
+  const recorded = Effect.flatMap(
+    Effect.exit(Effect.provideService(ran, Entities, sending)),
+    (exit): Effect.Effect<unknown> =>
+      Exit.isSuccess(exit)
+        ? inEntity(p, d, id, (tx) => tx.apply({ _tag: 'Complete', key, incarnation, message: exit.value }))
+        : Cause.hasInterruptsOnly(exit.cause)
+        ? Effect.void
+        : inEntity(p, d, id, (tx) => tx.apply({ _tag: 'Die', key, incarnation, cause: Cause.squash(exit.cause) })),
+  )
+  return d.provide(Effect.asVoid(recorded) as Effect.Effect<void, never, T['services']>).pipe(
+    Effect.ensuring(Effect.sync(() => {
+      release(p, addressOf(entity), under(key, incarnation))
+      tell(p, 'changed')
+    })),
+  )
+}
+
+/** The last output of a transaction that `pick` reads an answer from. */
+const answerOf = <T extends Types, A>(tx: Transaction<T>, pick: (output: Machine.Output<T>) => A | undefined): A => {
+  for (let at = tx.outputs.length - 1; at >= 0; at--) {
+    const output = tx.outputs[at]
+    const answer = output === undefined ? undefined : pick(output)
+    if (answer !== undefined) return answer
+  }
+  throw new Error('the transaction of a request gave no answer to it')
+}
+
+const send = <T extends Types>(
+  p: Process,
+  d: Deployment<T>,
+  id: string,
+  message: T['inbound'],
+  request: Request<T['sender']>,
+  keep?: number,
+): Effect.Effect<Answer<T['rejection']>> =>
+  Effect.gen(function*() {
+    // A message or a sender that does not encode is its caller's defect, and reaches no entity.
+    const asked = yield* Effect.sync(() => {
+      encode(d.program.schemas.inbound, message, 'inbound message')
+      if (request._tag === 'Caller') encode(d.program.schemas.sender, request.sender, 'sender')
+      return Machine.requestKey(d.program, request)
+    })
+    // An operation is given again the `NotFound` a run before it was given, so that a run after a crash acts alike.
+    if (request._tag === 'Operation') {
+      const kept = yield* d.storage.answer(id, 'Message', request)
+      if (kept?._tag === 'NotFound') return kept
+    }
+    return yield* inEntity(p, d, id, (tx): Effect.Effect<Answer<T['rejection']>> =>
+      Effect.gen(function*() {
+        if (tx.machine === null) {
+          const none = { _tag: 'NotFound' } as const
+          if (request._tag === 'Operation') yield* d.storage.keepAnswer(id, 'Message', request, none)
+          return none
+        }
+        const found = yield* d.storage.reply(id, request, DateTime.toEpochMillis(tx.now))
+        yield* tx.apply({
+          _tag: 'Receive',
+          request,
+          message,
+          reply: found?.reply ?? null,
+          carried: found?.carried ?? null,
+          at: tx.now,
+          ...(keep === undefined ? {} : { keep }),
+        })
+        return answerOf(tx, (output) =>
+          output._tag === 'Replied' && Machine.requestKey(d.program, output.request) === asked ? output.reply : undefined)
+      }))
+  })
+
+const create = <T extends Types>(
+  p: Process,
+  d: Deployment<T>,
+  id: string,
+  flags: T['flags'],
+  request: Request<T['sender']>,
+): Effect.Effect<Creation<T['rejection']> | Reused> =>
+  Effect.gen(function*() {
+    const asked = yield* Effect.sync(() => {
+      encode(d.program.schemas.flags, flags, 'value of the flags')
+      if (request._tag === 'Caller') encode(d.program.schemas.sender, request.sender, 'sender')
+      return Machine.requestKey(d.program, request)
+    })
+    if (request._tag === 'Operation') {
+      const kept = yield* d.storage.answer(id, 'Create', request)
+      if (kept?._tag === 'Rejected') return kept
+    }
+    return yield* inEntity(p, d, id, (tx): Effect.Effect<Creation<T['rejection']> | Reused> =>
+      Effect.gen(function*() {
+        if (tx.machine === null) {
+          const started = Machine.start(d.program, id, flags, tx.now, request)
+          // A defect at creation stores nothing, and its creator is given the defect.
+          if (started._tag === 'Defect') return yield* Effect.die(started.cause)
+          if (started._tag === 'Rejected') {
+            if (request._tag === 'Operation') yield* d.storage.keepAnswer(id, 'Create', request, started.reply)
+            return started.reply
+          }
+          yield* tx.created(started)
+        } else yield* tx.apply({ _tag: 'Create', request, flags })
+        return answerOf(tx, (output) =>
+          output._tag === 'CreationReplied' && Machine.requestKey(d.program, output.request) === asked
+            ? output.reply
+            : undefined)
+      }))
+  })
+
+/** An operator's `Resume` or `Discard`, in one transaction, with what it did read off the entity around it. */
+const operate = <T extends Types>(p: Process, d: Deployment<T>, id: string, event: 'Resume' | 'Discard') =>
+  inEntity(p, d, id, (tx): Effect.Effect<Operated> =>
+    Effect.gen(function*() {
+      const before = tx.machine
+      if (before === null) return { _tag: 'NotFound' }
+      if (before.stored.suspension === null) return { _tag: 'NotSuspended' }
+      const after = yield* tx.apply({ _tag: event })
+      if (after.stored.suspension === null) return { _tag: event === 'Resume' ? 'Resumed' : 'Discarded' }
+      if (after === before) return { _tag: 'NotDiscarded' }
+      return { _tag: 'StillSuspended', cause: Machine.render(after.stored.suspension.cause) }
+    }))
+
+/**
+ * What one run of an operation sends with. Its request is the run's, with the name the operation gives, so a run
+ * after a crash sends the same requests and is given the stored replies. A receiver that is suspended, or whose
+ * program is not deployed yet, has no reply: the run sends again after `retry`, or sooner once an entity is resumed.
+ */
+const entitiesOf = (p: Process, entity: Address, key: Key, incarnation: number, droppable: boolean) => {
+  const used = new Set<string>()
+  const requested = (kind: 'sent' | 'created', program: string, id: string, name: string) =>
+    Effect.sync(() => {
+      const refuse = (reason: string): never => {
+        throw new InvariantDefect({ reason })
+      }
+      if (droppable) refuse(`the droppable operation under '${Machine.shownKey(key)}' sent to ${program} '${id}'`)
+      const fault = idFault(id)
+      if (fault !== undefined) refuse(fault)
+      // A name used twice with one entity would be answered the first request's reply, and never applied.
+      const to = JSON.stringify([kind, program, id, name])
+      if (used.has(to)) refuse(`the operation ${kind} '${name}' to ${program} '${id}' twice`)
+      used.add(to)
+      return { _tag: 'Operation', entity, key, incarnation, name } as const
+    })
+  const answered = <A>(program: string, attempt: (d: Deployment<any>) => Effect.Effect<A | null>): Effect.Effect<A> =>
+    Effect.suspend(() => {
+      // The signal is taken before the attempt, so that a resumption between the answer and the wait ends the wait.
+      const resumed = p.resumed
+      const d = p.deployments.get(program)
+      return Effect.flatMap(d === undefined ? Effect.succeed(null) : attempt(d), (answer) =>
+        answer !== null
+          ? Effect.succeed(answer)
+          : Effect.flatMap(
+            Effect.race(Deferred.await(resumed), Effect.sleep(`${p.retry} millis`)),
+            () => answered(program, attempt),
+          ))
+    })
+  const notReused = (program: string, id: string) =>
+    Effect.die(new InvariantDefect({ reason: `an operation's request to ${program} '${id}' was answered Reused` }))
+  return Entities.of({
+    send: <T extends Types>(program: Receiver<T>, id: string, message: T['inbound'], name: string) =>
+      Effect.flatMap(requested('sent', program.name, id, name), (request) =>
+        answered(program.name, (d: Deployment<T>) =>
+          Effect.flatMap(send(p, d, id, message, request), (reply): Effect.Effect<Reply<T['rejection']> | null> =>
+            reply._tag === 'Suspended' || reply._tag === 'Full'
+              ? Effect.succeed(null)
+              : reply._tag === 'Reused'
+              ? notReused(program.name, id)
+              : Effect.succeed(reply)))),
+    create: <T extends Types>(program: Receiver<T>, id: string, name: string, ...[flags]: Flagged<T>) =>
+      Effect.flatMap(requested('created', program.name, id, name), (request) =>
+        answered(program.name, (d: Deployment<T>) =>
+          Effect.flatMap(
+            create(p, d, id, flags === undefined ? null : flags, request),
+            (creation): Effect.Effect<Creation<T['rejection']> | null> =>
+              creation._tag === 'Reused' ? notReused(program.name, id) : Effect.succeed(creation),
+          ))),
+  })
+}
+
+/**
+ * Fires the stored timers of a program's entities: the one fiber of a deployment that waits on time. It reads the
+ * entities with a timer due, fires each timer in a transaction of its entity, and sleeps until the earliest time
+ * stored, or until a step arms a timer before that time.
+ */
+const waking = <T extends Types>(p: Process, d: Deployment<T>): Effect.Effect<never> =>
+  Effect.forever(Effect.gen(function*() {
+    const now = yield* DateTime.now
+    const due = yield* d.storage.due(DateTime.toEpochMillis(now), [])
+    let fired = 0
+    for (const id of due.ready) {
+      const fire = inEntity(p, d, id, (tx) =>
+        Effect.gen(function*() {
+          const next = tx.machine === null ? undefined : Machine.nextTimer(tx.machine, tx.now)
+          if (next === undefined) return false
+          yield* tx.apply({ _tag: 'Fire', key: next.key, incarnation: next.incarnation })
+          return true
+        }))
+      while (yield* fire) fired++
+    }
+    tell(p, 'changed')
+    if (fired > 0) return
+    d.next = due.next
+    // A timer that is due and did not fire is read again after `retry`, and not at once.
+    const wait = due.ready.length > 0
+      ? p.retry
+      : due.next === null
+      ? null
+      : Math.max(0, due.next - DateTime.toEpochMillis(now))
+    yield* Effect.race(Queue.take(d.poke), wait === null ? Effect.never : Effect.sleep(`${wait} millis`))
+  }))
+
+/**
+ * Launches the spike's runtime on the client. It creates the tables of the storage, and holds no database: another
+ * runtime may run on the same one.
+ */
+export const launch = (options: Options = {}): Effect.Effect<Runtime, never, SqlClient.SqlClient | Scope.Scope> =>
+  Effect.gen(function*() {
+    const sql = yield* SqlClient.SqlClient
+    yield* createTables
+    yield* partitioned(defaultPartitions)
+    const p: Process = {
+      sql,
+      retry: options.retry ?? 50,
+      probe: options.probe ?? (() => Effect.void),
+      scope: yield* Effect.scope,
+      deployments: new Map(),
+      operations: new Map(),
+      activated: options.activation === 'step' ? null : new Set(),
+      changed: Deferred.makeUnsafe<void>(),
+      resumed: Deferred.makeUnsafe<void>(),
+    }
+
+    const deploy = <T extends Types>(program: Program<T>) =>
+      Effect.gen(function*() {
+        yield* Effect.sync(() => checkProgram(program))
+        if (p.deployments.has(program.name)) {
+          return yield* Effect.die(new InvariantDefect({ reason: `the program '${program.name}' is deployed already` }))
+        }
+        const services = yield* Effect.context<Exclude<T['services'], Entities>>()
+        const d: Deployment<T> = {
+          program,
+          storage: storage(program, sql),
+          provide: (operation) => Effect.provideContext(operation, services) as Effect.Effect<void>,
+          poke: yield* Queue.sliding<void>(1),
+          next: null,
+        }
+        yield* d.storage.indexed
+        p.deployments.set(program.name, d)
+        tell(p, 'resumed')
+        // An operation a crash interrupted has no fiber in this process, so a transaction of its entity restarts it.
+        for (const id of yield* d.storage.interrupted) yield* inEntity(p, d, id, () => Effect.void)
+        yield* Effect.forkIn(waking(p, d), p.scope)
+        const caller = (request: Readonly<{ requestId: string; sender?: unknown }>): Request<T['sender']> => ({
+          _tag: 'Caller',
+          sender: request.sender === undefined ? null : request.sender,
+          id: request.requestId,
+        })
+        const handle: Handle<T> = {
+          create: (id, request) =>
+            create(p, d, id, (request as { flags?: unknown }).flags ?? null, caller(request)),
+          send: (id, message, request) =>
+            send(p, d, id, message, caller(request), request.keep === 'forever' ? undefined : request.keep.millis),
+          read: d.storage.projected,
+          resume: (id) => operate(p, d, id, 'Resume'),
+          discard: (id) => operate(p, d, id, 'Discard'),
+        }
+        return handle
+      })
+
+    const quiet = Effect.gen(function*() {
+      if (p.operations.size > 0) return false
+      const now = DateTime.toEpochMillis(yield* DateTime.now)
+      for (const d of p.deployments.values()) {
+        if ((yield* d.storage.due(now, [])).ready.length > 0) return false
+      }
+      return true
+    })
+    // The signal is taken before the look, so whatever ends after the look completes it, and `settled` looks again.
+    const settled: Effect.Effect<void> = Effect.suspend(() => {
+      const next = p.changed
+      return Effect.flatMap(quiet, (is) => is ? Effect.void : Effect.flatMap(Deferred.await(next), () => settled))
+    })
+
+    return { deploy, settled }
+  })
