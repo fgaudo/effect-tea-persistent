@@ -763,7 +763,8 @@ family gets a fix of its own.
 113. **Observed: the first test of the job `postgres` times out at 5 s in two runs of three.** The test `finds the
     entities whose activation the new program suspends, as a deploy then suspends them`, in `src/check.test.ts`, is
     the first that `test:postgres` runs on the CI's server. It timed out in the runs of `048e0df` and `0fbff80` on
-    2026-11-21, and passed in 0.5 s in the run of `dabeb35` and in a run of `0fbff80` again. The commits between
+    2026-11-21, and passed in 0.5 s in the run of `dabeb35` and in a run of `0fbff80` again. It timed out in the run
+    of `6f90cd5`, the only test of the job to fail, and passed when the job ran again. The commits between
     change no code it runs, and the other tests of the file take milliseconds. The cause is not known. The first
     database the job makes on the server, or the first connection of its pool, is the first place to look. The fix
     begins with a run that logs where the test waits.
