@@ -21,6 +21,21 @@ Each step names its model and effort, what it depends on, and how to tell it is 
      answer within microtasks. On a server it waits until the pool of `fixed` connections is idle.
    - The target's runner waits for the history's answer, kept by run. A process restarts only once it is quiet, so
      the runs whose runner was called are the runs a committed step stored.
+   - **The maintainer chose on 2026-11-21**, after an opinion of Fable 5.2. The store is SQLite `:memory:` through
+     the storage of today, one private client per rehearsal. Inside, the rehearsal runs on a `SqlClient`, and the
+     public `rehearse` gives it the private client. The driver is `@effect/sql-sqlite-node`, an optional peer
+     dependency that only `/testing` imports. It runs on `node:sqlite`, which Bun implements:
+     `spikes/sqlite-node-under-bun.test.ts` holds what the rehearsal rests on, and `bun test` and the spikes passed
+     on it on 2026-11-21 with every client of the tests moved to it.
+   - **At a defect** the act that suspends an entity fails with a defect that carries the cause and the entity. A
+     `send` fails where the runtime answers `Suspended`. The entity stays suspended, and the rehearsal gives
+     `suspension`, `resume` and `discard`. So the histories of step 3 are played on the rehearsal too, as a third
+     target.
+   - The rehearsal drives the runtime's transaction, not a launched runtime. A runner is given no key and no
+     incarnation, so a wrapped runner cannot be matched to `pending(key)`. The seam is what the process does after
+     the commit: the runtime forks the operation, and the rehearsal records the run as pending. `fire` moves the
+     time to its timer's, so a timer due earlier fires first. The checks of an operation that comes back the same
+     and of a timer that loops at one time stay, stricter than the runtime.
 
 6. **A slice from the browser to the entity.** (Fable 5.2 · high) It depends on steps 4 and 5. It is the library's
    first application, and it says what the backend lacks. It is one example, the seat of `examples/quick-start`

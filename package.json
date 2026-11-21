@@ -20,11 +20,20 @@
     "test:postgres": "bun test '--path-ignore-patterns=node_modules/**' src/check.test.ts src/storage.test.ts src/postgres.test.ts src/fixtures.property.test.ts src/runtime",
     "links": "bun scripts/check-links.ts"
   },
+  "peerDependencies": {
+    "@effect/sql-sqlite-node": "4.1.3"
+  },
+  "peerDependenciesMeta": {
+    "@effect/sql-sqlite-node": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@effect/platform-bun": "4.1.3",
     "@effect/sql-pg": "4.1.3",
     "@effect/sql-pglite": "4.1.3",
     "@effect/sql-sqlite-bun": "4.1.3",
+    "@effect/sql-sqlite-node": "4.1.3",
     "@electric-sql/pglite": "0.5.15",
     "@types/bun": "^1.4.3",
     "effect": "4.1.3",
