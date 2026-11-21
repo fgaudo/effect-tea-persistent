@@ -20,8 +20,16 @@ Each step names its model and effort, what it depends on, and how to tell it is 
      and every parked piece. The outbox is one table, as `docs/design.md` says under Publishing what happened.
      `bun test` runs in 52 s. `src/contract.test.ts` went, since it compared backends on pieces that went.
      `spikes/full-volume.test.ts` and `spikes/full-database.test.ts` went with the consumers they freed room for.
-   - Next: the runtime and the storage are 2,903 lines without tests, over the budget of 2,500. The maintainer
-     chose on 2026-11-21 to cut rather than move the budget, and approves each cut before it is made.
+   - Done on 2026-11-21: the cuts of dead code and of statements written twice took the runtime and the storage
+     from 2,903 lines to 2,818. Four cuts were left. `untransacted` stays a function, since the test of the forks
+     of `src/form.test.ts` finds a fork by its call. `onDialectOrElse` would drop the dialect's name from the
+     defect. A helper of the exact digits would read `NaN` as `JSON.stringify` does not. A helper of the check of
+     a transaction saves one line.
+   - Next: the runtime and the storage are still over the budget of 2,500. The maintainer chose to cut, and took
+     only those cuts. The cuts left are about 140 lines from inferring `Storage<T>` from its parts and from comments
+     that repeat `docs/design.md`, about 55 lines of signatures that fit one line, and two changes of behaviour of
+     about 40 lines: `due` without the refusal of bug 114, and an index's long name refused by `checkProgram`. All
+     of them leave about 2,580. The maintainer chooses among them, or moves the budget.
    - Done on 2026-11-21 on the CI's server: the histories, the test of `READ COMMITTED` and the deadlock pass.
    - Done on 2026-11-21: the four overlaps of `src/runtime.pool.test.ts` pass on the server. The row is stored
      under the receiver's name, so the receiver's `expire` deletes it, as the sweep of each program does. The
