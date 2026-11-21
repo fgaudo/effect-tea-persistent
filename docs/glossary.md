@@ -92,8 +92,9 @@ so.
 - **Report.** A question over the entities the read model does not answer: a count, a grouping, a disjunction, a
   search in a text, a join across programs, a series over time. It is answered by a store made for it, which a
   reader of the outbox fills.
-- **Rehearsal, `rehearse`.** A scenario run on the machine without storage or clock, where the test answers
-  or runs the operations, fires the timers or lets time pass, kills the process and deploys new versions.
+- **Rehearsal, `rehearse`.** A scenario run on the runtime's step over a database in memory, with no clock, where
+  the test answers or runs the operations, fires the timers or lets time pass, kills the process and deploys new
+  versions.
   `rehearse` runs one entity, and `rehearse.together` a world.
 - **Reply.** The stored answer to a request, which a retry under the same request id reads. A caller's is kept for
   the `keep` its boundary gave `send`, from the step that answers, or for ever where the `keep` is `'forever'`. Another entity's is kept
@@ -136,6 +137,6 @@ so.
   the previous state's after each step: a new key starts its work, a missing one ends it. The notes before
   [decision 0195](decisions/0195-the-package-is-effect-tea-persistent.md) call it durable work, and the function
   `durable`.
-- **World, member.** In a rehearsal: entities on the machine together, with one time and one process for all of them,
-  made by `rehearse.together`. A member is one entity of a world, whose `run` runs an operation's runner, and what
-  the runner sends reaches the receiver's machine.
+- **World, member.** In a rehearsal: entities on one process together, with one time and one database for all of
+  them, made by `rehearse.together`. A member is one entity of a world, whose `run` runs an operation's runner, and
+  what the runner sends reaches the receiver's step.

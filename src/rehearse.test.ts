@@ -11,6 +11,7 @@ import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Scheduler from 'effect/Scheduler'
 import * as Schema from 'effect/Schema'
+import * as SchemaTransformation from 'effect/SchemaTransformation'
 import fc from 'fast-check'
 import { booking } from './fixtures/booking.ts'
 import { inventory } from './fixtures/inventory.ts'
@@ -20,6 +21,7 @@ import {
   defect,
   type Entities,
   InvariantDefect,
+  type Json,
   isTimer,
   operation,
   type Program,
@@ -33,7 +35,7 @@ import {
   type TypesOf,
   key,
 } from './program.ts'
-import { type Member, rehearse, type World } from './rehearse.ts'
+import { accepted, EntitySuspended, type Member, rehearse, type World } from './rehearse.ts'
 
 const placedAt = DateTime.makeUnsafe('2026-10-30T10:00:00Z')
 
@@ -111,7 +113,8 @@ describe('a deploy', () => {
       }),
     ))
     const cause = Exit.isFailure(exit) ? Cause.squash(exit.cause) : null
-    expect(cause instanceof InvariantDefect && cause.reason)
+    const reason = cause instanceof EntitySuspended ? cause.reason : null
+    expect(reason instanceof InvariantDefect && reason.reason)
       .toBe("the program changed the operation under 'charge' before its completion")
   })
 
@@ -229,8 +232,9 @@ describe('a rehearsal', () => {
     ))
   })
 
-  // Two timers under way, fired out of their order: the earlier one firing after the later does not take time back.
-  test('keeps its time when a timer due earlier fires after one due later', () => {
+  // Two timers under way, the later one fired first: time moves to its time, and the earlier one fires on the way, as
+  // the runtime's clock would fire it.
+  test('fires a timer due earlier on the way to one due later, and drops its firing after', () => {
     const timers = ['early', 'late'] as const
     const Timer = Schema.Literals(timers)
     const dueOf = { early: DateTime.add(placedAt, { hours: 1 }), late: DateTime.add(placedAt, { hours: 2 }) }
@@ -279,21 +283,21 @@ describe('a rehearsal', () => {
         const early = yield* rehearsal.pending('early')
         const late = yield* rehearsal.pending('late')
         expect(yield* rehearsal.fire(late)).toBe('Delivered')
-        expect(yield* rehearsal.fire(early)).toBe('Delivered')
+        expect(yield* rehearsal.fire(early)).toBe('Dropped')
         yield* rehearsal.send({ _tag: 'Ping' }, { sender: { _tag: 'Tester' } })
         expect((yield* rehearsal.state).seen.map(DateTime.formatIso))
-          .toEqual([dueOf.late, dueOf.late, dueOf.late].map(DateTime.formatIso))
+          .toEqual([dueOf.early, dueOf.late, dueOf.late].map(DateTime.formatIso))
       }),
     ))
   })
 
   // The runtime gives a caller the projection decoded from the JSON it stored, where `-0` is written `0`.
-  test('gives the projection as a caller reads it from its JSON, -0 as 0 (decision 0211)', () =>
+  test('gives the state and the projection as the runtime reads them back from their JSON, -0 as 0', () =>
     Effect.runPromise(rehearse(
       inventory,
       { flags: { capacity: -0 }, at: placedAt },
       Effect.fnUntraced(function*(rehearsal) {
-        expect(Object.is((yield* rehearsal.state).capacity, -0)).toBe(true)
+        expect(Object.is((yield* rehearsal.state).capacity, 0)).toBe(true)
         expect(Object.is((yield* rehearsal.projection).available, 0)).toBe(true)
       }),
     )))
@@ -378,9 +382,9 @@ describe("a rehearsal's request ids", () => {
       }),
     )))
 
-  // Bug 112 of docs/bugs.md. Each fiber yields after every operation, so that one send reads that no reply is stored
-  // before the other send applies its message.
-  test.failing('applies once a request id that two fibers of the scenario send at once', () =>
+  // Each fiber yields after every operation, so that two sends of one request interleave wherever they can. Each is
+  // one transaction of the runtime, so the second reads the reply the first stored.
+  test('applies once a request id that two fibers of the scenario send at once', () =>
     Effect.runPromise(Effect.provideService(
       rehearse(
         door,
@@ -513,8 +517,10 @@ describe("a rehearsal's request ids", () => {
 describe('a world', () => {
   const at = placedAt
   const flags = { customer: 'ada', event: 'concert-1', seats: 2 }
+  // A runner's defect suspends its entity, as in the runtime, and the act fails with the suspension.
   const reasonOf = (exit: Exit.Exit<unknown>) => {
-    const cause = Exit.isFailure(exit) ? Cause.squash(exit.cause) : null
+    const failed = Exit.isFailure(exit) ? Cause.squash(exit.cause) : null
+    const cause = failed instanceof EntitySuspended ? failed.reason : failed
     return cause instanceof InvariantDefect ? cause.reason : cause
   }
   // A booking whose hold is the runner given: the rest of the booking is the example's.
@@ -721,9 +727,26 @@ describe('a world', () => {
         yield* held.run('hold')
       }),
     ))
-    expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toBe(
+    const failed = Exit.isFailure(exit) ? Cause.squash(exit.cause) : null
+    expect(failed instanceof Error && failed.message).toBe(
       "the world runs no program 'Inventory', and a reference to it brings no code to run",
     )
+  })
+
+  // Each act holds the world's lock, so an act that reads and then steps is whole even where two fibers act at once.
+  // Each fiber yields after every operation, so that two creations of one id interleave wherever they can.
+  test('fails the second of two creations of one id that two fibers make at once', async () => {
+    const exit = await Effect.runPromiseExit(Effect.provideService(
+      rehearse.together(at, (world) =>
+        Effect.asVoid(Effect.all(
+          [world.create(inventory, 'concert-1', { capacity: 4 }), world.create(inventory, 'concert-1', { capacity: 4 })],
+          { concurrency: 'unbounded' },
+        ))),
+      Scheduler.MaxOpsBeforeYield,
+      1,
+    ))
+    const failed = Exit.isFailure(exit) ? Cause.squash(exit.cause) : null
+    expect(failed instanceof Error ? failed.message : failed).toBe("Inventory 'concert-1' exists in the world already")
   })
 
   // A rejection at creation creates nothing, and a run's `create` is answered it (decision 0182).
@@ -1072,18 +1095,16 @@ describe('time that passes', () => {
       Effect.fnUntraced(function*(rehearsal) {
         yield* rehearsal.send({ _tag: 'Arm', key: 'b', at: hours(2), every: null, next: null }, { sender: tester })
         yield* rehearsal.send({ _tag: 'Arm', key: 'a', at: hours(1), every: 30 * 60 * 1000, next: null }, { sender: tester })
-        // Within two hours, `a` fires at 1h, 1h30 and 2h. `b` fires at 2h before `a` does, since `a` came back at
-        // 2h after `b` was armed.
+        // Within two hours, `a` fires at 1h, 1h30 and 2h, and `b` at 2h. The order of `a` and `b` at 2h is not
+        // promised, which bug 115 of docs/bugs.md holds.
         yield* rehearsal.advance('2 hours')
         expect(yield* rehearsal.underWay('b')).toBeNull()
         yield* rehearsal.send({ _tag: 'Ping' }, { sender: tester })
-        expect((yield* rehearsal.state).seen.slice(2)).toEqual([
-          seenAs('a', hours(1)),
-          seenAs('a', hours(1.5)),
-          seenAs('b', hours(2)),
-          seenAs('a', hours(2)),
-          seenAs('Ping', hours(2)),
-        ])
+        const seen = (yield* rehearsal.state).seen.slice(2)
+        expect(seen.slice(0, 2)).toEqual([seenAs('a', hours(1)), seenAs('a', hours(1.5))])
+        expect(new Set(seen.slice(2, 4).map((one) => JSON.stringify(one))))
+          .toEqual(new Set([seenAs('b', hours(2)), seenAs('a', hours(2))].map((one) => JSON.stringify(one))))
+        expect(seen.slice(4)).toEqual([seenAs('Ping', hours(2))])
         expect((yield* rehearsal.pending('a')).work).toEqual(timer(hours(2.5), { _tag: 'Rang', key: 'a' }))
       }),
     )))
@@ -1579,10 +1600,9 @@ describe("the order of two entities' timers due at one time", () => {
     await fc.assert(alike(() => order), { numRuns: 200 })
   })
 
-  // The premise of decision 0293 fails here. A defect ends `advance` where it falls, and the timers due at the same
-  // time that have not fired yet do not fire. A scenario that catches the defect, and reads the other entity, reads
-  // whether that entity fired first. The runtime suspends the broken entity alone, and the other fires either way.
-  test('with a defect among them, shows a scenario that catches it which fired first', async () => {
+  // A defect suspends the broken entity alone, as in the runtime: `advance` fires the other one either way, and fails
+  // once time has passed.
+  test('with a defect among them, suspends the broken entity alone, whichever was created first', async () => {
     const breaking: Program<Order> = {
       ...order,
       update: (message, meta) => (state) =>
@@ -1604,16 +1624,14 @@ describe("the order of two entities' timers due at one time", () => {
       return { read, exit: exit._tag }
     }
     expect({ brokenFirst: await run(true), soundFirst: await run(false) }).toEqual({
-      brokenFirst: { read: ['Failure', 'AwaitingPayment'], exit: 'Success' },
+      brokenFirst: { read: ['Failure', 'Cancelled'], exit: 'Success' },
       soundFirst: { read: ['Failure', 'Cancelled'], exit: 'Success' },
     })
   })
 
-  // The premise of decision 0293 fails here too. A restart activates the entities in the order of their creation,
-  // and a suspended entity's activation dies again, so the entities after it are not activated. A scenario that
-  // caught a defect, and restarts, reads whether the other entity came before: an email under way is told unsure only
-  // if it did.
-  test('a restart after a caught defect shows a scenario which entity was created first', async () => {
+  // A restart steps every entity, as a new process does, and leaves a suspended one as it is: an email under way is
+  // told unsure, whichever entity was created first.
+  test('a restart after a caught defect activates every entity, whichever was created first', async () => {
     const breaking: Program<Order> = {
       ...order,
       update: (message, meta) => (state) =>
@@ -1644,8 +1662,8 @@ describe("the order of two entities' timers due at one time", () => {
       return { read, exit: exit._tag }
     }
     expect({ brokenFirst: await run(true), soundFirst: await run(false) }).toEqual({
-      brokenFirst: { read: ['Sending', 'Failure', 'Failure', 'Sending'], exit: 'Success' },
-      soundFirst: { read: ['Sending', 'Failure', 'Failure', 'Unsure'], exit: 'Success' },
+      brokenFirst: { read: ['Sending', 'Failure', 'Success', 'Unsure'], exit: 'Success' },
+      soundFirst: { read: ['Sending', 'Failure', 'Success', 'Unsure'], exit: 'Success' },
     })
   })
 
@@ -1669,23 +1687,6 @@ describe("the order of two entities' timers due at one time", () => {
       read.push((yield* Effect.exit(seats.state))._tag)
     })))
     expect({ read, exit: exit._tag }).toEqual({ read: ['Failure', 'Holding', true, 'Success'], exit: 'Success' })
-  })
-
-  // The histories reach timers of two entities due at one time, fired in two orders: a program whose `update` reads
-  // how many deadlines passed before its own, from outside its state, ends otherwise in the two worlds.
-  test('changes what a program reads of the order, which the histories reach', async () => {
-    const counting = () => {
-      let passed = 0
-      return {
-        ...order,
-        update: (message, meta) => (state) =>
-          message._tag === 'PaymentDeadlinePassed' && state._tag === 'AwaitingPayment'
-            ? { _tag: 'Cancelled', order: state.order, reason: passed++ === 0 ? 'Unpaid' : 'ByCustomer' }
-            : order.update(message, meta)(state),
-      } satisfies Program<Order>
-    }
-    const found = await fc.check(alike(counting), { numRuns: 200 })
-    expect(found.failed).toBe(true)
   })
 })
 
@@ -1736,9 +1737,9 @@ describe('a failure a scenario catches', () => {
     })
   })
 
-  // On the runtime, a defect of an operation suspends its entity (`docs/design.md`, under Defects). In a rehearsal it
-  // fails the run alone, and the entity handles the next message.
-  test("of an operation's defect suspends no entity in a rehearsal, unlike the runtime", async () => {
+  // A defect of an operation suspends its entity, as in the runtime (`docs/design.md`, under Defects), so the entity
+  // handles no later message.
+  test("of an operation's defect suspends its entity, as in the runtime", async () => {
     const twice = {
       ...booking,
       name: 'Twice',
@@ -1771,8 +1772,92 @@ describe('a failure a scenario catches', () => {
       }
     })))
     expect(seen).toEqual({
-      'a run that sends twice under one name': ['Failure', 'Success'],
-      'a runner that dies': ['Failure', 'Success'],
+      'a run that sends twice under one name': ['Failure', 'Failure'],
+      'a runner that dies': ['Failure', 'Failure'],
     })
+  })
+})
+
+// A rehearsal stores what the runtime stores, and reads it back through the migrations of the program deployed. So
+// a retry after a deploy is answered as the runtime answers it, whatever the new version writes otherwise.
+describe('a retry after a deploy', () => {
+  const Owner = Schema.Struct({ id: Schema.String })
+  const wallet = declare({
+    state: Schema.Struct({ spent: Schema.Int }),
+    flags: Schema.Null,
+    inbound: Schema.TaggedStruct('Spend', { n: Schema.Int }),
+    rejection: Schema.Struct({ limit: Schema.Int }),
+    sender: Owner,
+    projection: Schema.Struct({ spent: Schema.Int }),
+  })({
+    name: 'Wallet',
+    init: () => ({ spent: 0 }),
+    update: (message) => (state) =>
+      state.spent + message.n > 10 ? rejectWith({ limit: 10 }) : { spent: state.spent + message.n },
+    project: (state) => state,
+  })
+  const ann = { id: 'ann' }
+  const fields = (json: Json) => json as Readonly<Record<string, Json>>
+
+  // Bug 5 of docs/bugs.md: the rehearsal kept a reply under the text of its request, which a new sender changes.
+  test('is given the stored reply where the new version writes the sender otherwise, and applied once', () => {
+    const prefixed: typeof wallet = {
+      ...wallet,
+      schemas: {
+        ...wallet.schemas,
+        sender: Schema.Struct({
+          id: Schema.String.pipe(Schema.decodeTo(
+            Schema.String,
+            SchemaTransformation.transform({
+              decode: (text) => text.slice('user:'.length),
+              encode: (id) => `user:${id}`,
+            }),
+          )),
+        }),
+      },
+      migrations: [{ sender: (json) => ({ id: `user:${String(fields(json)['id'])}` }) }],
+    }
+    return Effect.runPromise(rehearse(wallet, { at: placedAt }, Effect.fnUntraced(function*(rehearsal) {
+      expect(yield* rehearsal.send({ _tag: 'Spend', n: 3 }, { sender: ann, requestId: 'r' })).toEqual(accepted)
+      yield* rehearsal.deploy(prefixed)
+      expect(yield* rehearsal.send({ _tag: 'Spend', n: 3 }, { sender: ann, requestId: 'r' })).toEqual(accepted)
+      expect(yield* rehearsal.state).toEqual({ spent: 3 })
+    })))
+  })
+
+  // Bug 107 of docs/bugs.md: the rehearsal compared the retry with the message as the version before encoded it.
+  test('is given the stored reply where the new version encodes the message otherwise, and not Reused', () => {
+    const textual: typeof wallet = {
+      ...wallet,
+      schemas: {
+        ...wallet.schemas,
+        inbound: Schema.TaggedStruct('Spend', { n: Schema.NumberFromString }) as unknown as typeof wallet.schemas
+          .inbound,
+      },
+      migrations: [{ inbound: (json) => ({ ...fields(json), n: String(fields(json)['n']) }) }],
+    }
+    return Effect.runPromise(rehearse(wallet, { at: placedAt }, Effect.fnUntraced(function*(rehearsal) {
+      expect(yield* rehearsal.send({ _tag: 'Spend', n: 3 }, { sender: ann, requestId: 'r' })).toEqual(accepted)
+      yield* rehearsal.deploy(textual)
+      expect(yield* rehearsal.send({ _tag: 'Spend', n: 3 }, { sender: ann, requestId: 'r' })).toEqual(accepted)
+      expect(yield* rehearsal.state).toEqual({ spent: 3 })
+    })))
+  })
+
+  // Bug 108 of docs/bugs.md: the rehearsal gave back the reason as the version before wrote it.
+  test('is given the stored reason as the migration of the rejection reads it', () => {
+    const cents: typeof wallet = {
+      ...wallet,
+      update: (message) => (state) =>
+        state.spent + message.n > 10 ? rejectWith({ limit: 1_000 }) : { spent: state.spent + message.n },
+      migrations: [{ rejection: (json) => ({ limit: Number(fields(json)['limit']) * 100 }) }],
+    }
+    return Effect.runPromise(rehearse(wallet, { at: placedAt }, Effect.fnUntraced(function*(rehearsal) {
+      const refused = { _tag: 'Rejected', reason: { limit: 10 } } as const
+      expect(yield* rehearsal.send({ _tag: 'Spend', n: 20 }, { sender: ann, requestId: 'big' })).toEqual(refused)
+      yield* rehearsal.deploy(cents)
+      expect(yield* rehearsal.send({ _tag: 'Spend', n: 20 }, { sender: ann, requestId: 'big' }))
+        .toEqual({ _tag: 'Rejected', reason: { limit: 1_000 } })
+    })))
   })
 })

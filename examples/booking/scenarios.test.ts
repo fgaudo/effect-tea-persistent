@@ -10,7 +10,7 @@ import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import type { Address } from '@fgaudo/effect-tea-persistent'
-import { accepted, rehearse, rejected } from '@fgaudo/effect-tea-persistent/testing'
+import { accepted, EntitySuspended, rehearse, rejected } from '@fgaudo/effect-tea-persistent/testing'
 import { booking, type Sender } from './booking.ts'
 import { inventory } from './inventory.ts'
 
@@ -150,7 +150,11 @@ describe('inventory', () => {
     )))
 })
 
-const reasonOf = (exit: Exit.Exit<unknown>) => (Exit.isFailure(exit) ? Cause.squash(exit.cause) : null)
+// A defect suspends its entity, as in the runtime, and the act fails with the suspension and its reason.
+const reasonOf = (exit: Exit.Exit<unknown>) => {
+  const failed = Exit.isFailure(exit) ? Cause.squash(exit.cause) : null
+  return failed instanceof EntitySuspended ? failed.reason : failed
+}
 
 describe('booking and inventory together', () => {
   test('held seats are confirmed, and sold', () =>

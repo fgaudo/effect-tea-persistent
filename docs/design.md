@@ -25,8 +25,8 @@ holds at each point where the process may die. The words it uses are defined in 
   or discards the message.
 - **Nothing is replayed.** After a crash the runtime reads the state back and starts the work `work` derives from
   it. A new version of a schema reads the version before through a migration.
-- **A program is tested without a database or a clock.** A rehearsal runs the runtime's machine, and the test
-  decides when each operation answers and when time passes.
+- **A program is tested with no database to set up and no clock.** A rehearsal runs the runtime's step on a
+  database in memory, and the test decides when each operation answers and when time passes.
 
 ## Contents
 
@@ -853,66 +853,57 @@ Most of a program is pure, so most tests need no runtime:
 
 ### Rehearsing
 
-`rehearse` runs a scenario on the program without storage or clock. It is the runtime's machine, which
-handles the mailbox to its end after each act of the test. Time stands at the start's, and moves to a timer's
-time when it fires, and forward by a duration with `advance`. The test decides when each operation answers, when
-time passes, and when the process dies:
+`rehearse` runs a scenario on the runtime's own step, over a database of SQLite in memory of its own, with no
+database to set up and no clock. So a rehearsal stores what the runtime stores, reads it back through the
+migrations, and answers what the runtime answers. Its driver is `@effect/sql-sqlite-node`, an optional peer
+dependency that only the entry `./testing` imports. Nothing happens by itself: the process forks no operation and
+fires no timer, and the test decides when each operation answers, when time passes, and when the process dies.
+Time stands at the start's, and moves to a timer's time when it fires, and forward by a duration with `advance`.
+Each act holds the world's lock, so a scenario that acts from two fibers steps one transaction after another:
 
 - `send` delivers an inbound message, and returns the reply; `sendFrom` delivers one from another entity. The
   request comes last, as `send(message, { sender, requestId })`. Given a request id, it is a request the test
-  names: a second send under the same sender and request id is a retry, given the stored reply and not applied
-  again, and the reply is kept through a restart and a deploy. Without one, each send is a new request
-  ([decision 0200](decisions/0200-a-rehearsal-sends-under-a-request-id-the-test-names.md)). A second send under the same
-  sender and request id that carries another message is answered `Reused`, and is not applied
-  ([decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)). A program whose sender is
-  `null` may leave the sender out, and the request with it, as `send(message)`
-  ([decision 0245](decisions/archive/0245-a-reply-is-kept-as-long-as-send-says-and-the-runtime-sweeps.md));
+  names, sent with `keep: 'forever'`: a retry is given the stored reply, through a restart and a deploy, as the
+  runtime reads it. One that carries another message is answered `Reused`. Without a request id, each send is a new
+  request, whose reply is kept for no time. A program whose sender is `null` may leave the sender out, and the
+  request with it, as `send(message)`;
 - `pending(key)` finds the work under way under one of the program's keys, with its idempotency key and its
   value, which a test asserts as it asserts a command in effect-tea. A key with a parameter takes it too:
   `pending('charge', 'line-7')`. It fails the test when there is none, and `underWay(key)` gives null instead;
 - `answer(pending, message)` completes an operation, and says whether the message was delivered or dropped. It
-  fails the test when the step that handles the message returns the same operation under its key, since that
-  operation would run again at once, turn after turn, with no pause
-  ([decision 0130](decisions/archive/0130-a-runner-retries-and-the-state-counts-the-attempts.md));
-- `fire(pending)` fires a timer;
-- `projection` gives the projection as a caller of the runtime reads it: encoded by its schema, written as JSON and
-  decoded again, so that `-0` is `0`
-  ([decision 0211](decisions/0211-a-rehearsal-gives-the-projection-as-a-caller-reads-it.md)). `state` gives the
-  state as the entity holds it;
+  fails the test when the step that handles the message returns the same operation under its key, which the
+  runtime would run again at once, turn after turn, with no pause;
+- `fire(pending)` moves time to the timer's time, and the timers due by then fire in the order of their times, this
+  one last. It is `Dropped` when an earlier one disarmed it;
+- `state` and `projection` give what the runtime reads back, decoded from the stored JSON, so that `-0` is `0`;
 - `advance(duration)` moves time forward, and fires each timer due within it at its time, in the order of the
-  times. A message after it is handled at the time reached. A world advances the one time of all its entities
-  ([decision 0187](decisions/0187-a-rehearsal-moves-time-by-a-duration.md)). Time moves by whole milliseconds, as
-  the runtime's clock reads it: a duration between two, as `Duration.micros(1500n)`, fails the test, and so does a
-  start time between two ([decision 0281](decisions/0281-a-rehearsals-time-is-a-whole-millisecond.md)). A repeating timer armed from its own
-  last due time catches up after a downtime: it fires once for each period missed, at once, as the runtime fires it.
-  At one time, a key fires again only with a due time later than the one it last fired with. A key armed again at a
-  due time no later would fire at once, turn after turn, and fails the test
-  ([decision 0266](decisions/0266-a-timer-that-catches-up-fires-with-a-due-time-that-grows.md));
+  times. Of two timers due at one time no order is promised. Time moves by whole milliseconds, as the runtime's
+  clock reads it: a duration between two, and a start time between two, fail the test. At one time, a key fires
+  again only with a due time later than the one it last fired with. A key armed again at a due time no later would
+  fire at once, turn after turn, and fails the test;
 - `answer`, `fire` and a member's `run` take a key in place of the pending, with its parameter for a key that takes
   one: `answer('charge', message)` acts on the work under way under the key, in its current incarnation. A test
-  keeps a pending to act on an incarnation that has moved on, and sees its message dropped
-  ([decision 0186](decisions/0186-a-rehearsal-names-the-work-by-its-key.md));
-- `restart` drops everything that is not stored, and activates the entity again: an at-most-once operation
+  keeps a pending to act on an incarnation that has moved on, and sees its message dropped;
+- `restart` drops everything that is not stored, and a new process steps every entity: an at-most-once operation
   under way delivers its `unknown` message;
-- `deploy(program)` restarts it with a new version of the program, which keeps the work under way it returns
-  the same and starts the rest as new work. One that changes, drops or delivers otherwise an operation under way
-  fails the test, as a defect.
+- `deploy(program)` restarts with a new version of the program, which keeps the work under way it returns the same
+  and starts the rest as new work.
+
+A defect suspends its entity, as in the runtime, and the act whose step suspended it fails with `EntitySuspended`,
+which carries the entity and the cause. A deploy that changes, drops or delivers otherwise an operation under way
+fails so, and so does a send to an entity already suspended, whose message waits for the resumption. The entity
+stays suspended: `suspension` reads it as an operator does, and `resume` and `discard` act as the operator's.
 
 [`examples/order/scenarios.test.ts`](../examples/order/scenarios.test.ts) shows them, and
-[`src/rehearse.test.ts`](../src/rehearse.test.ts) rehearses deploys of the order.
-
-A migration is a pure function on JSON, and `rehearse` encodes what a step stores only to check it
-([decision 0040](decisions/archive/0040-what-is-stored-encodes-to-json-as-it-is.md)). It reads back only the
-projection, through no migration, so a
-rehearsed deploy does not exercise one: the runtime's tests deploy a version whose state, operation and
-projection schemas changed.
+[`src/rehearse.test.ts`](../src/rehearse.test.ts) rehearses deploys of the order. The histories of
+[`src/rehearse.histories.test.ts`](../src/rehearse.histories.test.ts) hold a rehearsal to the promises the runtime
+keeps.
 
 ### Rehearsing a world
 
 `rehearse` runs one entity, and the test answers for the entities it talks to. So two programs that disagree on
 what a state accepts pass both rehearsals. `rehearse.together(at, scenario)` runs a world of entities on the
-machine, with one time and one process for all of them
-([decision 0131](decisions/archive/0131-a-rehearsal-runs-the-entities-an-operation-sends-to.md)):
+runtime's step, with one time, one database and one process for all of them:
 
 - `world.create(program, id, flags)` creates an entity, and gives a member of the world: the surface of `rehearse`
   without `restart` and `deploy`, and with `run`. A world runs one program under each name, as a process does, so a
@@ -924,22 +915,21 @@ machine, with one time and one process for all of them
   program's runners, since a key may hold any of the program's operations. A test provides a service it does not
   run with `Layer.mock(Service, {})`, whose members die when used, so a runner the test meant to answer fails the
   test if it runs ([decision 0189](decisions/0189-a-world-asks-a-run-for-every-service-of-its-program.md));
-- what the runner sends reaches the receiver's machine, which handles its mailbox to its end before `send`
-  returns. The world keeps the reply under the run's request while the work that asked is stored, so a run after a
-  restart is given the stored reply. A receiver that does not exist answers `NotFound`, and `create` creates an
-  entity in the world. A `NotFound` and a creation `init` rejects are kept for the run's work too, as the runtime
-  keeps them ([decision 0253](decisions/archive/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md)).
-  A `create` through a reference fails the test where the world runs no program of its name, since a reference
-  brings no code to run ([decision 0183](decisions/0183-a-receiver-is-named-by-a-reference.md));
+- what the runner sends reaches the receiver's step, as in the runtime, which stores the reply under the run's
+  request while the work that asked holds, so a run after a restart is given the stored reply. A receiver that does
+  not exist answers `NotFound`, and so does a program the world does not run. `create` creates an entity in the
+  world. A `create` through a reference fails the run where the world runs no program of its name, since a
+  reference brings no code to run;
 - `run(pending, { crash: true })`, or `run(key, { crash: true })`, runs the runner to its end, drops its message,
   and restarts the world: the process died between the replies and the completion;
 - `world.restart` restarts every entity, and `world.deploy(program)` restarts them with a new version of one
   program. `world.advance(duration)` moves the one time of the world, and a member has no `advance` of its own
   ([decision 0187](decisions/0187-a-rehearsal-moves-time-by-a-duration.md)).
 
-What the runtime makes a defect fails the test: a run that sends twice under one name to one entity, a droppable
-operation that sends, and a defect of the sender or of the receiver. A suspended receiver is never reached, since
-its defect has failed the test first. A world does not choose the order of steps of the entities: each act of the
+What the runtime makes a defect suspends the sender, and fails the run with `EntitySuspended`: a run that sends
+twice under one name to one entity, a droppable operation that sends, and a runner that dies. A receiver with no
+reply, since it is suspended, fails the run with no step, and the operation stays under way: the runtime would send
+again once the receiver is resumed. A world does not choose the order of steps of the entities: each act of the
 test runs to its end before the next, which is one order the runtime can take.
 [`examples/booking/scenarios.test.ts`](../examples/booking/scenarios.test.ts) rehearses the booking and the inventory
 together.

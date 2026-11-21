@@ -106,12 +106,7 @@ family gets a fix of its own.
    [open question](open-questions.md#running) A drain across a deploy of a newer version on Cluster lists.
 3. **Fixed by [decision 0289](decisions/archive/0289-expire-deletes-what-work-that-ended-was-given.md)**, whose `expire` deletes the replies and the answers kept for work that has ended, which two steps at once on a pool leave.
 4. **Fixed by [decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md)**, whose caller's request carries its message, and a reused id with another is answered `Reused`.
-5. **Reasoned: a rehearsal may apply a retry twice after a deploy that changes how the sender is written.** The
-   rehearsal keys a reply by the request's text, and the runtime finds a request by its id
-   ([decisions 0065](decisions/archive/0065-the-machine-holds-no-replies.md),
-   [0200](decisions/0200-a-rehearsal-sends-under-a-request-id-the-test-names.md)). Verified by a test of
-   `src/rehearse.ts`: the [open question](open-questions.md#programs) A retry in a rehearsal after a deploy that
-   changes how the sender is written.
+5. **Fixed on 2026-11-21 by step 5 of the [roadmap](roadmap.md)**, whose rehearsal runs the runtime's step on SQLite in memory. The test `is given the stored reply where the new version writes the sender otherwise, and applied once`, in `src/rehearse.test.ts`, holds it.
 6. **Verified false: a step of a drain that changes a droppable operation leaves an incarnation counted as running and
    never started.** ([decisions 0119](decisions/archive/0119-a-planned-stop-drains-the-at-most-once-operations.md),
    [0128](decisions/archive/0128-an-operation-that-acts-on-nothing-may-be-dropped.md)). Verified false by `a droppable
@@ -683,41 +678,8 @@ family gets a fix of its own.
     whose `src/` is `main`'s at `ca62547`. It has the form of family G. No test was written. The fix runs `bun run
     test:explore -t <test>` on the mutation until a seed fails, and pins that seed with its pin in
     `src/runtime.test_pins.ts`. If no seed of 2,000 finds it, a deviation under `bound` 1 holds it, or an open question.
-107. **Reproduced: a caller's retry in a rehearsal after a deploy that changes how the message encodes is answered
-    `Reused`, where the runtime gives the stored reply.** A rehearsal keeps a named request's reply for the whole
-    rehearsal, a deploy included
-    ([decision 0200](decisions/0200-a-rehearsal-sends-under-a-request-id-the-test-names.md)).
-    [Decision 0269](decisions/archive/0269-a-callers-request-is-its-sender-its-id-and-what-it-carries.md) compares a retry
-    with what the request carried, and the runtime reads what was carried through the migrations of `inbound` from
-    the version that wrote it. The rehearsal keeps what was carried as the version before encoded it, in `keep` of
-    `src/rehearse.ts`, and the machine compares that text with the retry's. So decision 0200's rule rests on a premise
-    decision 0269 took away: what the rehearsal keeps of a request reads alike at every version. Version 1 takes
-    `Spend { n: 3 }` under the request id `r`, version 2 encodes `n` as text with a migration of `inbound`, and the
-    same message comes again under `r`. The runtime gives `Accepted`, and the rehearsal `Reused`. It has the form of
-    bug 5, under what the request carried. The test `FAILING: a retry after a deploy that encodes the message
-    otherwise is given the stored reply, as the runtime gives it`, in `src/rehearse.test.ts`, reproduces it on the
-    branch `claude/premise-review-2-area-10-a27203`, at `84e2446`, cut from `main` at `2e17087`. The fix begins at
-    `keep` of `src/rehearse.ts`, which would keep the version that wrote `carried`, and read it through the migrations
-    of `inbound` of the program deployed before `receive` compares it.
-108. **Reproduced: a reply a rehearsal keeps across a deploy gives the reason as the version before wrote it, where the
-    runtime reads it through the migrations of `rejection`.** Decision 0200 keeps a named request's reply across a
-    deploy as the runtime keeps one, and
-    [decision 0131](decisions/archive/0131-a-rehearsal-runs-the-entities-an-operation-sends-to.md) keeps an
-    operation's reply while the work that asked holds, across a deploy of the receiver too. The runtime reads a stored
-    reason through the migrations from its version
-    ([decisions 0069](decisions/archive/0069-a-reply-is-keyed-by-the-version-that-wrote-it.md),
-    [0100](decisions/archive/0100-a-reason-is-kept-as-long-as-a-reply-of-its-version.md)). The rehearsal keeps the
-    reply as a value in `Kept` of `src/rehearse.ts`, and gives it back as it is, so
-    [decision 0214](decisions/0214-a-rejections-reason-is-given-as-a-caller-reads-it.md) holds within one version and
-    fails across a deploy. Two tests of `src/rehearse.test.ts` reproduce it on the branch
-    `claude/premise-review-2-area-10-a27203`, at `84e2446`. `FAILING: a retry after a deploy whose migration reads the
-    reason is given the reason as the migration writes it` gives `{ limit: 10 }` where the runtime gives
-    `{ limit: 1000 }`. `FAILING: a run after a crash and a deploy of the receiver is given the stored reason as the
-    migration reads it` gives `SoldOut` where the runtime gives `SalesClosed`. A `Rejected` of `init` that a world
-    keeps in `answers` ([decision 0253](decisions/archive/0253-an-answer-no-entity-stores-is-kept-for-the-operation-that-was-given-it.md))
-    is kept the same way, read and not run. The fix begins at `Kept` of `src/rehearse.ts`, which would keep the encoded
-    reason with its version, and read it through the migrations of the program deployed when a retry or a run is
-    given it.
+107. **Fixed on 2026-11-21 by step 5 of the [roadmap](roadmap.md)**, whose rehearsal runs the runtime's step on SQLite in memory. The test `is given the stored reply where the new version encodes the message otherwise, and not Reused`, in `src/rehearse.test.ts`, holds it.
+108. **Fixed on 2026-11-21 by step 5 of the [roadmap](roadmap.md)**, whose rehearsal runs the runtime's step on SQLite in memory. The test `is given the stored reason as the migration of the rejection reads it`, in `src/rehearse.test.ts`, holds it.
 109. **Reproduced: two runtimes launch on one database of SQLite in memory that clients share.**
     [Decision 0267](decisions/0267-a-file-of-sqlite-is-held-by-a-file-of-its-own-and-refuses-no-reader.md) holds a
     database in memory by its client alone, since it names no file and no other connection opens it. A URI of SQLite
@@ -746,20 +708,7 @@ family gets a fix of its own.
     `42f0832`. The fix begins at `test:postgres` of `package.json`, run under `SCHEDULES=all` where the job of the
     server has the time, or at the job `release`, which would get the service of PostgreSQL and `POSTGRES_URL`.
 111. **Fixed by [decision 0288](decisions/0288-a-batch-of-prune-skips-the-rows-another-batch-holds.md)**, whose batch of `prune` locks the rows it selects and skips those another batch holds. On a pool of PostgreSQL two prunes at once locked rows of the outbox in opposite orders, and PostgreSQL ended one as a deadlock. Found by the test of a contract of the pool on the CI's server, for the pair of two prunes.
-112. **Reproduced: a request id that two fibers of a scenario send at once is applied twice in a rehearsal.**
-    [Decision 0200](decisions/0200-a-rehearsal-sends-under-a-request-id-the-test-names.md) answers a second send under
-    a sender and request id from the reply stored for the first, and does not apply it again. `receive` of
-    `src/rehearse.ts` reads the stored reply in one effect and applies the message in the next. A fiber may yield
-    between the two, and Effect makes a fiber yield after 2,048 operations by default. So a second fiber of the
-    scenario sends the same request whole in between, the first fiber goes on with no reply stored, and the machine
-    applies the message again. The test `applies once a request id that two fibers of the scenario send at once`, in
-    `src/rehearse.test.ts`, reproduces it on `main` as a `test.failing`, with `Scheduler.MaxOpsBeforeYield` at 1. No
-    note took a premise away: decision 0200 names no fiber, and no note says what a rehearsal promises to a scenario
-    of several fibers. It was found on 2026-11-13 by a reading of effect-tea's `docs/rehearse-owned-effects.md`, whose
-    rehearsal lost what a fiber of the test's asked for. The fix begins at `receive`, which would read the reply and
-    apply the message in one synchronous step, or at the rehearsal, which would fail a scenario whose fiber acts while
-    an act of another is under way. The [open question](open-questions.md#programs) on a scenario of several fibers
-    holds the choice, and the other acts of the same form.
+112. **Fixed on 2026-11-21 by step 5 of the [roadmap](roadmap.md)**, whose rehearsal runs the runtime's step on SQLite in memory, where each send is one transaction and each act holds the world's lock. The tests `applies once a request id that two fibers of the scenario send at once` and `fails the second of two creations of one id that two fibers make at once`, in `src/rehearse.test.ts`, hold it.
 113. **Observed: the first test of the job `postgres` times out at 5 s in two runs of three.** The test `finds the
     entities whose activation the new program suspends, as a deploy then suspends them`, in `src/check.test.ts`, is
     the first that `test:postgres` runs on the CI's server. It timed out in the runs of `048e0df` and `0fbff80` on
@@ -773,3 +722,13 @@ family gets a fix of its own.
     `ready` and `next` alone, and sleeps until `next`. So a refused row is neither logged nor read again before
     `next`. Only a test of `src/storage.test.ts` reads `refused`. The fix is the maintainer's choice: the waker logs
     what is refused, or the refusal goes with the reading of decision 0259 and the comment with it.
+115. **Observed: the storage reads an entity's keys in no order, so two of its timers due at one time fire in an order
+    `nextTimer` does not say.** The doc comment of `nextTimer`, in `src/machine.ts`, says that of two timers due at
+    one time the first in the stored work fires first, and that a restart keeps the order. `entity` of
+    `src/storage/entities.ts` reads the rows of `effecttea_entity_keys` with no `ORDER BY`. SQLite gives them by
+    their primary key, and PostgreSQL in any order. So a program whose two timers fall due together handles their
+    messages in an order its rehearsal and its runtime may not share, and that a dialect may change. It was found on
+    2026-11-21, once the rehearsal ran on the storage: the test `fires each timer due within it at its time, in
+    their order, and none due after it`, in `src/rehearse.test.ts`, saw `a` fire before `b` at one time. That test
+    no longer reads the order. The fix is the maintainer's choice: the storage keeps the order of the work, or
+    `docs/design.md` promises no order of one entity's timers due together, and `nextTimer` says so.

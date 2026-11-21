@@ -63,10 +63,11 @@ bun run build
 ## The modules of `src/`
 
 [`src/program.ts`](src/program.ts) is the one place a program is declared, with its types and the migrations of
-its schemas. [`src/machine.ts`](src/machine.ts) is the runtime's semantics as a pure state machine, which `rehearse`
-runs and property tests check. The runtime, in [`src/runtime.ts`](src/runtime.ts), runs each event as one
+its schemas. [`src/machine.ts`](src/machine.ts) is the runtime's semantics as a pure state machine, which property tests
+check. The runtime, in [`src/runtime.ts`](src/runtime.ts), runs each event as one
 transaction that locks the entity, reads it, steps the machine and writes, through Effect's `SqlClient` and the
-storage of [`src/storage.ts`](src/storage.ts). [`src/check.ts`](src/check.ts) steps the activation of every stored
+storage of [`src/storage.ts`](src/storage.ts). `rehearse`, in [`src/rehearse.ts`](src/rehearse.ts), drives the
+runtime's step by hand on a database of SQLite in memory. [`src/check.ts`](src/check.ts) steps the activation of every stored
 entity with the machine, before a deploy, and writes nothing.
 [`src/runtime.histories.test.ts`](src/runtime.histories.test.ts) plays generated histories on the runtime and
 compares where each ends with the machine, and [`src/runtime.crash.test.ts`](src/runtime.crash.test.ts) kills a
@@ -79,7 +80,7 @@ module alone. Each module is built on the one above it:
 flowchart TB
   program["program.ts: program(schemas)(…), with init, update, work,<br/>operations, project, indexes and migrations;<br/>part, child and each, which compose children"]
   machine["machine.ts: the pure machine, from an event<br/>to the next machine and the rows it writes"]
-  rehearse["rehearse.ts: a scenario without storage or clock,<br/>of one entity or of a world"]
+  rehearse["rehearse.ts: a scenario on the runtime's step, driven by the test,<br/>over SQLite in memory, of one entity or of a world"]
   testing["testing.ts: the checks of a program's migrations and projections"]
   runtime["runtime.ts: launch and deploy, a deployment's handle,<br/>the transaction of each event, the fibers of the operations,<br/>the waker of the stored timers and the sweep"]
   check["check.ts: the check of a program against the stored entities,<br/>before its deploy, stepped by the machine, which writes nothing"]
@@ -96,12 +97,12 @@ flowchart TB
   entries["the package's three entries: index.ts, the main one;<br/>index.program.ts, what declares a program;<br/>index.testing.ts, rehearse and the checks"]
 
   program --> machine
-  machine --> rehearse
   program --> testing
   machine --> runtime
   machine --> check
   check --> storage
   runtime --> storage
+  runtime --> rehearse
   storage --> db
   rehearse --> entries
   testing --> entries

@@ -207,7 +207,28 @@ export interface Runtime {
   readonly settled: Effect.Effect<void>
 }
 
-interface Deployment<T extends Types> {
+/**
+ * What drives a process in place of its fibers and its waker, as a rehearsal does. A driven process forks no
+ * operation, and fires no timer by itself.
+ */
+export interface Driver {
+  /** A run a committed step stored, which the process holds as under way, with no fiber. */
+  readonly started: (entity: Address, started: Extract<Machine.Output<Types>, Readonly<{ _tag: 'Started' }>>) => void
+  /** A committed step suspended the entity with `cause`. */
+  readonly suspended: (entity: Address, cause: unknown) => void
+  /** The deployment of a program that a run sends to and the process does not run, or a defect. */
+  readonly deploy: (program: Receiver<any>) => Effect.Effect<Deployment<any>>
+}
+
+/**
+ * The defect of a run of a driven process whose receiver has no reply yet. A launched process sends again after its
+ * retry, and a driven one would wait for ever, so the run ends with this defect, and no step records it.
+ */
+export class Unanswered extends Error {
+  readonly _tag = 'Unanswered'
+}
+
+export interface Deployment<T extends Types> {
   readonly program: Program<T>
   readonly storage: Storage<T>
   /** Gives an operation the services the program was deployed with. */
@@ -223,6 +244,7 @@ interface Process {
   readonly retry: number
   readonly probe: (point: Point, entity: Address) => Effect.Effect<void>
   readonly scope: Scope.Scope
+  readonly driver: Driver | undefined
   // The types of each deployment are those of its program, which a map by name cannot say.
   readonly deployments: Map<string, Deployment<any>>
   /**
@@ -307,7 +329,7 @@ const runningOf = <T extends Types>(p: Process, address: string, stored: Machine
 }
 
 /** What an event's transaction is given: the entity as it read it, and how to step an event of it. */
-interface Transaction<T extends Types> {
+export interface Transaction<T extends Types> {
   /** The entity as the transaction read it and as its events left it, or null where none is stored. */
   machine: Machine.Machine<T> | null
   /** The time of the transaction, read once. */
@@ -404,8 +426,11 @@ const inEntity = <T extends Types, A>(
         if (output._tag === 'Started') {
           const run = under(output.key, output.incarnation)
           const runs = p.operations.get(address)
-          if (runs?.has(run) === true) runs.set(run, yield* apart(p, operating(p, d, id, output)))
-        } else if (output._tag === 'Disarmed') {
+          if (runs?.has(run) !== true) continue
+          if (p.driver === undefined) runs.set(run, yield* apart(p, operating(p, d, id, output)))
+          else p.driver.started(entity, output)
+        } else if (output._tag === 'Suspended') p.driver?.suspended(entity, output.cause)
+        else if (output._tag === 'Disarmed') {
           // A droppable operation the step dropped or changed stops. A timer has no fiber.
           const run = under(output.key, output.incarnation)
           const fiber = p.operations.get(address)?.get(run)
@@ -601,18 +626,23 @@ const entitiesOf = (p: Process, entity: Address, key: Key, incarnation: number, 
       used.add(to)
       return { _tag: 'Operation', entity, key, incarnation, name } as const
     })
-  const answered = <A>(program: string, attempt: (d: Deployment<any>) => Effect.Effect<A | null>): Effect.Effect<A> =>
+  const answered = <A>(
+    program: Receiver<any>,
+    attempt: (d: Deployment<any>) => Effect.Effect<A | null>,
+  ): Effect.Effect<A> =>
     Effect.suspend(() => {
       // The signal is taken before the attempt, so that a resumption between the answer and the wait ends the wait.
       const resumed = p.resumed
-      const d = p.deployments.get(program)
+      const d = p.deployments.get(program.name)
       // A commit that failed may have committed, and the attempt sent again is then given the reply it stored.
       const attempted = d === undefined
-        ? Effect.succeed(null)
+        ? p.driver === undefined ? Effect.succeed(null) : Effect.flatMap(p.driver.deploy(program), attempt)
         : Effect.catchCauseIf(attempt(d), failedInDatabase, () => Effect.succeed(null))
       return Effect.flatMap(attempted, (answer) =>
         answer !== null
           ? Effect.succeed(answer)
+          : p.driver !== undefined
+          ? Effect.die(new Unanswered(`a receiver of ${program.name} has no reply yet`))
           : Effect.flatMap(
             Effect.race(Deferred.await(resumed), Effect.sleep(`${p.retry} millis`)),
             () => answered(program, attempt),
@@ -623,7 +653,7 @@ const entitiesOf = (p: Process, entity: Address, key: Key, incarnation: number, 
   return Entities.of({
     send: <T extends Types>(program: Receiver<T>, id: string, message: T['inbound'], name: string) =>
       Effect.flatMap(requested('sent', program.name, id, name), (request) =>
-        answered(program.name, (d: Deployment<T>) =>
+        answered(program, (d: Deployment<T>) =>
           Effect.flatMap(send(p, d, id, message, request), (reply): Effect.Effect<Reply<T['rejection']> | null> =>
             reply._tag === 'Suspended'
               ? Effect.succeed(null)
@@ -632,7 +662,7 @@ const entitiesOf = (p: Process, entity: Address, key: Key, incarnation: number, 
               : Effect.succeed(reply)))),
     create: <T extends Types>(program: Receiver<T>, id: string, name: string, ...[flags]: Flagged<T>) =>
       Effect.flatMap(requested('created', program.name, id, name), (request) =>
-        answered(program.name, (d: Deployment<T>) =>
+        answered(program, (d: Deployment<T>) =>
           Effect.flatMap(
             create(p, d, id, flags === undefined ? null : flags, request),
             (creation): Effect.Effect<Creation<T['rejection']> | null> =>
@@ -762,6 +792,87 @@ const keptFor = (keep: Keep): number | undefined => {
   throw new InvariantDefect({ reason: `the reply is kept ${JSON.stringify(keep)}, which is no non-negative integer of milliseconds` })
 }
 
+const processOf = (
+  sql: SqlClient.SqlClient,
+  scope: Scope.Scope,
+  retry: number,
+  probe: Options['probe'],
+  driver: Driver | undefined,
+): Process => ({
+  sql,
+  retry,
+  probe: probe ?? (() => Effect.void),
+  scope,
+  driver,
+  deployments: new Map(),
+  operations: new Map(),
+  activated: new Set(),
+  changed: Deferred.makeUnsafe<void>(),
+  resumed: Deferred.makeUnsafe<void>(),
+})
+
+/** Deploys `program` in the process, with no waker and no sweep, once it is checked. */
+const deployed = <T extends Types>(
+  p: Process,
+  program: Program<T>,
+  outbox: boolean,
+  provide: Deployment<T>['provide'],
+): Effect.Effect<Deployment<T>> =>
+  Effect.gen(function*() {
+    yield* Effect.sync(() => checkProgram(program))
+    // A deploy steps the entities a crash interrupted, so it is refused within a transaction, as a call is.
+    if (Option.isSome(yield* Effect.serviceOption(p.sql.transactionService))) {
+      const reason = 'the deploy runs within a transaction of the client of the runtime'
+      return yield* Effect.die(new InvariantDefect({ reason }))
+    }
+    if (p.deployments.has(program.name)) {
+      return yield* Effect.die(new InvariantDefect({ reason: `the program '${program.name}' is deployed already` }))
+    }
+    const d: Deployment<T> = {
+      program,
+      storage: storage(program, p.sql, outbox),
+      provide,
+      poke: yield* Queue.sliding<void>(1),
+      next: null,
+    }
+    yield* d.storage.indexed
+    p.deployments.set(program.name, d)
+    tell(p, 'resumed')
+    return d
+  })
+
+/** The steps of a process that a driver runs by hand, as `rehearse` does, on the client given. */
+export const drive = (sql: SqlClient.SqlClient, scope: Scope.Scope, driver: Driver) => {
+  const p = processOf(sql, scope, 1, undefined, driver)
+  return {
+    deploy: <T extends Types>(program: Program<T>) =>
+      deployed(p, program, false, (operation) => operation as Effect.Effect<void>),
+    /** One transaction of the entity `id`, as every event of the runtime runs. */
+    step: <T extends Types, A>(d: Deployment<T>, id: string, body: (tx: Transaction<T>) => Effect.Effect<A>) =>
+      inEntity(p, d, id, body),
+    send: <T extends Types>(
+      d: Deployment<T>,
+      id: string,
+      message: T['inbound'],
+      request: Request<T['sender']>,
+      keep?: number,
+    ) => send(p, d, id, message, request, keep),
+    create: <T extends Types>(d: Deployment<T>, id: string, flags: T['flags'], request: Request<T['sender']>) =>
+      create(p, d, id, flags, request),
+    operate: <T extends Types>(d: Deployment<T>, id: string, event: 'Resume' | 'Discard') => operate(p, d, id, event),
+    /** The process forgets the run, once its completion was stepped. */
+    release: (entity: Address, key: Key, incarnation: number) => release(p, addressOf(entity), under(key, incarnation)),
+    /** What the process runs of a stored entity, with no lock: the machine a step of it would start from. */
+    machine: <T extends Types>(entity: Address, stored: Machine.Stored<T>): Machine.Machine<T> =>
+      ({ stored, running: runningOf(p, addressOf(entity), stored).running }),
+    entities: (entity: Address, key: Key, incarnation: number, droppable: boolean) =>
+      entitiesOf(p, entity, key, incarnation, droppable),
+  }
+}
+
+/** A process driven by hand, as `drive` gives it. */
+export type Driven = ReturnType<typeof drive>
+
 /**
  * Launches the runtime on the client. It creates the tables of the storage, and holds no database: another runtime
  * may run on the same one. A retry that is no positive integer of milliseconds is the launcher's defect.
@@ -780,40 +891,13 @@ export const launch = (options: Options = {}): Effect.Effect<Runtime, never, Sql
     }
     const sql = yield* SqlClient.SqlClient
     yield* createTables
-    const p: Process = {
-      sql,
-      retry,
-      probe: options.probe ?? (() => Effect.void),
-      scope: yield* Effect.scope,
-      deployments: new Map(),
-      operations: new Map(),
-      activated: new Set(),
-      changed: Deferred.makeUnsafe<void>(),
-      resumed: Deferred.makeUnsafe<void>(),
-    }
+    const p = processOf(sql, yield* Effect.scope, retry, options.probe, undefined)
 
     const deploy = <T extends Types>(program: Program<T>, options: Readonly<{ outbox?: boolean }> = {}) =>
       Effect.gen(function*() {
-        yield* Effect.sync(() => checkProgram(program))
-        // A deploy steps the entities a crash interrupted, so it is refused within a transaction, as a call is.
-        if (Option.isSome(yield* Effect.serviceOption(sql.transactionService))) {
-          const reason = 'the deploy runs within a transaction of the client of the runtime'
-          return yield* Effect.die(new InvariantDefect({ reason }))
-        }
-        if (p.deployments.has(program.name)) {
-          return yield* Effect.die(new InvariantDefect({ reason: `the program '${program.name}' is deployed already` }))
-        }
         const services = yield* Effect.context<Exclude<T['services'], Entities>>()
-        const d: Deployment<T> = {
-          program,
-          storage: storage(program, sql, options.outbox === true),
-          provide: (operation) => Effect.provideContext(operation, services) as Effect.Effect<void>,
-          poke: yield* Queue.sliding<void>(1),
-          next: null,
-        }
-        yield* d.storage.indexed
-        p.deployments.set(program.name, d)
-        tell(p, 'resumed')
+        const d = yield* deployed(p, program, options.outbox === true, (operation) =>
+          Effect.provideContext(operation, services) as Effect.Effect<void>)
         // An operation a crash interrupted has no fiber in this process, so a transaction of its entity restarts it.
         for (const id of yield* d.storage.interrupted) yield* inEntity(p, d, id, () => Effect.void)
         yield* apart(p, waking(p, d))

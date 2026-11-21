@@ -135,8 +135,10 @@ describe('ride', () => {
         yield* rehearsal.send({ _tag: 'EndRequested' }, { sender: ann })
       }),
     ))
+    // The defect suspends the ride, as in the runtime, and the send fails with the suspension.
     expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : null).toMatchObject({
-      reason: "the step dropped the operation under 'email' before its completion",
+      _tag: 'EntitySuspended',
+      reason: { reason: "the step dropped the operation under 'email' before its completion" },
     })
   })
 

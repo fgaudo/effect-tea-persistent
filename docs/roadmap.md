@@ -11,33 +11,7 @@ Each step names its model and effort, what it depends on, and how to tell it is 
 
 ## Next
 
-5. **The rehearsal on the runtime's step.** (Opus 5.5 · high) It depends on step 4. The rehearsal of today is not
-   a target of the histories: it fails a test at a defect, and has no `resume` and no `discard`. The maintainer chose
-   the machine on 2026-11-21, and `docs/open-questions.md` asks whether a rehearsal shows a suspension. `rehearse`
-   runs the step of `src/runtime.ts` on a store in memory, with the test's clock and the test's answers, and reads
-   what it stored back through the migrations. The histories of step 3 run on the runtime's target over both stores,
-   and must agree. It is done when bugs 5, 107, 108 and 112 of `docs/bugs.md` each have a test that passes.
-   - The runtime's `Target` of the histories waits by `quiet` of `src/runtime.test_shared.ts`. SQLite and PGlite
-     answer within microtasks. On a server it waits until the pool of `fixed` connections is idle.
-   - The target's runner waits for the history's answer, kept by run. A process restarts only once it is quiet, so
-     the runs whose runner was called are the runs a committed step stored.
-   - **The maintainer chose on 2026-11-21**, after an opinion of Fable 5.2. The store is SQLite `:memory:` through
-     the storage of today, one private client per rehearsal. Inside, the rehearsal runs on a `SqlClient`, and the
-     public `rehearse` gives it the private client. The driver is `@effect/sql-sqlite-node`, an optional peer
-     dependency that only `/testing` imports. It runs on `node:sqlite`, which Bun implements:
-     `spikes/sqlite-node-under-bun.test.ts` holds what the rehearsal rests on, and `bun test` and the spikes passed
-     on it on 2026-11-21 with every client of the tests moved to it.
-   - **At a defect** the act that suspends an entity fails with a defect that carries the cause and the entity. A
-     `send` fails where the runtime answers `Suspended`. The entity stays suspended, and the rehearsal gives
-     `suspension`, `resume` and `discard`. So the histories of step 3 are played on the rehearsal too, as a third
-     target.
-   - The rehearsal drives the runtime's transaction, not a launched runtime. A runner is given no key and no
-     incarnation, so a wrapped runner cannot be matched to `pending(key)`. The seam is what the process does after
-     the commit: the runtime forks the operation, and the rehearsal records the run as pending. `fire` moves the
-     time to its timer's, so a timer due earlier fires first. The checks of an operation that comes back the same
-     and of a timer that loops at one time stay, stricter than the runtime.
-
-6. **A slice from the browser to the entity.** (Fable 5.2 · high) It depends on steps 4 and 5. It is the library's
+6. **A slice from the browser to the entity.** (Fable 5.2 · high) It depends on step 4. It is the library's
    first application, and it says what the backend lacks. It is one example, the seat of `examples/quick-start`
    with an interface. A program of effect-tea in the browser and the entity on the server import one module of
    schemas. In the browser a message to the entity is a command, and the entity's projection is a subscription
@@ -49,7 +23,7 @@ Each step names its model and effort, what it depends on, and how to tell it is 
      programs together with no browser, server or database, or this file says what a rehearsal of both lacks.
    - It writes here, as steps, what the slice asked of the backend and did not find.
 
-7. **The bugs and the questions are read again.** (Opus 5.5 · medium) It depends on step 5. Each entry of
+7. **The bugs and the questions are read again.** (Opus 5.5 · medium) It depends on nothing. Each entry of
    `docs/bugs.md` and `docs/open-questions.md` is gone with its piece, held by a test, or still open. It is done
    when both files hold only what is open, and every open bug has a failing test.
    - `docs/open-questions.md` still links to removed code at the tag `pre-restart`.
@@ -61,6 +35,8 @@ Each step names its model and effort, what it depends on, and how to tell it is 
    of the contract a simpler one may replace, and the slice shows which of them a browser meets. The maintainer
    takes each or leaves it, and each one taken changes the machine with its tests. It is done when each of the five
    is taken or left, in a sentence of `docs/design.md`.
+   - A rehearsal answers as the runtime does, since step 5 of 2026-11-21. A defect on a caller's message fails the
+     rehearsal's `send` with `EntitySuspended`, and its `discard` is the operator's. Either goes with its rule.
 
 9. **The documents, from what exists.** (Opus 5.5 · medium) It depends on step 8. `docs/design.md` is written
    again, under 600 lines: the contract first, then how the runtime keeps it. The guide, the README, the glossary
@@ -77,12 +53,15 @@ Each step names its model and effort, what it depends on, and how to tell it is 
     closed.
     - A deploy activates only the entities with an operation or a message, so a deploy that makes a stored timer an
       operation starts it late. `docs/open-questions.md` asks it under Programs. The runtime's target of the
-      histories retries the creation after each deploy, so that the histories do not check it.
+      histories retries the creation after each deploy, so that the histories do not check it. A rehearsal's
+      `restart` and `deploy` step every entity, in `restart` of `src/rehearse.ts`, until this step decides.
 
 11. **The release, experimental.** (Opus 5.5 · medium) It depends on steps 9 and 10, and on ten open bugs at most.
     It decides what `exports` names, writes the metadata of `package.json`, and packs the package into a project
     outside Bun that runs and typechecks it.
     - No spike sees the runtime on a full volume since the consumers went. A spike of it is owed before the release.
+    - `./testing` imports `@effect/sql-sqlite-node`, an optional peer dependency on `node:sqlite`. The project outside
+      Bun runs a rehearsal on Node too, at a version that has `node:sqlite` without a flag.
 
 ## Later
 

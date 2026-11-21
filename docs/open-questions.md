@@ -1093,21 +1093,6 @@ with a requirement that no example has yet.
   - whether the five take their signal alike, or the waker's flag and the readings' count need more than one form;
   - whether the pure core of [decision 0292](decisions/0292-the-processs-state-is-a-pure-core-and-a-test-holds-an-order-by-its-events.md)
     holds the look and the registration in one transition, which would make the primitive needless.
-- **The order of two timers due at one time.** A rehearsal fires first, of two timers due at one time, the one of the
-  entity created first, and within an entity the one its machine holds first (`dueBy` of `src/rehearse.ts`). The runtime
-  does the same for entities loaded under the default scheduler, and a schedule of `src/testing.ts` fires either first,
-  even for two timers of one entity. So does a clock that is real, for two timers of one entity armed in two steps. For
-  entities unloaded, it fires first the timer of the smaller id, since the waker reads the entities with a timer due in
-  the order of their ids (`due` of `src/storage/entities.ts`). The tests `two timers due at one time`, in
-  `src/runtime/loop.test.ts`, show both orders. The order changes nothing a test reads of a rehearsal whose programs are
-  pure, as the test `changes nothing a test reads of the entities` of `src/rehearse.test.ts` shows, so only a program
-  that reads outside its state passes on the rehearsal by it. `docs/design.md` promises no order of two entities' timers
-  due at one time. [Decision 0293](decisions/0293-two-entities-timers-due-at-one-time-fire-in-no-order.md), `proposed`,
-  promises none, and has a rehearsal fire them in the order of creation alone. The question leaves this file when that
-  note is taken. It would be decided by:
-  - the step Two entities' timers due at one time, in no order, of the [roadmap](roadmap.md), and the tests its note
-    names.
-
 ## Programs
 
 - **When a deploy's new work starts on an entity that holds no operation.** A deploy activates the entities whose
@@ -1119,41 +1104,12 @@ with a requirement that no example has yet.
   `t` an operation, which does not run. Their target now steps the entity after each deploy, so they do not check
   it. Activating every entity with a stored timer at each deploy costs a transaction for each of them.
   - Step 10 of the [roadmap](roadmap.md), which lists what a deploy may change, decides it.
-- **A rehearsal that reads back a reason, and a projection after a deploy.** `docs/design.md`, under Rehearsing,
-  says that `rehearse` reads back only the projection, and that a rehearsed deploy exercises no migration of the state
-  and of the projection. The machine reads back a rejection's reason too, in `replied` of `src/machine.ts`
-  ([decision 0214](decisions/0214-a-rejections-reason-is-given-as-a-caller-reads-it.md)). After a deploy, a
-  rehearsal's `projection` is the new version's `project(state)`, where the runtime gives the row the version before
-  wrote, read through the migrations of `projection`, until a step or `reindex` writes it again. The difference is
-  documented, and no test runs it. Bugs 107 and 108 are a rehearsal that keeps a request's text and reason across a
-  deploy. The second reading of the premise review noticed it on 2026-11-12.
-  - Whether the fixes of bugs 107 and 108 read the projection through its migrations too, or the guide says which
-    readings a rehearsed deploy skips, would decide it.
 - **A deploy that changes a child's wrapper or the name of a key.** Bug 96 of [`docs/bugs.md`](bugs.md) suspends an
   entity whose key's parameter a deploy encodes otherwise. A deploy that changes the form of a child's wrapper, or the
   name of a key with work under way, may fail the same way. The second reading of the premise review noticed both on
   2026-11-12, and ran neither.
   - The step What a deploy may change of a program, against what is stored, of the [roadmap](roadmap.md), decides
     both, since its list of pieces names the children and the keys.
-
-- **A scenario of a rehearsal that acts from several fibers.** No note says whether a scenario may act from two
-  fibers at once, as with `Effect.all` under a concurrency or a fiber it forks. Bug 112 of [`docs/bugs.md`](bugs.md)
-  is one act that reads and writes in two effects, with a yield between them: `receive` of `src/rehearse.ts`. Other
-  acts have the same form, and none was run. `create` of a runner's `Entities` and `create` of a world look for the
-  entity, then store it in `born`, so two creations of one id at once may store the second over the first.
-  `complete` reads the work before its step, to fail an operation that comes back the same. `fireOf` moves the time,
-  then applies the timer. `advance` chooses a timer, then fires it. `run` is different by design: its runner runs
-  between the read and the completion, and the incarnation drops an answer that came late. effect-tea changed its
-  rehearsal for what a fiber of the test's loses, in its `docs/rehearse-owned-effects.md`; its four roots need a
-  loop, a queue and an end that reads a ledger, and this rehearsal has none. It was found on 2026-11-13, by a
-  reading. It would be decided by:
-  - whether each act is one synchronous step, which no fiber falls into, with a test of two fibers for each act
-    above, under `Scheduler.MaxOpsBeforeYield` at 1;
-  - or whether the rehearsal fails a scenario whose fiber acts while an act of another fiber is under way, the sends
-    of a runner under `run` aside;
-  - what the guide says of a scenario of several fibers, either way;
-  - the step An act of a rehearsal from several fibers, of the [roadmap](roadmap.md), which holds the fix the
-    session that found the bug recommends, and which the maintainer postponed.
 
 - **A rehearsal in a browser.** The machine computes the digest of an idempotency key with `node:crypto`, so the
   machine runs only where that module is
@@ -1213,20 +1169,6 @@ with a requirement that no example has yet.
   - whether the maintainer wants a rehearsal to be stricter than the runtime on what it can see;
   - whether a program has a use for a message rebuilt otherwise after a crash, as one built from the clock.
 
-- **A retry in a rehearsal after a deploy that changes how the sender is written.** A rehearsal keeps the reply of a
-  request the test named for the whole rehearsal, a deploy included
-  ([decision 0200](decisions/0200-a-rehearsal-sends-under-a-request-id-the-test-names.md)). It stores the reply under
-  `Machine.requestKey`, the request's text with the sender as the deployed program's schema writes it
-  (`src/rehearse.ts`). A deploy whose `sender` schema writes the same sender otherwise changes that text, so a retry
-  under the same request id may not find its reply, and the rehearsal applies the message again. The set of named
-  requests is keyed by the same text. The runtime finds a caller's request by its id and migrates it
-  ([decision 0065](decisions/archive/0065-the-machine-holds-no-replies.md)), so it answers the retry from the stored
-  reply. The premise review of 2026-11-11 noticed the case and did not reach it, so it is neither reproduced nor ruled
-  out. It would be decided by:
-  - a test of `src/rehearse.ts` that sends under a request id, deploys a version whose `sender` schema writes the
-    sender otherwise, and retries under the same id;
-  - whether the runtime, read in `src/storage/` and `src/runtime/callers.ts`, does find the request by its id across
-    such a deploy, as the review read.
 - **A chain of keys that loops in a rehearsal.** A timer under a key with a parameter that arms the next parameter
   at the time reached never fires one key twice, so a rehearsal's `advance` never ends
   ([decisions 0187](decisions/0187-a-rehearsal-moves-time-by-a-duration.md),
@@ -1279,13 +1221,6 @@ with a requirement that no example has yet.
   program whose schema of rejections is `Never` could take no reason. It would be decided by:
   - a program that acts otherwise on a discard than on a rejection, as one that alerts or sends again later;
   - whether a reason the receiver's schema declares for a discard reads as the receiver's own rule.
-- **Whether a rehearsal shows a suspension.** A rehearsal fails the test once a defect suspends the entity, and gives
-  no `resume` and no `discard`, by `apply` of `src/rehearse.ts`. So the histories of
-  `src/machine.test_histories.ts` hold a die, a resume and a discard, and are played on the machine. Step 5 of the
-  [roadmap](roadmap.md) runs the rehearsal on the runtime's step, whose handle has `resume` and `discard`. Whether a rehearsal then answers `Suspended` and
-  gives a test the operator's acts, or still fails at a defect, is not decided. It would be decided by:
-  - a test of an example that rehearses the fix of a bug, deployed and resumed;
-  - the question of the contract on a defect on a caller's message, of step 8, which may take `discard` away.
 - **A handle divided by who uses it.** A handle gives more than twenty calls in one interface: a caller's `create`,
   `send` and `read`, the queries, the log's `published`, `fetch`, `ack` and `consume`, and an operator's `suspended`,
   `inspect`, `resume`, `discard`, `prune`, `forget`, `expire` and `reindex`. A boundary that serves callers holds the
