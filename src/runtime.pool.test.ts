@@ -218,7 +218,7 @@ const leftBy = (sql: SqlClient.SqlClient, table: 'effecttea_replies' | 'effectte
  * receiver stores the reply, or for an inventory not stored the answer `NotFound`, and reads whether the asker's work
  * holds. The asker's step deletes the rows of the work it ends. Where `first` is the receiver, its step is held at
  * its commit while the asker's step runs, and the asker's step is held otherwise. Neither step waits for the other,
- * and each misses the other's write, so the row is left for the sweep, which deletes it.
+ * and each misses the other's write, so the row is left for the sweep of the receiver's program, which deletes it.
  */
 const overlapping = (event: 'gig' | 'none', first: 'receiver' | 'asker') =>
   run(Effect.gen(function*() {
@@ -268,7 +268,9 @@ const overlapping = (event: 'gig' | 'none', first: 'receiver' | 'asker') =>
     const table = event === 'gig' ? 'effecttea_replies' : 'effecttea_answers'
     const status = (yield* bookings.read('b1'))?.status
     const left = yield* leftBy(sql, table)
-    yield* bookings.expire
+    // The row is stored under the receiver's name, so the receiver's `expire` deletes it, as the sweep of each
+    // program deployed does.
+    yield* inventories.expire
     const found = { status, left, after: yield* leftBy(sql, table) }
     yield* two.die
     yield* one.die
