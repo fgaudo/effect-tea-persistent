@@ -67,18 +67,20 @@ Each step names its model and effort, what it depends on, and how to tell it is 
      lands.
    - A reply or a `NotFound` stored while the asker's work ends is left on PostgreSQL. Neither step waits for the
      other, and each misses the other's write. The four overlaps check that `expire` deletes the row.
-   - The sweep runs no `prune`, since no consumer is stored, and a prune drops whole a topic no consumer holds. The
-     outbox of one table needs a way its rows go, and its shape is the maintainer's to choose before it lands.
+   - **The outbox, as the maintainer chose on 2026-11-21.** It is one table `effecttea_outbox`, keyed by the
+     entity's name, its id and its `steps` after the write, with the kind, the version, the time, the message and the
+     projection. A program deployed with `outbox: true` writes a row at its creation and at each step whose
+     projection changed. No order holds across entities. The library never deletes a row, and a reader deletes by
+     key the rows it handled. `topics` are parked with the consumers, and the sweep runs no `prune`.
    - `deploy`, `create`, `send`, `resume` and `discard` within a transaction of the client are the caller's defect,
      as in the old runtime. `read` is not.
 
 5. **The rehearsal on the runtime's step.** (Opus 5.5 · high) It depends on step 4. The rehearsal of today is not
    a target of the histories: it fails a test at a defect, and has no `resume` and no `discard`. The maintainer chose
-   the machine on 2026-11-21, and `docs/open-questions.md` asks whether a rehearsal shows a suspension. `rehearse` runs the step of
-   step 4 on a store in memory, with the test's clock and the test's answers, and reads what it stored back through
-   the migrations. The histories of step 3 run on the runtime's target over both stores, and must agree. It is done
-   when bugs 5, 107, 108 and
-   112 of `docs/bugs.md` each have a test that passes.
+   the machine on 2026-11-21, and `docs/open-questions.md` asks whether a rehearsal shows a suspension. `rehearse`
+   runs the step of step 4 on a store in memory, with the test's clock and the test's answers, and reads what it
+   stored back through the migrations. The histories of step 3 run on the runtime's target over both stores, and
+   must agree. It is done when bugs 5, 107, 108 and 112 of `docs/bugs.md` each have a test that passes.
 
 6. **A slice from the browser to the entity.** (Fable 5.2 · high) It depends on steps 4 and 5. It is the library's
    first application, and it says what the backend lacks. It is one example, the seat of `examples/quick-start`
