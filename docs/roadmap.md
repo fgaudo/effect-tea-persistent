@@ -24,9 +24,9 @@ Each step names its model and effort, what it depends on, and how to tell it is 
    - Done on 2026-11-21: every test of `src/transactional*.test.ts` runs on SQLite and PGlite, and the histories
      play 50 on PostgreSQL. A step takes an advisory lock of its entity first. `src/transactional.pool.test.ts`
      holds the tests only a server runs: two steps of an entity, two creations, a deadlock, and the four overlaps
-     of a receiver's step and its asker's. They were written with no server, and were not run yet.
-   - Next, PostgreSQL: the CI's job `postgres` passes those tests, and the two rules of `runningOf` below are
-     decided.
+     of a receiver's step and its asker's. The CI's job `postgres` passes them. No run has checked yet that the
+     tests of two steps and of two creations fail without the lock.
+   - Next, PostgreSQL: the two rules of `runningOf` below are decided.
    - Then `query`, `reindex`, the outbox as one table, `inspect`, `suspended` and the sweep.
    - Then the old runtime goes, with the integration of Cluster, the hold, the scheduler of the tests and every
      parked piece. The tests of `spikes/transactional/` then move into `src/`, but `cost.test.ts`.
