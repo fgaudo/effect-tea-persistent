@@ -19,7 +19,7 @@ again, and code written again cites no note. Step 9 of the roadmap deletes the n
   spike.
 - **Removing comes first.** A change asks what it can take out before it asks what to add. An edge case is refused
   where it enters, before it is given a mechanism. One job has one mechanism.
-- **Budgets.** The runtime and the storage, without tests, stay under 2,500 lines together. `docs/design.md` stays
+- **Budgets.** The runtime and the storage, without tests, stay under 3,000 lines together. `docs/design.md` stays
   under 600 lines, `AGENTS.md` under 120 and `docs/roadmap.md` under 150. A change that crosses a budget is the
   maintainer's choice, and the maintainer sets the numbers.
 - **No feature while more than ten bugs are open.**
