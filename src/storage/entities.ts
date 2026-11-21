@@ -75,6 +75,7 @@ export type Due = Readonly<{
 /** The part of the storage of one program that reads and writes its entities. */
 export const entitiesOf = <T extends Types>(held: Held<T>): Pick<
   Storage<T>,
+  | 'lock'
   | 'load'
   | 'stepsOf'
   | 'delivered'
@@ -94,7 +95,7 @@ export const entitiesOf = <T extends Types>(held: Held<T>): Pick<
 > => {
   const { program, sql, partitions, onCluster, name, version, upsert, rows, up, upRequest, upReason, readWork, snapshot } =
     held
-  const { lockingTheConditionSkipping } = held
+  const { lockingTheConditionSkipping, dialect } = held
   const { state, inbound, internal, flags, request, reason, suspended } = held.codecs
   const row = rowOf(held)
   const encodeReason = Schema.encodeSync(reasonOf(program.schemas.rejection))
@@ -166,6 +167,14 @@ export const entitiesOf = <T extends Types>(held: Held<T>): Pick<
         held: row.suspended_on === null ? null : { cause: row.suspended_cause, at: row.suspended_at },
       }
     })
+
+  // An advisory lock holds an entity that has no row yet, so that two creations wait for each other. Its two keys
+  // of four bytes are held apart from the one key of eight bytes that holds a database. The transaction is at
+  // `READ COMMITTED`, so each statement after the lock reads what the transaction that held it committed.
+  const lock = (id: string) =>
+    dialect === 'pg'
+      ? Effect.orDie(Effect.asVoid(sql`SELECT pg_advisory_xact_lock(hashtext(${name}), hashtext(${id}))`))
+      : Effect.void
 
   const load = (id: string) => entity(id).pipe(Effect.map((found) => found?.stored ?? null), Effect.orDie)
 
@@ -806,6 +815,7 @@ export const entitiesOf = <T extends Types>(held: Held<T>): Pick<
     ).pipe(Effect.map((rows) => rows[0]?.steps ?? null), Effect.orDie)
 
   return {
+    lock,
     load,
     stepsOf,
     delivered,

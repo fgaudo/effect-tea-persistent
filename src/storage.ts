@@ -79,6 +79,12 @@ export {
 } from './storage/tables.ts'
 
 export interface Storage<T extends Types> {
+  /**
+   * Takes the lock of the entity `id` until the transaction it runs in ends, whether the entity is stored or not.
+   * A step of the transactional runtime runs it first. On SQLite the transaction's `BEGIN IMMEDIATE` already holds
+   * the one writer, and it does nothing.
+   */
+  readonly lock: (id: string) => Effect.Effect<void>
   /** What is stored for the entity `id`, its replies left out, or null when there is none (decision 0065). */
   readonly load: (id: string) => Effect.Effect<Machine.Stored<T> | null>
   /**

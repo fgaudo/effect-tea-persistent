@@ -21,8 +21,12 @@ Each step names its model and effort, what it depends on, and how to tell it is 
    - Done on 2026-11-21: `create`, `send`, `read`, the timers, the operations, a suspension, `resume` and `discard`,
      on SQLite. `src/transactional.histories.test.ts` plays 1,000 histories, and 10,000 with `SCHEDULES=all`.
      Entities that talk, on SQLite, with the tests of `src/transactional.talk.test.ts`.
-   - Next, PostgreSQL: the lock of the entity's row, and a test of two transactions held at a statement for each
-     statement that reads another entity's rows.
+   - Done on 2026-11-21: every test of `src/transactional*.test.ts` runs on SQLite and PGlite, and the histories
+     play 50 on PostgreSQL. A step takes an advisory lock of its entity first. `src/transactional.pool.test.ts`
+     holds the tests only a server runs: two steps of an entity, two creations, a deadlock, and the four overlaps
+     of a receiver's step and its asker's. They were written with no server, and were not run yet.
+   - Next, PostgreSQL: the CI's job `postgres` passes those tests, and the two rules of `runningOf` below are
+     decided.
    - Then `query`, `reindex`, the outbox as one table, `inspect`, `suspended` and the sweep.
    - Then the old runtime goes, with the integration of Cluster, the hold, the scheduler of the tests and every
      parked piece. The tests of `spikes/transactional/` then move into `src/`, but `cost.test.ts`.
@@ -30,8 +34,8 @@ Each step names its model and effort, what it depends on, and how to tell it is 
      lines without tests, and `bun test` runs within a minute.
 
    What the work so far left, which the next parts build on:
-   - A `Target` of the runtime waits by `quiet` of `src/transactional.test_shared.ts`. It holds on SQLite alone,
-     whose calls answer at once, so PGlite and PostgreSQL need another wait.
+   - A `Target` of the runtime waits by `quiet` of `src/transactional.test_shared.ts`. SQLite and PGlite answer
+     within microtasks. On a server it waits until the pool of `fixed` connections is idle.
    - Its runner waits for the history's answer, kept by run. A process restarts only once it is quiet, so the runs
      whose runner was called are the runs a committed step stored.
    - A deploy activates only the entities with an operation or a message, so a deploy that makes a stored timer an
@@ -50,18 +54,21 @@ Each step names its model and effort, what it depends on, and how to tell it is 
      most once is then recorded `unknown` while it still runs, and is never run twice. Who runs an operation is
      the claim the step under Later decides.
    - **Of the review's six rules** the runtime keeps the first, the third for a request, and the fourth. It breaks
-     the second where the storage of today does, and in no place of its own. A step calls seven functions of the
-     storage: `load`, `reply`, `write`, `answer`, `keepAnswer`, `due` and `interrupted`.
+     the second where the storage of today does, and in no place of its own. A step calls eight functions of the
+     storage: `lock`, `load`, `reply`, `write`, `answer`, `keepAnswer`, `due` and `interrupted`.
    - **The examples' tests run as they are** on the new runtime, by the preload of
      `spikes/transactional/examples.preload.ts`. `examples/subscription` has no test on a runtime, and every test of
      `examples/order` uses a parked piece or a reading of the read model, which the preload takes from the storage.
    - **A sender sees a resumption or a deploy of another process at its retry.** Only those of its own process end
      the wait sooner. `docs/design.md` says a wait looks again on no clock, and says this when this step lands.
-   - A transaction of the receiver that dies with a `SqlError` has no reply yet, and its sender sends again at the
-     retry. On PostgreSQL a deadlock of two entities' transactions is such a failure, and the part on PostgreSQL
-     tests it so.
-   - Nothing yet tried a pool. A call within a transaction of the caller's client is not refused yet, as the old
-     runtime refuses it.
+   - **A transaction that fails in the database is tried again at the retry**, as a deadlock fails it. A
+     receiver's is sent again by its sender, an operation's end by its fiber, and a timer's fire by the waker. A
+     caller's dies as its defect. `docs/design.md` says a deadlock crashes its entity, and says this when this step
+     lands.
+   - A reply or a `NotFound` stored while the asker's work ends is left on PostgreSQL. Neither step waits for the
+     other, and each misses the other's write. The sweep deletes the row, and the four overlaps then check it.
+   - `deploy`, `create`, `send`, `resume` and `discard` within a transaction of the client are the caller's defect,
+     as in the old runtime. `read` is not.
 
 5. **The rehearsal on the runtime's step.** (Opus 5.5 · high) It depends on step 4. The rehearsal of today is not
    a target of the histories: it fails a test at a defect, and has no `resume` and no `discard`. The maintainer chose

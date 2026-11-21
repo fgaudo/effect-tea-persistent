@@ -14,6 +14,7 @@ import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
+import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import type * as Scope from 'effect/Scope'
 import { SqlClient, SqlError } from 'effect/sql'
@@ -224,11 +225,12 @@ interface Transaction<T extends Types> {
 
 /**
  * One transaction of the entity `id`, and then what the process does for what the transaction stored. The
- * transaction takes the write lock as it begins, reads the entity, runs `body` and commits. An entity that is not
- * suspended is restarted first where one of its operations has no fiber in this process, which runs the operation
- * again as after a crash. It is restarted too where it has no operation here and the process does not remember
- * activating it: the restart then checks the stored work against the program deployed, and writes nothing where the
- * two agree.
+ * transaction takes the entity's lock as it begins, reads the time and the entity, runs `body` and commits. The time
+ * is read after the lock, so that a transaction that waited for another steps at the time it holds the entity. An
+ * entity that is not suspended is restarted first where one of its operations has no fiber in this process, which
+ * runs the operation again as after a crash. It is restarted too where it has no operation here and the process does
+ * not remember activating it: the restart then checks the stored work against the program deployed, and writes
+ * nothing where the two agree.
  */
 const inEntity = <T extends Types, A>(
   p: Process,
@@ -243,6 +245,7 @@ const inEntity = <T extends Types, A>(
     const claimed: Array<string> = []
     let woken = false
     const stepped = Effect.gen(function*() {
+      yield* d.storage.lock(id)
       const now = yield* DateTime.now
       const millis = DateTime.toEpochMillis(now)
       const stored = yield* d.storage.load(id)
@@ -343,10 +346,16 @@ const operating = <T extends Types>(
     Effect.exit(Effect.provideService(ran, Entities, sending)),
     (exit): Effect.Effect<unknown> =>
       Exit.isSuccess(exit)
-        ? inEntity(p, d, id, (tx) => tx.apply({ _tag: 'Complete', key, incarnation, message: exit.value }))
+        ? persisting(
+          p,
+          inEntity(p, d, id, (tx) => tx.apply({ _tag: 'Complete', key, incarnation, message: exit.value })),
+        )
         : Cause.hasInterruptsOnly(exit.cause)
         ? Effect.void
-        : inEntity(p, d, id, (tx) => tx.apply({ _tag: 'Die', key, incarnation, cause: Cause.squash(exit.cause) })),
+        : persisting(
+          p,
+          inEntity(p, d, id, (tx) => tx.apply({ _tag: 'Die', key, incarnation, cause: Cause.squash(exit.cause) })),
+        ),
   )
   return d.provide(Effect.asVoid(recorded) as Effect.Effect<void, never, T['services']>).pipe(
     Effect.ensuring(Effect.sync(() => {
@@ -355,6 +364,22 @@ const operating = <T extends Types>(
     })),
   )
 }
+
+/** Whether `cause` is a statement or a commit that failed, which the storage gives as a defect of `SqlError`. */
+const failedInDatabase = (cause: Cause.Cause<never>) =>
+  !Cause.hasInterrupts(cause) && SqlError.isSqlError(Cause.squash(cause))
+
+/**
+ * Runs the transaction `effect` again after `retry` while it fails in the database, as a deadlock fails it on
+ * PostgreSQL. It records an operation's end, which only the operation's fiber holds, so a failure must not lose it.
+ * A commit that failed may have committed, and the event run again is then one the machine ignores.
+ */
+const persisting = <A>(p: Process, effect: Effect.Effect<A>): Effect.Effect<A> =>
+  Effect.catchCauseIf(
+    effect,
+    failedInDatabase,
+    () => Effect.andThen(Effect.sleep(`${p.retry} millis`), persisting(p, effect)),
+  )
 
 /** The last output of a transaction that `pick` reads an answer from. */
 const answerOf = <T extends Types, A>(tx: Transaction<T>, pick: (output: Machine.Output<T>) => A | undefined): A => {
@@ -457,9 +482,6 @@ const operate = <T extends Types>(p: Process, d: Deployment<T>, id: string, even
       return { _tag: 'StillSuspended', cause: Machine.render(after.stored.suspension.cause) }
     }))
 
-/** Whether `cause` is a statement or a commit that failed, which the storage gives as a defect of `SqlError`. */
-const failedInDatabase = (cause: Cause.Cause<never>) =>
-  !Cause.hasInterrupts(cause) && SqlError.isSqlError(Cause.squash(cause))
 
 /**
  * What one run of an operation sends with. Its request is the run's, with the name the operation gives, so a run
@@ -535,13 +557,18 @@ const waking = <T extends Types>(p: Process, d: Deployment<T>): Effect.Effect<ne
     const due = yield* d.storage.due(DateTime.toEpochMillis(now), [])
     let fired = 0
     for (const id of due.ready) {
-      const fire = inEntity(p, d, id, (tx) =>
-        Effect.gen(function*() {
-          const next = tx.machine === null ? undefined : Machine.nextTimer(tx.machine, tx.now)
-          if (next === undefined) return false
-          yield* tx.apply({ _tag: 'Fire', key: next.key, incarnation: next.incarnation })
-          return true
-        }))
+      // A fire that fails in the database fires nothing, and its timer is read again as one due and not fired.
+      const fire = Effect.catchCauseIf(
+        inEntity(p, d, id, (tx) =>
+          Effect.gen(function*() {
+            const next = tx.machine === null ? undefined : Machine.nextTimer(tx.machine, tx.now)
+            if (next === undefined) return false
+            yield* tx.apply({ _tag: 'Fire', key: next.key, incarnation: next.incarnation })
+            return true
+          })),
+        failedInDatabase,
+        () => Effect.succeed(false),
+      )
       while (yield* fire) fired++
     }
     tell(p, 'changed')
@@ -558,14 +585,24 @@ const waking = <T extends Types>(p: Process, d: Deployment<T>): Effect.Effect<ne
 
 /**
  * Runs `effect` once the id and the request id a caller gave, where it gave one, are text a database holds, and the
- * id is not empty.
- * Anything else is the caller's defect, and nothing is read or stored for it.
+ * id is not empty. Where `sql` is given, `effect` steps the entity, and a call within a transaction of the client is
+ * refused too: the step would commit with the caller's transaction, after the process started the operations the
+ * step stored. Anything refused is the caller's defect, and nothing is read or stored for it.
  */
-const checked = <A>(id: string, requestId: string | null, effect: Effect.Effect<A>): Effect.Effect<A> =>
-  Effect.suspend(() => {
-    const reason = idFault(id) ?? (requestId === null ? undefined : requestIdFault(requestId))
-    return reason === undefined ? effect : Effect.die(new InvariantDefect({ reason }))
-  })
+const checked = <A>(
+  id: string,
+  requestId: string | null,
+  effect: Effect.Effect<A>,
+  sql?: SqlClient.SqlClient,
+): Effect.Effect<A> =>
+  Effect.flatMap(
+    sql === undefined ? Effect.succeedNone : Effect.serviceOption(sql.transactionService),
+    (open) => {
+      const reason = idFault(id) ?? (requestId === null ? undefined : requestIdFault(requestId)) ??
+        (Option.isSome(open) ? 'the call runs within a transaction of the client of the runtime' : undefined)
+      return reason === undefined ? effect : Effect.die(new InvariantDefect({ reason }))
+    },
+  )
 
 /** The time a caller's reply is kept, in milliseconds, or undefined for ever. Anything else is the caller's defect. */
 const keptFor = (keep: Keep): number | undefined => {
@@ -603,6 +640,11 @@ export const launch = (options: Options = {}): Effect.Effect<Runtime, never, Sql
     const deploy = <T extends Types>(program: Program<T>) =>
       Effect.gen(function*() {
         yield* Effect.sync(() => checkProgram(program))
+        // A deploy steps the entities a crash interrupted, so it is refused within a transaction, as a call is.
+        if (Option.isSome(yield* Effect.serviceOption(sql.transactionService))) {
+          const reason = 'the deploy runs within a transaction of the client of the runtime'
+          return yield* Effect.die(new InvariantDefect({ reason }))
+        }
         if (p.deployments.has(program.name)) {
           return yield* Effect.die(new InvariantDefect({ reason: `the program '${program.name}' is deployed already` }))
         }
@@ -631,6 +673,7 @@ export const launch = (options: Options = {}): Effect.Effect<Runtime, never, Sql
               id,
               request.requestId,
               create(p, d, id, (request as { flags?: unknown }).flags ?? null, caller(request)),
+              sql,
             ),
           send: (id, message, request) =>
             checked(
@@ -638,10 +681,11 @@ export const launch = (options: Options = {}): Effect.Effect<Runtime, never, Sql
               request.requestId,
               Effect.flatMap(Effect.sync(() => keptFor(request.keep)), (keep) =>
                 send(p, d, id, message, caller(request), keep)),
+              sql,
             ),
           read: (id) => checked(id, null, d.storage.projected(id)),
-          resume: (id) => checked(id, null, operate(p, d, id, 'Resume')),
-          discard: (id) => checked(id, null, operate(p, d, id, 'Discard')),
+          resume: (id) => checked(id, null, operate(p, d, id, 'Resume'), sql),
+          discard: (id) => checked(id, null, operate(p, d, id, 'Discard'), sql),
         }
         return handle
       })

@@ -1,9 +1,9 @@
 /**
  * Entities that talk on the runtime of `transactional.ts`, which the histories of one entity do not reach: the
  * booking and the inventory of `src/fixtures/`. An operation's request is sent in a transaction of the receiver,
- * on the sender's fiber, and a request with no reply yet is sent again after the retry.
+ * on the sender's fiber, and a request with no reply yet is sent again after the retry. Each test runs on SQLite and
+ * on PostgreSQL.
  */
-import { SqliteClient } from '@effect/sql-sqlite-bun'
 import { expect, test } from 'bun:test'
 import * as Clock from 'effect/Clock'
 import * as Effect from 'effect/Effect'
@@ -16,11 +16,17 @@ import { inventory } from './fixtures/inventory.ts'
 import { create, defect, operation, type Program, rejectWith, send, type Types } from './program.ts'
 import { storage } from './storage.ts'
 import { launch, type Options } from './transactional.ts'
-import { quiet, quietly } from './transactional.test_shared.ts'
+import { onEach } from './storage.test_databases.ts'
+import { clientOf, dialects, quiet, quietly } from './transactional.test_shared.ts'
 
 const organizer = { _tag: 'Organizer' } as const
 const gig = { flags: { capacity: 10 }, requestId: 'c-gig', sender: organizer }
 const b1 = { flags: { customer: 'ann', event: 'gig', seats: 3 }, requestId: 'c-b1', sender: { _tag: 'Customer', id: 'ann' } } as const
+
+/** A failure of the database, as a statement or a commit gives it. */
+const failure = new SqlError.SqlError({
+  reason: new SqlError.UnknownError({ cause: null, message: 'the write failed' }),
+})
 
 /** A retry so long that a hold answered within a test was woken by something other than the clock. */
 const hour = { retry: { millis: 3_600_000 } }
@@ -34,10 +40,16 @@ const launched = (options?: Options) =>
     return { deploy, die: Scope.close(scope, Exit.void) }
   })
 
-const run = <A>(body: Effect.Effect<A, never, SqlClient.SqlClient>) =>
-  Effect.runPromise(
-    body.pipe(Effect.provide([SqliteClient.layer({ filename: ':memory:' }), TestClock.layer()]), quietly),
-  )
+/** Runs `body` on a new database of each dialect, and gives what it gave on each. */
+const run = async <A>(body: Effect.Effect<A, never, SqlClient.SqlClient>): Promise<Array<A>> => {
+  const results: Array<A> = []
+  await onEach(dialects, async (dialect) => {
+    results.push(
+      await Effect.runPromise(body.pipe(Effect.provide([clientOf(dialect), TestClock.layer()]), quietly)),
+    )
+  })
+  return results
+}
 
 /** An inventory that dies on a hold while `broken.now` holds, so an operator mends it in place, with no deploy. */
 const breakable = (broken: { now: boolean }): typeof inventory => ({
@@ -142,7 +154,6 @@ test('a hold whose transaction of the inventory fails in the database sends agai
     const retry = { millis: 100 }
     const attempts: Array<number> = []
     let fails = false
-    const failed = new SqlError.SqlError({ reason: new SqlError.UnknownError({ cause: null, message: 'the write failed' }) })
     const { deploy, die } = yield* launched({
       retry,
       // Once armed, the first transaction of the inventory fails as a write that fails before the commit.
@@ -153,7 +164,7 @@ test('a hold whose transaction of the inventory fails in the database sends agai
             attempts.push(now)
             if (!fails) return Effect.void
             fails = false
-            return Effect.die(failed)
+            return Effect.die(failure)
           }),
     })
     const inventories = yield* deploy(inventory)
@@ -173,6 +184,64 @@ test('a hold whose transaction of the inventory fails in the database sends agai
     expect(attempts).toEqual([0, retry.millis])
     expect(yield* statusOf(bookings.read('b1'))).toBe('Held')
     expect(yield* availableIn(inventories.read('gig'))).toBe(7)
+    yield* die
+  })))
+
+/**
+ * A probe that fails the `nth` transaction of the booking at its commit, once, and counts the booking's transactions
+ * that reach their commit.
+ */
+const failingBooking = (nth: number) => {
+  const reached = { count: 0 }
+  const probe: Options['probe'] = (point, entity) =>
+    Effect.suspend(() => {
+      if (point !== 'BeforeCommit' || entity.name !== 'Booking') return Effect.void
+      reached.count++
+      return reached.count === nth ? Effect.die(failure) : Effect.void
+    })
+  return { reached, probe }
+}
+
+test('an operation whose end fails in the database is recorded at the retry', () =>
+  run(Effect.gen(function*() {
+    const retry = { millis: 100 }
+    // The booking's first transaction creates it, and its second records the end of the hold.
+    const { reached, probe } = failingBooking(2)
+    const { deploy, die } = yield* launched({ retry, probe })
+    const inventories = yield* deploy(inventory)
+    const bookings = yield* deploy(booking)
+    yield* inventories.create('gig', gig)
+    yield* bookings.create('b1', b1)
+    yield* quiet
+    expect(reached.count).toBe(2)
+    expect(yield* statusOf(bookings.read('b1'))).toBe('Holding')
+    yield* TestClock.adjust(retry.millis)
+    yield* quiet
+    expect(reached.count).toBe(3)
+    expect(yield* statusOf(bookings.read('b1'))).toBe('Held')
+    expect(yield* availableIn(inventories.read('gig'))).toBe(7)
+    yield* die
+  })))
+
+test('a timer whose fire fails in the database fires at the retry', () =>
+  run(Effect.gen(function*() {
+    const retry = { millis: 100 }
+    // The third transaction of the booking fires the deadline, once the hold has ended.
+    const { reached, probe } = failingBooking(3)
+    const { deploy, die } = yield* launched({ retry, probe })
+    const inventories = yield* deploy(inventory)
+    const bookings = yield* deploy(booking)
+    yield* inventories.create('gig', gig)
+    yield* bookings.create('b1', b1)
+    yield* quiet
+    expect(yield* statusOf(bookings.read('b1'))).toBe('Held')
+    yield* TestClock.adjust(15 * 60_000)
+    yield* quiet
+    expect(reached.count).toBe(3)
+    expect(yield* statusOf(bookings.read('b1'))).toBe('Held')
+    yield* TestClock.adjust(retry.millis)
+    yield* quiet
+    expect(yield* statusOf(bookings.read('b1'))).not.toBe('Held')
     yield* die
   })))
 
@@ -206,17 +275,19 @@ const refused = (Hold: (typeof booking)['operations']['Hold']) =>
 test('a droppable operation that sends dies, and suspends its entity', async () => {
   // The types refuse a droppable operation that sends, so only a program typed by hand reaches the runtime's check.
   const dropping = operation.droppable(sending(1) as unknown as (op: Hold) => Effect.Effect<{ _tag: 'SeatsHeld' }>)
-  const { causes, available } = await refused(dropping as unknown as (typeof booking)['operations']['Hold'])
-  expect(causes).toHaveLength(1)
-  expect(causes[0]).toContain("the droppable operation under 'hold' sent to Inventory 'gig'")
-  expect(available).toBe(10)
+  for (const { causes, available } of await refused(dropping as unknown as (typeof booking)['operations']['Hold'])) {
+    expect(causes).toHaveLength(1)
+    expect(causes[0]).toContain("the droppable operation under 'hold' sent to Inventory 'gig'")
+    expect(available).toBe(10)
+  }
 })
 
 test('an operation that sends twice under a name to an entity dies at the second, and suspends its entity', async () => {
-  const { causes, available } = await refused(operation.atLeastOnce(sending(2)))
-  expect(causes).toHaveLength(1)
-  expect(causes[0]).toContain("the operation sent 'hold' to Inventory 'gig' twice")
-  expect(available).toBe(7)
+  for (const { causes, available } of await refused(operation.atLeastOnce(sending(2)))) {
+    expect(causes).toHaveLength(1)
+    expect(causes[0]).toContain("the operation sent 'hold' to Inventory 'gig' twice")
+    expect(available).toBe(7)
+  }
 })
 
 /** An inventory whose creation `init` rejects where its capacity is 0. */
@@ -267,13 +338,13 @@ const afterCrash = (creates: boolean, before: boolean) =>
   }))
 
 test('a hold run again after a crash sends the same request, and is given the reply the inventory stored', async () => {
-  expect(await afterCrash(false, true)).toEqual({ status: 'Held', available: 7 })
+  expect(await afterCrash(false, true)).toEqual(dialects.map(() => ({ status: 'Held', available: 7 })))
 })
 
 test('a hold run again after a crash is given the NotFound of its first run, though the inventory exists since', async () => {
-  expect(await afterCrash(false, false)).toEqual({ status: 'Cancelled', available: 10 })
+  expect(await afterCrash(false, false)).toEqual(dialects.map(() => ({ status: 'Cancelled', available: 10 })))
 })
 
 test('a hold run again after a crash is given the rejection of its first creation, though another made it since', async () => {
-  expect(await afterCrash(true, false)).toEqual({ status: 'Cancelled', available: 10 })
+  expect(await afterCrash(true, false)).toEqual(dialects.map(() => ({ status: 'Cancelled', available: 10 })))
 })

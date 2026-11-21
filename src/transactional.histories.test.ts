@@ -1,12 +1,12 @@
 /**
- * The histories of `machine.test_histories.ts`, played on the runtime of `transactional.ts` over SQLite. Each history
- * has a database of its own in memory, the test's clock, and a process that a restart kills and launches again on
- * the same database.
+ * The histories of `machine.test_histories.ts`, played on the runtime of `transactional.ts` over SQLite and over
+ * PostgreSQL. Each history has a database of its own, the test's clock, and a process that a restart kills and
+ * launches again on the same database. PostgreSQL is PGlite, or a pool of the server `POSTGRES_URL` names, and plays
+ * fewer histories, since each makes a database.
  *
  * The toy's runner waits for the answer the history gives its run. An answer is kept by run, so a run started
  * again after a crash, or answered late, is given it at once.
  */
-import { SqliteClient } from '@effect/sql-sqlite-bun'
 import { expect, test } from 'bun:test'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
@@ -29,9 +29,9 @@ import {
   type Version,
   violations,
 } from './machine.test_histories.ts'
-import { storage } from './storage.ts'
+import { type Dialect, storage } from './storage.ts'
 import { type Handle, launch } from './transactional.ts'
-import { quiet, quietly } from './transactional.test_shared.ts'
+import { clientOf, dialects, quiet, quietly } from './transactional.test_shared.ts'
 
 const id = 'history'
 
@@ -144,7 +144,7 @@ const onRuntime = Effect.gen(function*() {
   return { target, close: Effect.suspend(() => Scope.close(scope, Exit.void)) }
 })
 
-const played = (acts: Parameters<typeof play>[0]) =>
+const played = (acts: Parameters<typeof play>[0], dialect: Dialect) =>
   Effect.runPromise(
     Effect.scoped(Effect.gen(function*() {
       const { target, close } = yield* onRuntime
@@ -152,15 +152,20 @@ const played = (acts: Parameters<typeof play>[0]) =>
       yield* close
       return result
     })).pipe(
-      Effect.provide([SqliteClient.layer({ filename: ':memory:' }), TestClock.layer()]),
+      Effect.provide([clientOf(dialect), TestClock.layer()]),
       quietly,
     ),
   )
 
-test('a history on the runtime over SQLite keeps the promises of the design', () =>
-  fc.assert(
-    fc.asyncProperty(history, async (acts) => {
-      expect(violations(await played(acts))).toEqual([])
-    }),
-    { numRuns: all ? 10_000 : 1_000, includeErrorInReport: true },
-  ), all ? 900_000 : 60_000)
+const runs = { sqlite: all ? 10_000 : 1_000, pg: all ? 1_000 : 50 }
+
+for (const dialect of dialects) {
+  const over = dialect === 'pg' ? 'PostgreSQL' : 'SQLite'
+  test(`a history on the runtime over ${over} keeps the promises of the design`, () =>
+    fc.assert(
+      fc.asyncProperty(history, async (acts) => {
+        expect(violations(await played(acts, dialect))).toEqual([])
+      }),
+      { numRuns: runs[dialect], includeErrorInReport: true },
+    ), all ? 900_000 : 60_000)
+}

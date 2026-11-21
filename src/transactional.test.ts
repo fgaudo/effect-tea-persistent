@@ -1,8 +1,7 @@
 /**
  * Rules of `transactional.ts` that the histories of one process do not reach: two runtimes on one database, and what
- * a caller or a launcher gives that the runtime refuses.
+ * a caller or a launcher gives that the runtime refuses. Each test runs on SQLite and on PostgreSQL.
  */
-import { SqliteClient } from '@effect/sql-sqlite-bun'
 import { expect, test } from 'bun:test'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
@@ -11,7 +10,8 @@ import * as Scope from 'effect/Scope'
 import { SqlClient } from 'effect/sql'
 import { first, type Operation, type T, toy } from './machine.test_histories.ts'
 import { type Handle, launch } from './transactional.ts'
-import { quiet, quietly } from './transactional.test_shared.ts'
+import { onEach } from './storage.test_databases.ts'
+import { clientOf, dialects, quiet, quietly } from './transactional.test_shared.ts'
 
 /** A process on the client: its runtime with the toy deployed, the runs its runner was given, and how it dies. */
 const processOn = Effect.gen(function*() {
@@ -26,7 +26,7 @@ const processOn = Effect.gen(function*() {
 })
 
 const run = <A>(body: Effect.Effect<A, never, SqlClient.SqlClient>) =>
-  Effect.runPromise(body.pipe(Effect.provide(SqliteClient.layer({ filename: ':memory:' })), quietly))
+  onEach(dialects, (dialect) => Effect.runPromise(body.pipe(Effect.provide(clientOf(dialect)), quietly)))
 
 test('an operation whose process died runs again at the next step of a process that remembers its entity', () =>
   run(Effect.gen(function*() {
@@ -65,6 +65,16 @@ test('an id, a request id or a time to keep a reply that is no such value is the
     expect(yield* defect(handle.send('e', { _tag: 'Refuse', nonce: 'n' }, { requestId: 'r', keep: { millis: -1 } })))
       .toBe('the reply is kept {"millis":-1}, which is no non-negative integer of milliseconds')
     expect(yield* defect(handle.read('\ud800'))).toBe('the id is "\\ud800", which is no text a database holds')
+    // A call that steps the entity within the caller's transaction would commit with it, so it is refused.
+    const sql = yield* SqlClient.SqlClient
+    const within = 'the call runs within a transaction of the client of the runtime'
+    expect(yield* defect(Effect.orDie(sql.withTransaction(handle.create('e', { requestId: 'c' }))))).toBe(within)
+    expect(yield* defect(Effect.orDie(sql.withTransaction(handle.resume('e'))))).toBe(within)
+    const relaunched = Effect.scoped(Effect.flatMap(launch(), (runtime) =>
+      Effect.orDie(sql.withTransaction(runtime.deploy(toy(first))))))
+    expect(yield* defect(relaunched))
+      .toBe('the deploy runs within a transaction of the client of the runtime')
+    expect(yield* Effect.orDie(sql.withTransaction(handle.read('e')))).toBeNull()
     yield* die
   })))
 
