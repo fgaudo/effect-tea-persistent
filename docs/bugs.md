@@ -709,19 +709,7 @@ family gets a fix of its own.
     server has the time, or at the job `release`, which would get the service of PostgreSQL and `POSTGRES_URL`.
 111. **Fixed by [decision 0288](decisions/0288-a-batch-of-prune-skips-the-rows-another-batch-holds.md)**, whose batch of `prune` locks the rows it selects and skips those another batch holds. On a pool of PostgreSQL two prunes at once locked rows of the outbox in opposite orders, and PostgreSQL ended one as a deadlock. Found by the test of a contract of the pool on the CI's server, for the pair of two prunes.
 112. **Fixed on 2026-11-21 by step 5 of the [roadmap](roadmap.md)**, whose rehearsal runs the runtime's step on SQLite in memory, where each send is one transaction and each act holds the world's lock. The tests `applies once a request id that two fibers of the scenario send at once` and `fails the second of two creations of one id that two fibers make at once`, in `src/rehearse.test.ts`, hold it.
-113. **Observed: the first test of the job `postgres` times out at 5 s in two runs of three.** The test `finds the
-    entities whose activation the new program suspends, as a deploy then suspends them`, in `src/check.test.ts`, is
-    the first that `test:postgres` runs on the CI's server. It timed out in the runs of `048e0df` and `0fbff80` on
-    2026-11-21, and passed in 0.5 s in the run of `dabeb35` and in a run of `0fbff80` again. It timed out in the run
-    of `6f90cd5`, the only test of the job to fail, and passed when the job ran again. The commits between
-    change no code it runs, and the other tests of the file take milliseconds. The cause is not known. The first
-    database the job makes on the server, or the first connection of its pool, is the first place to look. It timed
-    out again in the run of `71ea59c`, once more when the job ran again, and in the run of `a609c26`. That run made
-    the server's first database in a hook first, in 96 ms, so the first `CREATE DATABASE` is not the cause. The next
-    suspect is a wait that never ends. `persisting` and `answered` of `src/runtime.ts` sleep for `retry` after a
-    transaction fails in the database, and the test runs under `TestClock`, whose time only `adjust` moves. So a
-    failure of one transaction on the server's pool would hold the test to its timeout. The fix begins with a run
-    that logs each transaction that fails in the database.
+113. **Fixed on 2026-11-21 by `9c77c8d`**, whose waker sleeps from the time it reads after its reading of what is due. On a server the clock moved while that reading waited on the network, and the waker slept past the timer, for ever under `TestClock`. The test `fires a timer whose time passes while the waker reads what is due`, in `src/runtime.test.ts`, races the two on the CI's server, and the job passed four runs of four.
 114. **Noticed: the waker never reads the entities whose time `due` refuses.** The doc comment of `Due.refused`, in
     `src/storage/entities.ts`, says the waker tries each again after `retry`. `waking` of `src/runtime.ts` reads
     `ready` and `next` alone, and sleeps until `next`. So a refused row is neither logged nor read again before
