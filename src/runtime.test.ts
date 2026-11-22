@@ -75,6 +75,70 @@ test('fires a timer whose time passes while the waker reads what is due', () =>
     TestClock.layer(),
   )))
 
+// Bug 114 of docs/bugs.md: the doc comment of `Due.refused` says the waker tries a refused entity again after
+// `retry`, and `waking` reads `ready` and `next` alone. Only SQLite holds a time that is no integer.
+test.failing('the waker reads again after the retry an entity whose time it refused', () =>
+  onEach(['sqlite'], (dialect) =>
+    Effect.runPromise(Effect.provide(
+      Effect.gen(function*() {
+        const sql = yield* SqlClient.SqlClient
+        const { handle, die } = yield* processOn
+        yield* handle.create('e', { requestId: 'creation' })
+        yield* handle.send('e', { _tag: 'Start', key: 't', nonce: 'n' }, { requestId: 'r', keep: 'forever' })
+        yield* quiet
+        // An operator writes a time no version writes, and the waker refuses it once the timer's time passes.
+        yield* sql`UPDATE effecttea_entity_keys SET due = 'soon' WHERE id = 'e' AND due IS NOT NULL`
+        yield* TestClock.adjust('20 millis')
+        yield* quiet
+        // The operator writes the time back, and the waker's next reading, after its retry, finds the timer due.
+        yield* sql`UPDATE effecttea_entity_keys SET due = 0 WHERE id = 'e' AND due IS NOT NULL`
+        yield* TestClock.adjust('60 millis')
+        yield* quiet
+        expect((yield* handle.read('e'))?.seen.some(({ tag }) => tag === 'Rang')).toBe(true)
+        yield* die
+      }).pipe(Effect.provide(clientOf(dialect)), quietly),
+      TestClock.layer(),
+    ))))
+
+// Bug 105 of docs/bugs.md: a step PostgreSQL cannot write fails in the database, and is tried again after the retry
+// for ever, so the entity's state never moves past it and the entity is not suspended.
+test.failing('a completion whose step writes a long index is stepped or suspends its entity, alike on both dialects', () => {
+  let seed = 7
+  const long = Array.from({ length: 4_000 }, () => {
+    seed = (seed * 48_271) % 2_147_483_647
+    return String.fromCharCode(97 + (seed % 26))
+  }).join('')
+  return run(Effect.provide(
+    Effect.gen(function*() {
+      let runs = 0
+      const base = toy(first, (operation) =>
+        operation.key === 'd'
+          ? Effect.sync(() => (runs++, { _tag: 'Done', run: operation, then: 'End' } as const))
+          : Effect.never)
+      const indexed = {
+        ...base,
+        indexes: { done: (state: T['state']) => (state.seen.some(({ tag }) => tag === 'Done') ? long : 'none') },
+      } as unknown as typeof base
+      const scope = yield* Scope.make()
+      const runtime = yield* Effect.provideService(launch(), Scope.Scope, scope)
+      const handle = yield* Effect.provideService(runtime.deploy(indexed), Scope.Scope, scope)
+      yield* handle.create('e', { requestId: 'creation' })
+      yield* handle.send('e', { _tag: 'Start', key: 'd', nonce: 'n' }, { requestId: 'r', keep: 'forever' })
+      for (let round = 0; round < 20; round++) {
+        yield* TestClock.adjust('60 millis')
+        yield* quiet
+      }
+      // The completion is stepped, or the entity is suspended, and the operation ran once.
+      const seen = (yield* handle.read('e'))?.seen ?? []
+      const suspended = yield* handle.suspended
+      expect({ runs, settled: seen.some(({ tag }) => tag === 'Done') || suspended.length === 1 })
+        .toEqual({ runs: 1, settled: true })
+      yield* Scope.close(scope, Exit.void)
+    }),
+    TestClock.layer(),
+  ))
+})
+
 const Counted = Schema.Array(Schema.Struct({ queued: Schema.Number }))
 
 /** How many messages wait in the mailbox of the toy's entity `id`. */

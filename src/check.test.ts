@@ -157,6 +157,25 @@ describe('the check of a program', () => {
       }])
     })))
 
+  // Bug 95 of docs/bugs.md: `entity` of `src/storage/entities.ts` runs the migrations of the flags outside its guard.
+  test.failing('a migration of the flags that dies on a stored row is a Load of its entity, as one of the state is', () =>
+    database(Effect.gen(function*() {
+      const at = yield* DateTime.now
+      yield* process({}, (runtime) =>
+        Effect.gen(function*() {
+          const { layer } = yield* hands()
+          const toy = yield* Effect.provide(runtime.deploy(program), layer)
+          yield* toy.create('t-1', { flags: { at }, requestId: 'c', sender: tester })
+          yield* runtime.settled
+        }))
+      const migrating: Program<T> = { ...program, migrations: [{ flags: () => defect('migration of the flags dies') }] }
+      expect((yield* check(migrating, { limit: all })).active.failed).toEqual([{
+        id: 't-1',
+        on: 'Load',
+        cause: expect.stringContaining('migration of the flags dies'),
+      }])
+    })))
+
   test('checks a suspended entity as a resume would activate it', () =>
     database(Effect.gen(function*() {
       const at = yield* DateTime.now

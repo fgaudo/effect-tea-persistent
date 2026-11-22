@@ -2005,6 +2005,19 @@ describe('a new program', () => {
     )
   })
 
+  // Bug 1 of docs/bugs.md: the incarnation kept is read as one run at most once, which may have acted.
+  test.failing('a droppable operation a new program delivers at most once starts, since it acted on nothing', () => {
+    const machine = droppable((message) => message, () => ({ charge: 'operation' }))
+    const base = tiny((message) => message, () => ({ charge: 'operation' }))
+    const transition = stepped(machine, { _tag: 'Restart' }, {
+      ...base,
+      operations: { Work: operation.atMostOnce(() => Effect.succeed('done'), () => '?') },
+    })
+    expect(transition.machine.stored.suspension).toBeNull()
+    expect(transition.outputs).toContainEqual(expect.objectContaining({ _tag: 'Started', key: { name: 'charge' } }))
+    expect(transition.machine.stored.mailbox).toEqual([])
+  })
+
   test('an at-most-once operation that is new work at an activation starts: it never ran', () => {
     const machine = checked((message) => message, () => ({ deadline: 'timer' }))
     const program = machine.program
@@ -2601,6 +2614,23 @@ describe('keys with a parameter', () => {
     expect(begun(flipped)).toEqual([])
     expect(flipped?.machine.stored.keys).toEqual(added?.machine.stored.keys)
     expect(flipped?.written?.keys).toEqual([])
+  })
+
+  // Bug 96 of docs/bugs.md: no kind of `Migration` reads a stored parameter, so the stored key reads as dropped.
+  test.failing('a deploy whose key parameter encodes otherwise keeps the operation under way under its key', () => {
+    const { machine } = run([send('+a')])
+    // Version 2 declares the parameter of `charge` as a struct, and charges each line under `{ line }`.
+    const encoded = {
+      ...lines,
+      keys: { ...lines.keys, charge: Schema.Struct({ line: Schema.String }) },
+      work: (state: L['state']) => ({
+        ...lines.work(state),
+        charge: state.lines.map((line) => [{ line }, { _tag: 'Charge', line }] as const),
+      }),
+    } as unknown as Program<L>
+    const deployed = Machine.step(encoded, machine, { _tag: 'Restart' })
+    expect(deployed.machine.stored.suspension).toBeNull()
+    expect(begun(deployed)).toContainEqual([{ name: 'charge', parameter: { line: 'a' } }, 1])
   })
 
   test('a parameter its schema refuses, two that encode alike, or no list under such a key is a defect', () => {

@@ -1109,6 +1109,19 @@ describe('time that passes', () => {
       }),
     )))
 
+  // Bug 115 of docs/bugs.md: `entity` of `src/storage/entities.ts` reads the keys in no order, as `nextTimer` says.
+  test.failing('fires two timers due at one time in the order of the stored work', () =>
+    Effect.runPromise(rehearse(
+      meter('Meter'),
+      { flags: {}, at: placedAt },
+      Effect.fnUntraced(function*(rehearsal) {
+        yield* rehearsal.send({ _tag: 'Arm', key: 'b', at: hours(1), every: null, next: null }, { sender: tester })
+        yield* rehearsal.send({ _tag: 'Arm', key: 'a', at: hours(1), every: null, next: null }, { sender: tester })
+        yield* rehearsal.advance('1 hour')
+        expect((yield* rehearsal.state).seen.slice(2)).toEqual([seenAs('b', hours(1)), seenAs('a', hours(1))])
+      }),
+    )))
+
   test('fires a timer due before the time already reached when it passes', () =>
     Effect.runPromise(rehearse(
       meter('Meter'),

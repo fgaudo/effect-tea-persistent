@@ -1042,6 +1042,36 @@ test('reindex skips an entity that a step wrote since, though its state has the 
       expect(yield* after.query({ limit: all })).toEqual([{ id: 'a', projection: 'migrated', indexes: {} }, { id: 'b', projection: 'x', indexes: {} }])
     }).pipe(Effect.orDie)))
 
+// `reindex` writes a row only over the state it computed the row from, so a step that lands between its reading and
+// its writing keeps the row it wrote.
+test('reindex skips an entity that a step moved to another state since its reading', () =>
+  database((sql) =>
+    Effect.gen(function*() {
+      const store = storage(receiver, sql)
+      yield* store.write('a', created({ entity: { state: { last: 'x' }, creation, flags: null } }), 0)
+      yield* store.write('b', created({ entity: { state: { last: 'x' }, creation, flags: null } }), 0)
+      // As the row of 'a' is written, a step moves 'b' to the state 'y' and writes its row: the step lands between
+      // the reading of 'b' and the writing of its row.
+      const step = `
+        UPDATE effecttea_entities SET state = '{"last":"y"}' WHERE name = 'Receiver' AND id = 'b';
+        UPDATE effecttea_projections SET projection = '"y"' WHERE name = 'Receiver' AND id = 'b';
+      `
+      if (dialectOf(sql) === 'pg') {
+        yield* sql.unsafe(`
+          CREATE FUNCTION step() RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN
+            IF NEW.id = 'a' THEN ${step} END IF;
+            RETURN NULL;
+          END $$
+        `)
+        yield* sql`CREATE TRIGGER step AFTER UPDATE ON effecttea_projections FOR EACH ROW EXECUTE FUNCTION step()`
+      } else {
+        yield* sql.unsafe(`CREATE TEMP TRIGGER step AFTER UPDATE ON effecttea_projections WHEN NEW.id = 'a' BEGIN ${step} END`)
+      }
+      expect(yield* store.reindex).toEqual({ written: 1, failed: [] })
+      expect((yield* store.query({ limit: all })).map(({ id, projection }) => [id, projection])).toEqual([['a', 'x'], ['b', 'y']])
+    }).pipe(Effect.orDie)))
+
 // What the program computes of a row leaves that entity's row, and what the runtime throws fails the call
 // (decisions 0061, 0122).
 test('reindex passes over a state a migration or the schema dies on, and fails on a text that is no JSON', () =>
@@ -1288,6 +1318,56 @@ test('reindex passes over a state an index dies on, names it, and writes the res
         ['c', 3],
       ])
     }).pipe(Effect.orDie)))
+
+/** A text of 4,000 letters that compresses little, past the 2,704 bytes an entry of an index of PostgreSQL holds. */
+const longText = (() => {
+  let seed = 7
+  return Array.from({ length: 4_000 }, () => {
+    seed = (seed * 48_271) % 2_147_483_647
+    return String.fromCharCode(97 + (seed % 26))
+  }).join('')
+})()
+
+/** What each dialect makes of `body`: its value, or the name of what it failed with. */
+const onEachDialect = async <A>(body: (sql: SqlClient.SqlClient) => Effect.Effect<A, unknown>) => {
+  const outcomes: Array<unknown> = []
+  await database((sql) =>
+    Effect.map(Effect.exit(body(sql)), (exit) =>
+      outcomes.push(Exit.isSuccess(exit) ? exit.value : String(Cause.squash(exit.cause)).slice(0, 80))))
+  return outcomes
+}
+
+// Bug 102 of docs/bugs.md: an entry of a B-tree index of PostgreSQL holds a bounded text, where SQLite holds any.
+test.failing('a step whose id, index or request holds a long text is written alike on both dialects', async () => {
+  const written = (write: (store: ReturnType<typeof storage<Ranked>>) => Effect.Effect<unknown, unknown>) =>
+    onEachDialect((sql) => Effect.map(write(storage(ranked, sql)), () => 'written'))
+  const [byId, byIndex, byRequest] = [
+    await written((store) => store.write(longText, created({}), 0)),
+    await written((store) =>
+      Effect.andThen(
+        store.indexed,
+        store.write('a', created({ shown: { projection: JSON.stringify(longText), indexes: { rank: longText } } }), 0),
+      )
+    ),
+    await written((store) => store.write('a', created({ replies: [{ ...reply('held', 1), request: JSON.stringify([longText]) }] }), 0)),
+  ]
+  expect([byId[0], byIndex[0], byRequest[0]]).toEqual([byId[1], byIndex[1], byRequest[1]])
+})
+
+// Bug 103 of docs/bugs.md: `reindex` passes over what the program computes, and dies whole on a statement that fails.
+test.failing('reindex passes over an entity whose new index PostgreSQL cannot hold, alike on both dialects', async () => {
+  const reindexed = await onEachDialect((sql) =>
+    Effect.gen(function*() {
+      const store = storage(ranked, sql)
+      yield* store.indexed
+      for (const [id, last] of [['a', '"a"'], ['b', JSON.stringify(longText)], ['c', '"c"']] as const) {
+        yield* store.write(id, created({ entity: { state: { last }, creation, flags: null }, shown: { projection: '0', indexes: { rank: 0 } } }), 0)
+      }
+      const { written, failed } = yield* store.reindex
+      return { written, failed: failed.map(({ id }) => id) }
+    }))
+  expect(reindexed[0]).toEqual(reindexed[1])
+})
 
 // Each statement of a page takes what the ones before it left of the limit, and a row found carries null for an
 // index it lacks, as the query reads it (decisions 0143, 0145).

@@ -11,14 +11,6 @@ Each step names its model and effort, what it depends on, and how to tell it is 
 
 ## Next
 
-7. **The bugs and the questions are read again.** (Opus 5.5 · medium) It depends on nothing. Each entry of
-   `docs/bugs.md` and `docs/open-questions.md` is gone with its piece, held by a test, or still open. It is done
-   when both files hold only what is open, and every open bug has a failing test.
-   - `docs/open-questions.md` still links to removed code at the tag `pre-restart`.
-   - A reply or a `NotFound` stored while the asker's work ends is left on PostgreSQL. Neither step waits for the
-     other, and each misses the other's write. The four overlaps of `src/runtime.pool.test.ts` check that `expire`
-     deletes the row.
-
 8. **The questions for the contract.** (Fable 5.2 · high) It depends on steps 6 and 7. The review lists five rules
    of the contract a simpler one may replace, and the slice shows which of them a browser meets. The maintainer
    takes each or leaves it, and each one taken changes the machine with its tests. It is done when each of the five
@@ -65,10 +57,10 @@ Each step names its model and effort, what it depends on, and how to tell it is 
      that a browser imports a program's module through `./program`. Step 12 gives the browser something to import.
    - The three choices of the slice are in the README of `examples/seat`, and `docs/design.md` says none of them.
 
-10. **What a deploy may change of a program.** (Fable 5.2 · high) It depends on step 4. It is the rule of bugs 1, 7
-    and 96. A table lists each piece a program declares and each way a deploy changes it, against an entity stored
+10. **What a deploy may change of a program.** (Fable 5.2 · high) It depends on step 4. It is the rule of bugs 1 and
+    96. A table lists each piece a program declares and each way a deploy changes it, against an entity stored
     or suspended, and against a browser that still holds the schemas of the version before. Each case has a test, or
-    a sentence that says why it holds. It is done when the table is in `docs/design.md` and the three bugs are
+    a sentence that says why it holds. It is done when the table is in `docs/design.md` and the two bugs are
     closed.
     - A deploy activates only the entities with an operation or a message, so a deploy that makes a stored timer an
       operation starts it late. `docs/open-questions.md` asks it under Programs. The runtime's target of the
