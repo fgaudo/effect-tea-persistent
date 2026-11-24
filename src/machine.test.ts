@@ -27,6 +27,7 @@ import {
   program as declare,
   reject,
   type Request,
+  requestBytes,
   rejectWith,
   runnerOf,
   timer,
@@ -2180,6 +2181,23 @@ describe('who a request belongs to', () => {
       name: text,
     } as const as Request<null>
     expect(Machine.requestFault(tiny((message) => message, () => ({})), asked)).toBeUndefined()
+  })
+
+  // A migration of the sender may lengthen a caller's request that waits in the mailbox past the bound of a request,
+  // and the storage could key no reply by it.
+  test("a caller's request a migration lengthened past its bound suspends the entity where it is handled", () => {
+    const base = tiny((message) => message, () => ({}))
+    const named = { ...base, schemas: { ...base.schemas, sender: Schema.String } } as unknown as Program<Tiny>
+    const created = Machine.start(named, 'tiny', null, epoch, { _tag: 'Caller', sender: 'ann', id: 'c' } as never)
+    if (created._tag !== 'Created') throw new Error(created._tag)
+    // The storage gives the request as the migration of the sender reads it.
+    const long = { _tag: 'Caller', sender: 'n'.repeat(requestBytes), id: 'r' } as unknown as Request<null>
+    const stored = { ...created.machine.stored, mailbox: [{ _tag: 'Inbound', request: long, message: 'go' }] as const }
+    const entity: Entity = { ...created.machine, stored, program: named, replies: new Map() }
+    const transition = stepped(entity, { _tag: 'Handle', at })
+    expect(reasonOfSuspension(transition))
+      .toBe(`the request encodes to more than ${requestBytes} bytes of UTF-8, the most a database keys a row by`)
+    expect(transition.machine.stored.mailbox).toEqual(stored.mailbox)
   })
 
   test('the same request id from different senders is different requests, each answered its own reply', () => {

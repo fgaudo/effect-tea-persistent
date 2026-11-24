@@ -370,25 +370,11 @@ const keyed = new WeakMap<object, WeakMap<object, string>>()
 /**
  * What a request is deduplicated by: its JSON as text, with the fields of each object in order. Two requests are
  * the same when they encode alike, whoever built them. The text is an index of the machine's, and nothing parses
- * it back. A request that does not encode, as a caller's sender its schema refuses, is a defect. So is one whose
- * text holds more than `requestBytes` bytes, which a migration of the sender may give.
+ * it back. A request that does not encode, as a caller's sender its schema refuses, is a defect. The text may be
+ * past `requestBytes`, which only `requestFault` checks, so that a request a migration of the sender lengthened is
+ * still compared with others.
  */
 export const requestKey = <T extends Types>(program: Program<T>, request: Request<T['sender']>): string => {
-  const fault = requestFault(program, request)
-  return fault === undefined ? requestText(program, request) : broken(fault)
-}
-
-/**
- * Why the storage cannot key a row by the request, or `undefined` where it can. Only a caller's request can be one,
- * since each part of an operation's is bounded where it enters. A handle and a rehearsal refuse such a request as the
- * caller's defect, before it reaches the entity.
- */
-export const requestFault = <T extends Types>(program: Program<T>, request: Request<T['sender']>): string | undefined =>
-  fits(requestText(program, request), requestBytes)
-    ? undefined
-    : `the request encodes to more than ${requestBytes} bytes of UTF-8, the most a database keys a row by`
-
-const requestText = <T extends Types>(program: Program<T>, request: Request<T['sender']>): string => {
   const codec = requestCodec(program)
   let held = keyed.get(codec)
   if (held === undefined) {
@@ -401,6 +387,17 @@ const requestText = <T extends Types>(program: Program<T>, request: Request<T['s
   held.set(request, text)
   return text
 }
+
+/**
+ * Why the storage cannot key a row by the request, or `undefined` where it can. Only a caller's request can be one,
+ * since each part of an operation's is bounded where it enters. A handle and a rehearsal refuse such a request as the
+ * caller's defect, before it reaches the entity. A request a migration of the sender lengthened is the program's
+ * defect, found where the entity handles its message.
+ */
+export const requestFault = <T extends Types>(program: Program<T>, request: Request<T['sender']>): string | undefined =>
+  fits(requestKey(program, request), requestBytes)
+    ? undefined
+    : `the request encodes to more than ${requestBytes} bytes of UTF-8, the most a database keys a row by`
 
 /**
  * What a caller's request carried, as text: the message or the flags as the program's schema encodes them, with the
@@ -1086,6 +1083,9 @@ const handle = <T extends Types>(program: Program<T>, machine: Machine<T>, at: D
         outputs: [{ _tag: 'Dropped', key: head.key, incarnation: head.incarnation }],
       }
     }
+    // A migration of the sender may lengthen a caller's request after it entered, and its reply would be keyed by it.
+    const fault = head._tag === 'Inbound' ? requestFault(program, head.request) : undefined
+    if (fault !== undefined) broken(fault)
     const from: Origin<T['sender']> = head._tag === 'Inbound' ? originOf(head.request) : { _tag: 'Self' }
     const result = byProgram(() => program.update(head.message, { at, from })(stored.state))
     if (isRejected(result)) {

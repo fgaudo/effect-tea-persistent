@@ -1046,6 +1046,9 @@ is written once. A launch on a client of any other dialect is the launcher's def
   the operation's defect, which suspends the sender. A parameter or an index is the program's, which suspends the
   entity. An operation's request holds four texts, a parameter, an integer and less than 120 bytes besides, so it
   always fits, and only a caller's sender can take a request past its bound.
+- A migration of the sender may lengthen a caller's request that waits in the mailbox past its bound. That request is
+  the program's defect. The entity suspends where it handles the message, since the step would key the reply by the
+  request. A step that only compares another request with it, as one received behind it, does not fail.
 - An id is not empty either. The waker and `reindex` page the entities from the empty id up, so an entity under it
   would never be woken nor indexed. A handle, an operation and a rehearsal refuse it as the defect of whoever gave it
   ([decision 0179](decisions/0179-an-id-is-not-empty.md)).
