@@ -13,20 +13,6 @@ come first, since no feature is built while more than ten bugs are open.
 
 ## Next
 
-16. **What the storage and the checks let through.** (Opus 5.5 · medium) It depends on no step. A hunt of
-    2026-11-24 found four narrow bugs, each reproduced by a test that was not kept. The step writes each as a bug of
-    `docs/bugs.md` with its `test.failing`, and fixes it. It is done when the four tests are `test`s, or a sentence
-    of `docs/design.md` refuses the case where it enters.
-    - On PostgreSQL a launch dies where the first schema of the `search_path` has a dot in its name. `migrationsTable`
-      of `src/storage/tables.ts` joins the schema and the table with a dot, and `sql` splits the name at each dot.
-    - An entity suspended at a time before 1970 is written and never read back. `Rows.entity` and `Rows.suspended`
-      of `src/storage/rows.ts` decode `suspended_at` as a `Count`, and `Rows.due` takes any integer.
-    - A timer whose time is no `DateTime`, which a cast lets through, is stored with no time. `checkWork` of
-      `src/machine.ts` checks a time only where `DateTime.isDateTime` holds. The timer never fires, and `load` dies
-      on its row. A `work` that gives a `Map`, through a cast too, is read as no work, with no defect.
-    - `projectionViolations` of `src/testing.ts` reads `allows` through the prototype chain. So a kind `__proto__`,
-      which the type `Allows` lets through, makes the check throw where it should pass over the kind.
-
 17. **The bugs no step holds.** (Opus 5.5 · high) It depends on no step. Bugs 95, 99, 102, 103, 105, 110, 114 and
     115 of `docs/bugs.md` belong to no step, and step 11 waits for ten open bugs at most. Where an entry names two
     fixes, the step takes the one the values of `AGENTS.md` rank higher. The fix of bug 110 changes `ci.yml`, whose
@@ -94,8 +80,8 @@ come first, since no feature is built while more than ten bugs are open.
     - The screen of `examples/seat` dies on a reading its contract does not decode, and its page asks for a reload.
       It is what a browser that holds the schemas of the version before meets today.
 
-11. **The release, experimental.** (Opus 5.5 · medium) It depends on steps 9, 10, 15, 16 and 17, and on ten open bugs
-    at most. It decides what `exports` names, writes the metadata of `package.json`, and packs the package into a
+11. **The release, experimental.** (Opus 5.5 · medium) It depends on steps 9, 10, 15 and 17, and on ten open bugs at
+    most. It decides what `exports` names, writes the metadata of `package.json`, and packs the package into a
     project outside Bun that runs and typechecks it. It publishes nothing, since a release is the owner's.
     - No spike sees the runtime on a full volume since the consumers went. A spike of it is owed before the release.
     - `./testing` imports `@effect/sql-sqlite-node`, an optional peer dependency on `node:sqlite`. The project outside

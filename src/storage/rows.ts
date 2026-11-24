@@ -127,17 +127,17 @@ const replyRow = { request: Schema.String, carried: Schema.NullOr(Schema.String)
  * column holds is the program's, and is read through the program's schemas.
  */
 export const Rows = {
-  /** A suspension's event and its cause are written together, or not at all. */
+  /** A suspension's event, its cause and its time are written together, or not at all. A time may be negative. */
   entity: decoder(Schema.Union([
     Schema.Struct({ ...entityRow, suspended_on: Schema.Null, suspended_cause: Schema.Null, suspended_at: Schema.Null }),
-    Schema.Struct({ ...entityRow, suspended_on: Schema.String, suspended_cause: Schema.String, suspended_at: Count }),
+    Schema.Struct({ ...entityRow, suspended_on: Schema.String, suspended_cause: Schema.String, suspended_at: Integer }),
   ])),
   /** A suspended entity, with the tag of its mailbox's first message, if any (decision 0114). */
   suspended: decoder(Schema.Struct({
     id: Schema.String,
     suspended_on: Schema.String,
     suspended_cause: Schema.String,
-    suspended_at: Count,
+    suspended_at: Integer,
     head: Schema.NullOr(Schema.Literals(['Inbound', 'Internal'])),
   })),
   /** An operation that waits for the resumption of the entity `id`: its run, and the name it sent under. */

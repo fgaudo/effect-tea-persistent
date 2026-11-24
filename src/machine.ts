@@ -123,9 +123,11 @@ export const keyOf = <T extends Types>(program: Program<T>, name: T['key'], para
 /** Whether `work` is a piece of work the program can run: a timer, or an operation it gives a runner for. */
 const checkWork = <T extends Types>(program: Program<T>, key: string, work: unknown): void => {
   if (isTimer(work)) {
+    // A time a cast lets through that is no `DateTime` would be stored as no time, and never fire.
+    if (!DateTime.isDateTime(work.at)) broken(`the timer under '${key}' is due at no time`)
     // The storage holds a timer's time as whole milliseconds, and a rehearsal's `advance` ends only on times that
-    // are, so a time a sum of durations left between two milliseconds is a defect (decision 0266).
-    if (DateTime.isDateTime(work.at) && !Number.isInteger(DateTime.toEpochMillis(work.at))) {
+    // are, so a time a sum of durations left between two milliseconds is a defect.
+    if (!Number.isInteger(DateTime.toEpochMillis(work.at))) {
       broken(`the timer under '${key}' is due at ${DateTime.toEpochMillis(work.at)}, which is no whole millisecond`)
     }
     return
@@ -148,6 +150,10 @@ const checkWork = <T extends Types>(program: Program<T>, key: string, work: unkn
 const workUnder = <T extends Types>(program: Program<T>, state: T['state']): Held<T> => {
   const work: unknown = byProgram(() => program.work(state))
   if (typeof work !== 'object' || work === null) return broken('work gave no record')
+  // `Predicate.isObject` takes a `Map`, whose entries `Object.entries` does not see, so a record is told by its
+  // prototype.
+  const prototype: unknown = Object.getPrototypeOf(work)
+  if (prototype !== Object.prototype && prototype !== null) return broken('work gave no record')
   const keys = declaredKeys(program)
   const held: Record<string, Keyed<T>> = {}
   for (const [name, returned] of Object.entries(work)) {

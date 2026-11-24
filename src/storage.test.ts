@@ -705,8 +705,7 @@ test('createTables dies within a transaction of its client and makes nothing, an
 const inOneTransaction = <A, E, R>(body: Effect.Effect<A, E, R>) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) => sql.withTransaction(body))
 
-// No statement of the storage names a schema but `current_schema()`, so a client whose search_path names one puts
-// every object there (decision 0217).
+// No statement of the storage names a schema, so a client whose search_path names one puts every object there.
 test('on PostgreSQL every object the runtime makes is in the schema its clientâ€™s search_path names', () =>
   Effect.runPromise(
     inOneTransaction(Effect.gen(function*() {
@@ -729,9 +728,8 @@ test('on PostgreSQL every object the runtime makes is in the schema its clientâ€
     })).pipe(Effect.provide(client('pg')), Effect.orDie),
   ))
 
-// Bug 120 of docs/bugs.md: a name given to `Migrator` is split at each dot, so a schema named with one cannot hold
-// its history.
-test.failing('on PostgreSQL a launch makes the tables in a schema whose name holds a dot', () =>
+// `Migrator` is given its table unnamed, since `sql` splits a name at each dot.
+test('on PostgreSQL a launch makes the tables in a schema whose name holds a dot', () =>
   Effect.runPromise(
     inOneTransaction(Effect.gen(function*() {
       const sql = yield* SqlClient.SqlClient
@@ -758,9 +756,9 @@ const diesWith = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     return cause instanceof Error ? cause.message : null
   })
 
-// Unnamed, `effecttea_migrations` was found in `public`, and the schema the search_path names first was given no
-// table (decision 0217). Named, a launch made a second set of tables, empty, in that schema. The launch now dies
-// before `Migrator` makes its table, and makes nothing in either schema (decision 0263).
+// `Migrator` finds `effecttea_migrations` in `public`, and the schema the search_path names first would be given no
+// table. Named with that schema, it made a second set of tables, empty, there. The launch dies before `Migrator`
+// makes its table, and makes nothing in either schema.
 test('on PostgreSQL a launch dies where a schema further on the search_path holds the tables, and makes nothing', () =>
   Effect.runPromise(
     inOneTransaction(Effect.gen(function*() {
@@ -1454,12 +1452,13 @@ test('a suspended entity is listed with what it died on, its cause and since whe
       ])
     })))
 
-// Bug 121 of docs/bugs.md: the time of a suspension is read back as a count, where a time before 1970 is negative.
-test.failing('an entity suspended at a time before 1970 is loaded and listed', () =>
+// A time before 1970 is negative, and is read back as any other.
+test('an entity suspended at a time before 1970 is loaded and listed', () =>
   database((sql) =>
     Effect.gen(function*() {
       const store = storage(receiver, sql)
-      yield* store.write('old', created({ suspension: { on: { _tag: 'Message' }, cause: 'broken' } }), -5)
+      const suspension = { on: { _tag: 'Message' }, cause: 'broken' } as const
+      yield* store.write('old', created({ queued: [inbound('one')], suspension }), -5)
       expect((yield* store.load('old')) === null).toBe(false)
       expect((yield* store.suspended).map(({ id, since }) => [id, DateTime.toEpochMillis(since)])).toEqual([['old', -5]])
     })))

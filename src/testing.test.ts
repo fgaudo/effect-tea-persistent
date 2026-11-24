@@ -137,8 +137,8 @@ describe('projectionViolations (decision 0213)', () => {
     ])
   })
 
-  // Bug 123 of docs/bugs.md: a kind named as a field of `Object.prototype` was read through the prototype chain.
-  test.failing('passes over a kind that allows does not hold, though Object.prototype has a field of its name', () => {
+  // A kind named as a field of `Object.prototype` is no predicate of `allows`.
+  test('passes over a kind that allows does not hold, though Object.prototype has a field of its name', () => {
     const check = projectionViolations(order, { CancelRequested: (projection) => projection.canCancel })
     expect(check(told, [{ message: { _tag: '__proto__' } as never, sender: ada }], at)).toEqual([])
   })

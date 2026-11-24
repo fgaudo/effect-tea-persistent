@@ -61,8 +61,11 @@ export const projectionViolations = <T extends Types>(program: Program<T>, allow
   for (const { message, sender } of candidates) {
     // `Allows` has a predicate for some tags of `T['inbound']`, which TypeScript cannot index by a tag it holds.
     type Allowed = (projection: T['projection'], message: T['inbound'], sender: T['sender']) => boolean
-    const allowed = (allows as Readonly<Record<string, Allowed | undefined>>)[(message as Readonly<{ _tag: string }>)._tag]
-    if (allowed === undefined) continue
+    const held = allows as Readonly<Record<string, Allowed>>
+    const tag = (message as Readonly<{ _tag: string }>)._tag
+    // A tag such as `__proto__` would be found on `Object.prototype`, which holds no predicate of `allows`.
+    if (!Object.hasOwn(held, tag)) continue
+    const allowed = held[tag] as Allowed
     const shown = allowed(projection, message, sender)
     const accepted = !isRejected(program.update(message, { at, from: { _tag: 'Caller', sender } })(state))
     if (shown && !accepted) violations.push({ _tag: 'Rejected', message, sender })

@@ -327,7 +327,8 @@ declared key beside a misspelt one they accept, so the machine checks what `work
 wherever it reads it, and a key the program does not declare is a defect
 ([decision 0037](decisions/archive/0037-the-machine-checks-the-declared-keys.md)). So is an operation the program gives
 no runner for, which a cast lets through
-([decision 0054](decisions/archive/0054-a-program-is-checked-where-it-enters.md)). The runtime compares the work with
+([decision 0054](decisions/archive/0054-a-program-is-checked-where-it-enters.md)). So is a `work` that gives no plain
+record, as a `Map`, whose entries would be read as no work. The runtime compares the work with
 the previous state's, as effect-tea compares subscriptions:
 
 - a new key starts its work;
@@ -374,7 +375,8 @@ Two kinds of work exist.
   checks it against the program's internal messages
   ([decision 0181](decisions/0181-a-timer-needs-no-type-parameter.md)). A timer is due at a whole millisecond, as
   the storage holds it, and a timer due between two is a defect
-  ([decision 0266](decisions/0266-a-timer-that-catches-up-fires-with-a-due-time-that-grows.md)).
+  ([decision 0266](decisions/0266-a-timer-that-catches-up-fires-with-a-due-time-that-grows.md)). A timer whose
+  time a cast lets through as no `DateTime` is a defect too, since it would be stored with no time and never fire.
 
 A stream from a socket or a feed is no work of a program, since it dies with the process. The boundary reads it,
 and sends each item as an inbound message, under a request id it derives from the item's offset or id, so that an
@@ -526,9 +528,11 @@ runtime's names dies, and leaves none of the runtime's objects behind
 PostgreSQL the runtime makes every object in the schema that the client's `search_path` names first. A launch dies
 where a schema further on the `search_path` holds the tables, and makes nothing, since the database cannot tell a
 schema put in front of them on purpose from one made later by chance
-([decision 0263](decisions/0263-a-launch-dies-where-a-schema-further-on-the-search-path-holds-the-tables.md)). Only `effecttea_migrations` is named with that schema, which
-`current_schema()` gives, since `Migrator` would otherwise find it in any schema of the `search_path`
-([decision 0217](decisions/0217-tea-migrations-is-named-in-the-schema-the-tables-are-made-in.md)). A launcher that sets the `search_path` of the runtime's role
+([decision 0263](decisions/0263-a-launch-dies-where-a-schema-further-on-the-search-path-holds-the-tables.md)). No
+statement names a schema, `effecttea_migrations` included, so a schema whose name holds a dot holds the tables too.
+`Migrator` finds its table in any schema of the `search_path`, and the launch dies before it where that schema is not
+the first.
+A launcher that sets the `search_path` of the runtime's role
 puts them in a schema of their own ([decision 0215](decisions/0215-the-runtimes-tables-are-made-in-the-schema-of-the-search-path.md)). Each row carries the version of the program that wrote it, and is read
 by migrating its JSON to the program's version (see [schemas that change](#schemas-that-change)). The row around
 the JSON is read through its table's schema, which says what the storage writes: nothing is filled in or cast, and

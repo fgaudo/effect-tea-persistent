@@ -95,20 +95,3 @@ again, so a bug that leaves this file leaves a gap in the list. Git keeps the bu
   in `src/rehearse.test.ts`, where `a` fires before `b` though `b` was armed first. The fix is one of two: the
   storage keeps the order of the work, or `docs/design.md` promises no order of one entity's timers due together,
   and `nextTimer` says so.
-- **120. On PostgreSQL a launch dies where the first schema of the `search_path` has a dot in its name.**
-  `migrationsTable` of `src/storage/tables.ts` gives `Migrator` the schema and the table joined by a dot. `sql` splits
-  a name at each dot, so the schema `run.time` is read as two names. The test is `on PostgreSQL a launch makes the
-  tables in a schema whose name holds a dot`, in `src/storage.test.ts`.
-- **121. An entity suspended at a time before 1970 is written and never read back.** `Rows.entity` and
-  `Rows.suspended` of `src/storage/rows.ts` decode `suspended_at` as a `Count`, which refuses a negative time.
-  `Rows.due` takes any integer. The test is `an entity suspended at a time before 1970 is loaded and listed`, in
-  `src/storage.test.ts`.
-- **122. A timer whose time is no `DateTime`, which a cast lets through, is stored with no time.** `checkWork` of
-  `src/machine.ts` checks a time only where `DateTime.isDateTime` holds. The timer never fires, and `load` dies on
-  its row. A `work` that gives a `Map`, through a cast too, is read as no work, with no defect. The test is `a timer
-  a cast lets through with a time that is no DateTime, and work given as a Map, are defects`, in
-  `src/machine.test.ts`.
-- **123. `projectionViolations` reads `allows` through the prototype chain.** `src/testing.ts` indexes `allows` by
-  the message's tag. So a kind `__proto__`, which the type `Allows` lets through, makes the check throw where it
-  should pass over the kind. The test is `passes over a kind that allows does not hold, though Object.prototype has a
-  field of its name`, in `src/testing.test.ts`.
