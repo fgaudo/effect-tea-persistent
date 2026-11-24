@@ -1275,6 +1275,16 @@ describe('what the program throws', () => {
     expect(handled(machine, inbound).machine.stored.suspension?.cause).toBeInstanceOf(TypeError)
   })
 
+  // Bug 122 of docs/bugs.md: a timer whose time is no `DateTime` was stored with no time, and a `Map` read as no work.
+  test.failing('a timer a cast lets through with a time that is no DateTime, and work given as a Map, are defects', () => {
+    const base = checked((message) => message, () => ({}))
+    const work = () => ({ deadline: timer({} as never, 'rang') })
+    const timed = { ...base, program: { ...base.program, work } }
+    expect(reasonOfSuspension(handled(timed, inbound))).toBe("the timer under 'deadline' is due at no time")
+    const mapped = { ...base, program: { ...base.program, work: () => new Map([['charge', 5]]) as never } }
+    expect(reasonOfSuspension(handled(mapped, inbound))).toBe('work gave no record')
+  })
+
   // A sum of durations may leave a time between two milliseconds, which the storage would not read back (decision 0266).
   test('a timer due at no whole millisecond is a defect', () => {
     const base = checked((message) => message, () => ({}))

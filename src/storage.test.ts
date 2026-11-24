@@ -729,6 +729,21 @@ test('on PostgreSQL every object the runtime makes is in the schema its clientâ€
     })).pipe(Effect.provide(client('pg')), Effect.orDie),
   ))
 
+// Bug 120 of docs/bugs.md: a name given to `Migrator` is split at each dot, so a schema named with one cannot hold
+// its history.
+test.failing('on PostgreSQL a launch makes the tables in a schema whose name holds a dot', () =>
+  Effect.runPromise(
+    inOneTransaction(Effect.gen(function*() {
+      const sql = yield* SqlClient.SqlClient
+      yield* sql`CREATE SCHEMA "run.time"`
+      yield* sql`SET LOCAL search_path TO "run.time"`
+      yield* migrate
+      yield* tablesMade
+      yield* storage(receiver, sql).write('r', created(), 0)
+      expect((yield* objectsIn(sql, 'run.time')).length).toBeGreaterThan(16)
+    })).pipe(Effect.provide(client('pg')), Effect.orDie),
+  ))
+
 /** The objects of PostgreSQL in `schema`: its relations and its functions. */
 const objectsIn = (sql: SqlClient.SqlClient, schema: string) =>
   sql<{ name: string }>`
@@ -1437,6 +1452,16 @@ test('a suspended entity is listed with what it died on, its cause and since whe
         { id: 'operation', on: onOperation.on, cause: 'died', since: 3, waiting: [] },
         { id: 'inbound', on: { _tag: 'Message', kind: 'Internal' }, cause: 'broken', since: 20, waiting: [] },
       ])
+    })))
+
+// Bug 121 of docs/bugs.md: the time of a suspension is read back as a count, where a time before 1970 is negative.
+test.failing('an entity suspended at a time before 1970 is loaded and listed', () =>
+  database((sql) =>
+    Effect.gen(function*() {
+      const store = storage(receiver, sql)
+      yield* store.write('old', created({ suspension: { on: { _tag: 'Message' }, cause: 'broken' } }), -5)
+      expect((yield* store.load('old')) === null).toBe(false)
+      expect((yield* store.suspended).map(({ id, since }) => [id, DateTime.toEpochMillis(since)])).toEqual([['old', -5]])
     })))
 
 // A wait is stored by the step that answered `Suspended`, listed while the run that sent holds, and deleted by the

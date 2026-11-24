@@ -136,6 +136,12 @@ describe('projectionViolations (decision 0213)', () => {
       { _tag: 'Missing', message: { _tag: 'ShipmentReported', tracking: 'track-1' }, sender: warehouse },
     ])
   })
+
+  // Bug 123 of docs/bugs.md: a kind named as a field of `Object.prototype` was read through the prototype chain.
+  test.failing('passes over a kind that allows does not hold, though Object.prototype has a field of its name', () => {
+    const check = projectionViolations(order, { CancelRequested: (projection) => projection.canCancel })
+    expect(check(told, [{ message: { _tag: '__proto__' } as never, sender: ada }], at)).toEqual([])
+  })
 })
 
 describe('projectionViolations reads the projection as a caller does (decision 0276)', () => {
