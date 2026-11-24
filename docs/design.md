@@ -1181,7 +1181,9 @@ changed in one synchronous step and never across a yield. A sender's wait takes 
 resumption before it sends, so that a resumption between the answer `Suspended` and the wait ends the wait.
 
 The waker sleeps by `Effect.sleep` until the earliest time stored, or until a step arms an earlier timer. It then
-reads the wall clock and the due timers again, so a wall clock set back fires no timer early. A due timer whose fire
+reads the wall clock and the due timers again, so a wall clock set back fires no timer early. While it reads and
+fires, every timer a step arms wakes it again. On a pool a step of another entity may commit its timer after the
+reading's snapshot, and the time of the round before would not say that the timer is earlier. A due timer whose fire
 failed is read again after `retry`, and not at once. A sleep past the host's limit of 2^31 − 1 milliseconds is set
 by Effect as timers of the host in turn
 ([decision 0194](decisions/0194-a-timer-months-away-sleeps-on-effects-promise-of-a-duration.md)).

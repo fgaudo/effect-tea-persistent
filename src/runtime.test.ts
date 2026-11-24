@@ -106,11 +106,11 @@ const failure = new SqlError.SqlError({
   reason: new SqlError.UnknownError({ cause: null, message: 'the statement failed' }),
 })
 
-// Bug 116 of docs/bugs.md. On a pool a step of another entity may commit its timer after the waker's statement of
-// `MIN(due)` and before the waker stores the time it sleeps until. The test runs that step in place of the statement,
-// and runs the statement blind to that entity, as a snapshot taken before its commit reads. The timer of `x` was
-// stopped, so the waker still holds its time, which is before the new timer of `y`.
-test.failing('fires a timer that a step arms while the waker reads what is due', () =>
+// On a pool a step of another entity may commit its timer after the waker's statement of `MIN(due)` and before the
+// waker stores the time it sleeps until. The test runs that step in place of the statement, and runs the statement
+// blind to that entity, as a snapshot taken before its commit reads. The timer of `x` was stopped, so the waker
+// still holds its time, which is before the new timer of `y`.
+test('fires a timer that a step arms while the waker reads what is due', () =>
   run(Effect.provide(
     Effect.gen(function*() {
       const keep = 'forever' as const

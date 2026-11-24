@@ -235,7 +235,10 @@ export interface Deployment<T extends Types> {
   readonly provide: (operation: Effect.Effect<void, never, T['services']>) => Effect.Effect<void>
   /** Wakes the fiber that fires the stored timers, once a step arms one due before the time it sleeps until. */
   readonly poke: Queue.Queue<void>
-  /** The time the fiber that fires the timers sleeps until, in milliseconds, or null where it waits for a poke. */
+  /**
+   * The time the fiber that fires the timers sleeps until, in milliseconds. It is null while the fiber reads what is
+   * due and fires it, and where it waits for a poke alone, so that every timer armed then pokes it.
+   */
   next: number | null
 }
 
@@ -682,6 +685,9 @@ const entitiesOf = (p: Process, entity: Address, key: Key, incarnation: number, 
  */
 const waking = <T extends Types>(p: Process, d: Deployment<T>): Effect.Effect<never> =>
   Effect.forever(Effect.gen(function*() {
+    // The time slept until is cleared before the reading, so that a step of another entity that commits its timer
+    // after the reading's snapshot pokes the waker, whatever the time of the round before.
+    d.next = null
     const now = yield* DateTime.now
     const due = yield* d.storage.due(DateTime.toEpochMillis(now))
     let fired = 0
