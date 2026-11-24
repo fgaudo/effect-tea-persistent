@@ -453,8 +453,9 @@ const inEntity = <T extends Types, A>(
 
 /**
  * The fiber of one run of an operation. It runs the operation with the program's services, and then steps its
- * completion or its death in a transaction of the entity. An operation that was only interrupted records nothing:
- * its step dropped it, or the process is stopping.
+ * completion or its death in a transaction of the entity. A run the runtime interrupted records nothing: its step
+ * dropped it, or the process is stopping. A run that ends interrupted otherwise dies, since it neither completed nor
+ * died, and a run left stored with no fiber would be restarted as after a crash.
  */
 const operating = <T extends Types>(
   p: Process,
@@ -470,19 +471,29 @@ const operating = <T extends Types>(
     ? runner.run(operation, started.idempotencyKey)
     : runner.run(operation)
   const sending = entitiesOf(p, entity, key, incarnation, runner.delivery === 'Droppable')
+  const run = under(key, incarnation)
   const recorded = Effect.flatMap(
     Effect.exit(Effect.provideService(ran, Entities, sending)),
-    (exit): Effect.Effect<unknown> =>
-      Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)
-        ? Effect.void
-        : persisting(p, inEntity(p, d, id, (tx) =>
-          tx.apply(Exit.isSuccess(exit)
-            ? { _tag: 'Complete', key, incarnation, message: exit.value }
-            : { _tag: 'Die', key, incarnation, cause: Cause.squash(exit.cause) }))),
+    (exit): Effect.Effect<unknown> => {
+      if (Exit.isSuccess(exit)) {
+        const completed = { _tag: 'Complete', key, incarnation, message: exit.value } as const
+        return persisting(p, inEntity(p, d, id, (tx) => tx.apply(completed)))
+      }
+      // The runtime interrupts a run only once its step released it, or once the process's scope closes, whose state
+      // is `Closed` while it interrupts its fibers. Any other end by interruption is the operation's own.
+      const interrupted = Cause.hasInterruptsOnly(exit.cause)
+      if (interrupted && (p.operations.get(addressOf(entity))?.has(run) !== true || p.scope.state._tag === 'Closed')) {
+        return Effect.void
+      }
+      const cause = interrupted
+        ? new Error(`the operation under '${Machine.shownKey(key)}' ended interrupted, and neither completed nor died`)
+        : Cause.squash(exit.cause)
+      return persisting(p, inEntity(p, d, id, (tx) => tx.apply({ _tag: 'Die', key, incarnation, cause })))
+    },
   )
   return d.provide(Effect.asVoid(recorded) as Effect.Effect<void, never, T['services']>).pipe(
     Effect.ensuring(Effect.sync(() => {
-      release(p, addressOf(entity), under(key, incarnation))
+      release(p, addressOf(entity), run)
       tell(p, 'changed')
     })),
   )

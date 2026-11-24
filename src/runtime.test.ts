@@ -181,8 +181,8 @@ test('a reading of what is due that fails in the database is read again at the r
     TestClock.layer(),
   )))
 
-// Bug 118 of docs/bugs.md: the runtime recorded nothing for a run that ended interrupted, as for one it interrupted.
-test.failing('an operation that ends interrupted, which no step dropped, suspends its entity', () =>
+// A run that ends interrupted, though no step dropped it and its process runs, neither completed nor died.
+test('an operation that ends interrupted, which no step dropped, suspends its entity', () =>
   run(Effect.gen(function*() {
     const scope = yield* Scope.make()
     const runtime = yield* Effect.provideService(launch(), Scope.Scope, scope)

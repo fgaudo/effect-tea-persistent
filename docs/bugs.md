@@ -95,12 +95,6 @@ again, so a bug that leaves this file leaves a gap in the list. Git keeps the bu
   in `src/rehearse.test.ts`, where `a` fires before `b` though `b` was armed first. The fix is one of two: the
   storage keeps the order of the work, or `docs/design.md` promises no order of one entity's timers due together,
   and `nextTimer` says so.
-- **118. A run whose runner ends interrupted is lost.** `operating` of `src/runtime.ts` records nothing for a cause
-  of interruptions only, as for a run the runtime interrupted. So the operation stays stored with no fiber and no
-  log, and `settled` returns. The entity's next transaction applies `Restart`, which records `Unknown` for every run
-  of the entity, one whose fiber still runs among them, and that run's `Done` is then dropped. The test is `an
-  operation that ends interrupted, which no step dropped, suspends its entity`, in `src/runtime.test.ts`. The fix
-  records such a run's end as its death, a defect of the program.
 - **119. A deploy that fails while it restarts an interrupted entity leaves its program deployed.** `deployed` of
   `src/runtime.ts` registers the program before `deploy` reads and steps the entities a crash interrupted, outside
   `persisting`. So an `SqlError` there ends the deploy, and every deploy after it is refused, with no waker and no

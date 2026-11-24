@@ -567,8 +567,12 @@ const makeWorld = (sql: SqlClient.SqlClient, scope: Scope.Scope, at: DateTime.Ut
           if (Exit.isSuccess(exit)) return options?.crash === true ? restart : complete(pending, exit.value)
           // A receiver with no reply yet fails the run, which the runtime would send again: no step records it.
           const squashed = Cause.squash(exit.cause)
-          if (Cause.hasInterruptsOnly(exit.cause) || squashed instanceof Unanswered) return Effect.failCause(exit.cause)
-          const event = { _tag: 'Die', key, incarnation, cause: squashed } as const
+          if (squashed instanceof Unanswered) return Effect.failCause(exit.cause)
+          // The rehearsal interrupts no run, so a run that ends interrupted dies, as in the runtime.
+          const cause = Cause.hasInterruptsOnly(exit.cause)
+            ? new Error(`the operation under '${Machine.shownKey(key)}' ended interrupted, and neither completed nor died`)
+            : squashed
+          const event = { _tag: 'Die', key, incarnation, cause } as const
           return Effect.andThen(
             process.step(d(), id, (tx) => applied(tx, event)),
             Effect.sync(() => process.release(address, key, incarnation)),

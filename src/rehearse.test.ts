@@ -1772,10 +1772,20 @@ describe('a failure a scenario catches', () => {
       name: 'Dying',
       operations: { ...booking.operations, Hold: operation(() => Effect.die('the hold dies')) },
     } as unknown as typeof booking
+    // A run that ends interrupted by itself neither completed nor died, so it dies.
+    const interrupted = {
+      ...booking,
+      name: 'Interrupted',
+      operations: { ...booking.operations, Hold: operation(() => Effect.interrupt) },
+    } as unknown as typeof booking
     const seen: Record<string, unknown> = {}
     await Effect.runPromise(rehearse.together(placedAt, Effect.fnUntraced(function*(world: World) {
       yield* world.create(inventory, 'concert-1', { capacity: 4 })
-      const programs = [['a run that sends twice under one name', twice], ['a runner that dies', dying]] as const
+      const programs = [
+        ['a run that sends twice under one name', twice],
+        ['a runner that dies', dying],
+        ['a runner that ends interrupted', interrupted],
+      ] as const
       for (const [name, program] of programs) {
         const held = yield* world.create(program, 'booking-1', flags)
         seen[name] = [
@@ -1787,6 +1797,7 @@ describe('a failure a scenario catches', () => {
     expect(seen).toEqual({
       'a run that sends twice under one name': ['Failure', 'Failure'],
       'a runner that dies': ['Failure', 'Failure'],
+      'a runner that ends interrupted': ['Failure', 'Failure'],
     })
   })
 })
