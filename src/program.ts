@@ -77,9 +77,17 @@ const isJson = (value: unknown): boolean => {
   if (typeof value === 'number') return Number.isFinite(value)
   // `every` passes over the holes of a sparse array, which `JSON.stringify` writes as `null` (decision 0210).
   if (Array.isArray(value)) return Array.from(value.keys(), (at) => at in value && isJson(value[at])).every(Boolean)
-  if (typeof value !== 'object') return false
+  return isPlainRecord(value) && Object.values(value).every(isJson)
+}
+
+/**
+ * Whether a value is an object of plain fields, told by its prototype. `Predicate.isObject` takes a `Map` too, whose
+ * entries `Object.entries` does not see.
+ */
+export const isPlainRecord = (value: unknown): value is Readonly<Record<string, unknown>> => {
+  if (typeof value !== 'object' || value === null) return false
   const prototype: unknown = Object.getPrototypeOf(value)
-  return (prototype === Object.prototype || prototype === null) && Object.values(value).every(isJson)
+  return prototype === Object.prototype || prototype === null
 }
 
 /** JSON with the fields of each object in order: two values that encode alike are then equal, field for field. */
@@ -1457,14 +1465,19 @@ const assemble = (
       ? timer(work.at, wrap(place, work.message))
       : { _tag: `${place.name}.${String(fieldOf(work, '_tag'))}`, ...at(place), operation: work }
   // A child's work is held while the child is there: a child that leaves the state with an operation under way
-  // drops its key, which the machine finds a defect (decision 0005).
+  // drops its key, which the machine finds a defect (decision 0005). A work that a cast lets through as no plain
+  // record is given back as it is, since spreading it would make it a record of no work, and the machine refuses it.
   const work = (state: unknown): Readonly<Record<string, unknown>> => {
-    const all: Record<string, unknown> = { ...declaration.work(state) }
+    const own: unknown = declaration.work(state)
+    if (!isPlainRecord(own)) return own as Readonly<Record<string, unknown>>
+    const all: Record<string, unknown> = { ...own }
     for (const name of names) {
       const { part } = childOf(name)
       for (const [id, held] of presentIn(name, state)) {
         const place = { name, id }
-        for (const [key, piece] of Object.entries(part.work(held))) {
+        const given: unknown = part.work(held)
+        if (!isPlainRecord(given)) return given as Readonly<Record<string, unknown>>
+        for (const [key, piece] of Object.entries(given)) {
           if (piece === undefined) continue
           const composed = `${name}.${key}`
           const takes = (part.keys[key] ?? null) !== null

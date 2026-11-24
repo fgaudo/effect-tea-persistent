@@ -18,6 +18,7 @@ import {
   idempotencyKey,
   indexesOf,
   InvariantDefect,
+  isPlainRecord,
   isRejected,
   isText,
   isTimer,
@@ -149,11 +150,7 @@ const checkWork = <T extends Types>(program: Program<T>, key: string, work: unkn
  */
 const workUnder = <T extends Types>(program: Program<T>, state: T['state']): Held<T> => {
   const work: unknown = byProgram(() => program.work(state))
-  if (typeof work !== 'object' || work === null) return broken('work gave no record')
-  // `Predicate.isObject` takes a `Map`, whose entries `Object.entries` does not see, so a record is told by its
-  // prototype.
-  const prototype: unknown = Object.getPrototypeOf(work)
-  if (prototype !== Object.prototype && prototype !== null) return broken('work gave no record')
+  if (!isPlainRecord(work)) return broken('work gave no record')
   const keys = declaredKeys(program)
   const held: Record<string, Keyed<T>> = {}
   for (const [name, returned] of Object.entries(work)) {

@@ -243,6 +243,34 @@ test('a parent with one child and nothing of its own does what the child does (d
   behavesAs(line as unknown as AnyPart, single as unknown as AnyPart, wrappedBy('Line'))
 })
 
+// Spread into the composed record, a `Map` would be a record of no work, which the machine would not refuse.
+test("a parent's or a child's work that a cast lets through as no plain record reaches the machine as it is", () => {
+  const map = new Map([['charge', 5]])
+  const parentOf = (inner: typeof line, own: () => unknown) =>
+    part({
+      state: Single,
+      flags: Schema.Null,
+      inbound: Schema.Never,
+      internal: Schema.Never,
+      operation: Schema.Never,
+      rejection: Schema.Never,
+      projection: LineProjection,
+      event: LineCharged,
+    })({
+      keys: [],
+      children: { Line: child(inner, { at: Optic.id<typeof Single.Type>().key('line') }) },
+      init: (flags, at) => ({ line: inner.init(flags, at) }),
+      update: () => () => defect('a parent with no messages of its own'),
+      work: own as () => typeof noWork,
+      operations: {},
+      project: (state, children) => children.Line(state),
+      onEvent: { Line: (event) => raise(event) },
+    })
+  const state = single.init(null, at)
+  expect<unknown>(parentOf(line, () => map).work(state)).toBe(map)
+  expect<unknown>(parentOf({ ...line, work: () => map as never }, () => noWork).work(state)).toBe(map)
+})
+
 const Nested = Schema.Struct({ single: Single })
 
 const nested = part({
