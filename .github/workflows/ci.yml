@@ -96,3 +96,28 @@ jobs:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
       - run: bun run test:release --shard=${{ matrix.shard }}/4
+
+  # Every case of the files of `test:postgres` on a server of PostgreSQL with a pool, which the job `release` runs on
+  # PGlite alone. PGlite runs one session, and hides what a pool does. Run by hand from the repository's Actions.
+  release-postgres:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - run: bun run test:postgres
+        env:
+          POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
+          SCHEDULES: all

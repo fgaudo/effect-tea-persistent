@@ -5,7 +5,6 @@
  */
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
-import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 import * as Machine from '../machine.ts'
 import type { Address, Json, Key, Request, Types } from '../program.ts'
@@ -63,11 +62,6 @@ export type Due = Readonly<{
   ready: ReadonlyArray<string>
   /** The earliest time a stored timer of another entity is due, by which the process sleeps, or null for none. */
   next: number | null
-  /**
-   * The entities whose earliest time no integer is, as a row no version writes: each with the reason its row is
-   * refused. The reading goes on past them, and the waker tries each again after `retry` (decision 0259).
-   */
-  refused: ReadonlyArray<Readonly<{ id: string; reason: string }>>
 }>
 
 /**
@@ -149,6 +143,7 @@ export const entitiesOf = <T extends Types>(held: Held<T>, outbox: boolean): Pic
             message: internal.read(envelope.message, up('internal', envelope.version), guard),
           }
       )
+      const flags = JSON.parse(row.flags) as Json
       const stored = {
         name,
         id,
@@ -158,8 +153,9 @@ export const entitiesOf = <T extends Types>(held: Held<T>, outbox: boolean): Pic
         mailbox,
         creation: request.read(row.creation, upRequest(row.version), guard),
         // Read through the migrations, and not decoded: a retry of the creation is compared with the text, and a
-        // schema of the flags that no longer reads them leaves the entity as it was (decision 0269).
-        flags: up('flags', row.version)(JSON.parse(row.flags) as Json),
+        // schema of the flags that no longer reads them leaves the entity as it was (decision 0269). The migrations
+        // are the program's and run inside `guard`, as those of the state do.
+        flags: guard(() => up('flags', row.version)(flags)),
         // The cause is what was rendered when the entity suspended: an operator reads it, nothing acts on it.
         suspension: row.suspended_on === null
           ? null
@@ -573,9 +569,6 @@ export const entitiesOf = <T extends Types>(held: Held<T>, outbox: boolean): Pic
       return found.map((row) => row.id)
     }).pipe(Effect.orDie)
 
-  /** One row of a reading through its schema, failed as a page of it would be. */
-  const one = <A>(decode: (held: unknown) => Effect.Effect<ReadonlyArray<A>, Schema.SchemaError>, row: unknown) =>
-    Effect.map(rows('effecttea_entity_keys', decode)(Effect.succeed([row])), (read) => read[0] as A)
   const due = (now: number) =>
     Effect.gen(function*() {
       const ready = (yield* rows('effecttea_entity_keys', Rows.id)(sql`
@@ -583,38 +576,11 @@ export const entitiesOf = <T extends Types>(held: Held<T>, outbox: boolean): Pic
         WHERE name = ${name} AND due IS NOT NULL AND due <= ${now} AND id NOT IN ${onHold}
         ORDER BY id LIMIT ${batch}
       `)).map(({ id }) => id)
-      // The earliest time of an entity, read in the order of the times. A row whose time
-      // is refused is its entity's alone: the entity is given back with the reason, and the reading goes on to the
-      // next row, so that one row an operator wrote by hand stops no other entity's timer (decision 0259).
-      let next: number | null = null
-      const refused: Array<{ id: string; reason: string }> = []
-      let from: Readonly<{ at: number | string | bigint; id: string }> | null = null
-      while (next === null) {
-        const page: ReadonlyArray<Readonly<{ id: unknown; at: number | string | bigint }>> = yield* sql<
-          Readonly<{ id: unknown; at: number | string | bigint }>
-        >`
-          SELECT id, MIN(due) AS at FROM effecttea_entity_keys
-          WHERE name = ${name} AND due > ${now} AND id NOT IN ${onHold}
-          GROUP BY id
-          ${from === null ? sql`` : sql`HAVING MIN(due) > ${from.at} OR (MIN(due) = ${from.at} AND id > ${from.id})`}
-          ORDER BY at, id LIMIT ${batch}
-        `
-        let last: string | null = null
-        for (const row of page) {
-          const { id }: { id: string } = yield* one(Rows.id, row)
-          last = id
-          const read = yield* Effect.result(one(Rows.due, row))
-          if (Result.isFailure(read)) refused.push({ id, reason: read.failure.message })
-          else {
-            next = read.success.at
-            break
-          }
-        }
-        const end = page[page.length - 1]
-        if (next !== null || page.length < batch || end === undefined || last === null) break
-        from = { at: end.at, id: last }
-      }
-      return { ready, next, refused } satisfies Due
+      const [earliest] = yield* rows('effecttea_entity_keys', Rows.earliest)(sql`
+        SELECT MIN(due) AS at FROM effecttea_entity_keys
+        WHERE name = ${name} AND due > ${now} AND id NOT IN ${onHold}
+      `)
+      return { ready, next: earliest?.at ?? null } satisfies Due
     }).pipe(Effect.orDie)
 
   // The tag of the mailbox's first message says what a `Message` the entity died on is: an inbound one is

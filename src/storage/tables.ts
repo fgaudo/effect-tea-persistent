@@ -159,7 +159,14 @@ const tables = Effect.gen(function*() {
   // the entity's counter keeps its incarnations from going back (decision 0132). `due` is a timer's time, by which
   // an entity nothing else holds loaded is woken (decision 0029). `key` is the key's name and `parameter` the JSON
   // of its parameter, or '' for a key without one: no JSON is empty, and a NULL in a primary key would let two rows
-  // of one key coexist (decision 0136).
+  // of one key coexist (decision 0136). The table refuses a time the waker would not read, so that a row an
+  // operator writes by hand stops no timer. A time is an integer of milliseconds within 2^53, as a driver gives it
+  // to the reading. An integer column of SQLite holds any value, so its check names the type.
+  const time = sql.literal(
+    dialect === 'pg'
+      ? `CHECK (due BETWEEN ${-Number.MAX_SAFE_INTEGER} AND ${Number.MAX_SAFE_INTEGER})`
+      : `CHECK (due IS NULL OR (typeof(due) = 'integer' AND due BETWEEN ${-Number.MAX_SAFE_INTEGER} AND ${Number.MAX_SAFE_INTEGER}))`,
+  )
   yield* sql`
     CREATE TABLE effecttea_entity_keys (
       name ${text} NOT NULL,
@@ -170,7 +177,7 @@ const tables = Effect.gen(function*() {
       version ${integer} NOT NULL,
       work ${text} NOT NULL,
       delivery ${text},
-      due ${integer},
+      due ${integer} ${time},
       PRIMARY KEY (name, id, key, parameter)
     )
   `

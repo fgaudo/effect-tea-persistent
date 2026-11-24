@@ -154,7 +154,8 @@ again, and code written again cites no note. Step 9 of the roadmap deletes the n
   `src/form.test.ts` checks that the jobs run every shard and every script. A change of the storage or of a statement
   passes the job of PostgreSQL once the owner pushes `main`, since PGlite runs one session and hides what a pool does.
   Where no `POSTGRES_URL` names a server, the report of the step says that the job is owed at the push. Run by
-  hand from the repository's Actions, the workflow also runs `bun run test:release`. The site's audit ignores one
+  hand from the repository's Actions, the workflow also runs `bun run test:release`, and every case of
+  `bun run test:postgres` on the server. The site's audit ignores one
   advisory of minimatch, and the workflow's comment says when the ignore goes.
 
 ## The documents

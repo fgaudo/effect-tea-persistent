@@ -167,7 +167,8 @@ export interface Rehearsal<T extends Types> extends Acts<T> {
   readonly deploy: (program: Program<T>) => Effect.Effect<void>
   /**
    * Time passes by `duration`. Each timer due within it fires at its time, in the order of the times, and its
-   * message is handled before the next one fires. At one time, a key fires again only with a due time later than
+   * message is handled before the next one fires. Of two timers of one entity due at one time, the one whose key
+   * comes first by the JSON of its name and its parameter fires first, as in the runtime. At one time, a key fires again only with a due time later than
    * the one it last fired with, or the test fails. A defect suspends its entity alone, and fails the act once time
    * has passed.
    */

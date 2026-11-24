@@ -655,8 +655,10 @@ the read model, which `reindex` writes ([decision 0247](decisions/archive/0247-c
   died on. A burst of callers' messages waits for the entity's lock, and nothing of a message
   is stored before its transaction commits.
 - **A timer.** Each deployment has one fiber, the waker, that reads the entities with a timer due, fires each timer
-  in a transaction of its entity, and sleeps until the earliest time stored, or until a step arms an earlier one. A
-  suspended entity's timer does not fire until an operator resumes it.
+  in a transaction of its entity, and sleeps until the earliest time stored, or until a step arms an earlier one. Of
+  two timers of one entity due at one time, the one whose key comes first fires first, a key ordered by the JSON of
+  its name and its parameter. The order is the machine's, since each dialect reads an entity's keys in an order of
+  its own. A suspended entity's timer does not fire until an operator resumes it.
 
 These rules are a pure state machine, [`src/machine.ts`](../src/machine.ts): its events are a message arriving,
 an operation completing or dying, a timer firing, a step, the process dying, and an operator resuming or
@@ -889,7 +891,9 @@ Each act holds the world's lock, so a scenario that acts from two fibers steps o
   one last. It is `Dropped` when an earlier one disarmed it;
 - `state` and `projection` give what the runtime reads back, decoded from the stored JSON, so that `-0` is `0`;
 - `advance(duration)` moves time forward, and fires each timer due within it at its time, in the order of the
-  times. Of two timers due at one time no order is promised. Time moves by whole milliseconds, as the runtime's
+  times. Of two timers of one entity due at one time, the one whose key comes first fires first, as in the runtime.
+  Of two entities' timers due at one time no order is promised.
+  Time moves by whole milliseconds, as the runtime's
   clock reads it: a duration between two, and a start time between two, fail the test. At one time, a key fires
   again only with a due time later than the one it last fired with. A key armed again at a due time no later would
   fire at once, turn after turn, and fails the test;
@@ -1030,6 +1034,12 @@ is written once. A launch on a client of any other dialect is the launcher's def
 - An id, a request id, a name, a key's name and a string an index holds are text every
   database holds as it is: no U+0000, which PostgreSQL holds in no text, and no lone surrogate, which no database
   gives back as written, so that two ids would be one. Anything else is the defect of whoever gave it.
+- Each of those texts holds at most 256 bytes of UTF-8, and so does the JSON of a key's parameter. The text of a
+  request holds at most 1,024 bytes. An entry of an index of PostgreSQL holds 2,704 bytes, where SQLite holds any
+  text, and the widest key of the storage holds seven such texts and a request. So a text past its bound is refused
+  where it enters, on both dialects. A caller's id, request id or request is the caller's defect, an operation's
+  request is the operation's, and a parameter or an index is the program's, which suspends the entity. A step whose
+  row PostgreSQL could not hold would otherwise fail in the database, and be tried again for ever.
 - An id is not empty either. The waker and `reindex` page the entities from the empty id up, so an entity under it
   would never be woken nor indexed. A handle, an operation and a rehearsal refuse it as the defect of whoever gave it
   ([decision 0179](decisions/0179-an-id-is-not-empty.md)).
@@ -1195,7 +1205,9 @@ The waker sleeps by `Effect.sleep` until the earliest time stored, or until a st
 reads the wall clock and the due timers again, so a wall clock set back fires no timer early. While it reads and
 fires, every timer a step arms wakes it again. On a pool a step of another entity may commit its timer after the
 reading's snapshot, and the time of the round before would not say that the timer is earlier. A due timer whose fire
-failed is read again after `retry`, and not at once, and so is a reading that failed. A sleep past the host's limit of 2^31 − 1 milliseconds is set
+failed is read again after `retry`, and not at once, and so is a reading that failed. The table of the keys
+refuses a time that is no integer of milliseconds within 2^53, on both dialects. So a row an operator writes by hand
+with a time the waker would not read fails as it is written, and never stops a timer. A sleep past the host's limit of 2^31 − 1 milliseconds is set
 by Effect as timers of the host in turn
 ([decision 0194](decisions/0194-a-timer-months-away-sleeps-on-effects-promise-of-a-duration.md)).
 

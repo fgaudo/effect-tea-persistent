@@ -165,5 +165,5 @@ test('a history on the machine keeps the promises of the design', () =>
     }),
     // The report names the promise the shrunk history broke.
     { numRuns: Bun.env['SCHEDULES'] === 'all' ? 50_000 : 10_000, includeErrorInReport: true },
-  ))
+  ), 60_000)
 

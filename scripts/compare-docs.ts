@@ -24,12 +24,11 @@
  * be `undocumented`, or an `undocumented` or `stable` one that is not stable (`AGENTS.md`). A `stable` one is
  * printed as `stable`, with no lines compared.
  *
- * Then the sources of Cluster that say how its rows are written and read are compared whole, code included: a
- * release that changes them may not read what an older one stored (`AGENTS.md`). Each is printed on a line of its
- * own, first `storage`, then the file and its status, followed by the lines that differ. A change does not fail the
- * run: its note says what it changes, and the spike of the fixtures runs it. Then the sources of the drivers of
- * PostgreSQL that a premise was read in are compared whole in the same way, each on a line that starts with `driver`
- * (decision 0254).
+ * Then the sources of `effect` whose code a rule rests on, beyond what their JSDoc promises, are compared whole, code
+ * included. Each is printed on a line of its own, first `source`, then the file and its status, followed by the lines
+ * that differ. A change does not fail the run, since only a reader of the lines can tell whether the rule still
+ * holds. Then the sources of the drivers of PostgreSQL that a premise was read in are compared whole in the same way,
+ * each on a line that starts with `driver` (decision 0254).
  */
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -84,13 +83,6 @@ const declarations: ReadonlyArray<Declaration> = [
   // Rolls back when its effect fails or is interrupted, which its docs do not say when (decisions 0002 and 0013).
   // Fails the statements of a fiber that outlives it (decision 0243).
   ['effect', 'sql/SqlClient.ts', 'withTransaction', 'unstable'],
-  ['effect', 'cluster/Entity.ts', 'toLayer', 'unstable'],
-  ['effect', 'cluster/Entity.ts', 'defectRetryPolicy', 'unstable'],
-  ['effect', 'cluster/Entity.ts', 'disableFatalDefects', 'unstable'],
-  ['effect', 'cluster/ClusterSchema.ts', 'Persisted', 'unstable'],
-  ['effect', 'cluster/ClusterSchema.ts', 'WithTransaction', 'unstable'],
-  ['effect', 'cluster/ClusterSchema.ts', 'Uninterruptible', 'unstable'],
-  ['effect', 'cluster/ShardingConfig.ts', 'entityRegistrationTimeout', 'unstable'],
   // Serializes access to the database, opens it in WAL mode, and begins a transaction with `BEGIN IMMEDIATE`, which
   // holds the write lock for its duration (decisions 0080 and 0092).
   ['@effect/sql-sqlite-bun', 'SqliteClient.ts', 'make', 'unstable'],
@@ -113,19 +105,11 @@ const drivers: ReadonlyArray<readonly [pkg: Package, file: string]> = [
   ['@effect/sql-pglite', 'PgliteClient.ts'],
 ]
 
-/** The sources of Cluster, under `effect`'s `src/`, that say how its rows are written and read. */
-const storage: ReadonlyArray<string> = [
-  // The tables, their migrations, and the statements that write and read them.
-  'cluster/SqlMessageStorage.ts',
-  'cluster/SqlRunnerStorage.ts',
-  // What a row encodes: a message, its envelope, its reply.
-  'cluster/MessageStorage.ts',
-  'cluster/Envelope.ts',
-  'cluster/Reply.ts',
-  'cluster/Message.ts',
-  // The ids and the shards a row is keyed by.
-  'cluster/Snowflake.ts',
-  'cluster/ShardId.ts',
+/** The sources under `effect`'s `src/` whose code a rule rests on, compared whole. */
+const effectSources: ReadonlyArray<string> = [
+  // `run` takes its lock before it reads the history, and a unique violation on the history is read as `Locked`. Two
+  // launches at once rest on both, in `createTables` of `src/storage/tables.ts`.
+  'sql/Migrator.ts',
 ]
 
 /** Packs a release from npm into `into`, and gives the folder of its sources. */
@@ -264,7 +248,7 @@ try {
     }
   }
   for (const [label, pkg, file] of [
-    ...storage.map((file) => ['storage', 'effect', file] as const),
+    ...effectSources.map((file) => ['source', 'effect', file] as const),
     ...drivers.map(([pkg, file]) => ['driver', pkg, file] as const),
   ]) {
     const lines = (version: string) => read(join(sources.get(`${pkg}@${version}`)!, file))?.replaceAll('\r\n', '\n')

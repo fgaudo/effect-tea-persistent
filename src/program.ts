@@ -690,13 +690,30 @@ export const migrationOf = <T extends Types>(
 }
 
 /**
- * Whether a string is text every database holds as it is: it holds no U+0000, which PostgreSQL holds in no text and
- * parses in no JSON, and no lone surrogate, which PostgreSQL writes as U+FFFD, so that two strings would be one,
- * and SQLite gives back as U+FFFD for each of its bytes, so that the string read finds no row. A
- * regular expression with the flag `u` reads a pair of surrogates as one code point, so `\p{Cs}` finds a lone one
- * only (decision 0157).
+ * The most bytes of UTF-8 a text that keys a row holds: an id, a request id, a name, a string an index holds, and the
+ * JSON of a key's parameter. An entry of an index of PostgreSQL holds 2,704 bytes, where SQLite holds any text, and
+ * the widest key of the storage holds seven such texts, one of them a request's.
  */
-export const isText = (text: string): boolean => !text.includes('\u0000') && !/\p{Cs}/u.test(text)
+export const keyedBytes = 256
+
+/** The most bytes of UTF-8 the text of a request holds, the eighth text of the widest key of the storage. */
+export const requestBytes = 1024
+
+const utf8 = new TextEncoder()
+
+/** Whether `text` holds at most `most` bytes of UTF-8. A code unit of UTF-16 is one byte at least. */
+export const fits = (text: string, most: number): boolean =>
+  text.length <= most && (text.length * 3 <= most || utf8.encode(text).length <= most)
+
+/**
+ * Whether a string is text every database holds as it is, in a key: it holds at most `keyedBytes` bytes of UTF-8,
+ * no U+0000, which PostgreSQL holds in no text and parses in no JSON, and no lone surrogate, which PostgreSQL writes
+ * as U+FFFD, so that two strings would be one, and SQLite gives back as U+FFFD for each of its bytes, so that the
+ * string read finds no row. A regular expression with the flag `u` reads a pair of surrogates as one code point, so
+ * `\p{Cs}` finds a lone one only.
+ */
+export const isText = (text: string): boolean =>
+  fits(text, keyedBytes) && !text.includes('\u0000') && !/\p{Cs}/u.test(text)
 
 /**
  * Why a string a caller gave as an id is no id, or `undefined` when it is one. An id is text a database holds, and

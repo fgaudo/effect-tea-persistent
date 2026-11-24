@@ -1095,22 +1095,22 @@ describe('time that passes', () => {
       Effect.fnUntraced(function*(rehearsal) {
         yield* rehearsal.send({ _tag: 'Arm', key: 'b', at: hours(2), every: null, next: null }, { sender: tester })
         yield* rehearsal.send({ _tag: 'Arm', key: 'a', at: hours(1), every: 30 * 60 * 1000, next: null }, { sender: tester })
-        // Within two hours, `a` fires at 1h, 1h30 and 2h, and `b` at 2h. The order of `a` and `b` at 2h is not
-        // promised, which bug 115 of docs/bugs.md holds.
+        // Within two hours, `a` fires at 1h, 1h30 and 2h, and `b` at 2h, after `a` by the order of the keys.
         yield* rehearsal.advance('2 hours')
         expect(yield* rehearsal.underWay('b')).toBeNull()
         yield* rehearsal.send({ _tag: 'Ping' }, { sender: tester })
-        const seen = (yield* rehearsal.state).seen.slice(2)
-        expect(seen.slice(0, 2)).toEqual([seenAs('a', hours(1)), seenAs('a', hours(1.5))])
-        expect(new Set(seen.slice(2, 4).map((one) => JSON.stringify(one))))
-          .toEqual(new Set([seenAs('b', hours(2)), seenAs('a', hours(2))].map((one) => JSON.stringify(one))))
-        expect(seen.slice(4)).toEqual([seenAs('Ping', hours(2))])
+        expect((yield* rehearsal.state).seen.slice(2)).toEqual([
+          seenAs('a', hours(1)),
+          seenAs('a', hours(1.5)),
+          seenAs('a', hours(2)),
+          seenAs('b', hours(2)),
+          seenAs('Ping', hours(2)),
+        ])
         expect((yield* rehearsal.pending('a')).work).toEqual(timer(hours(2.5), { _tag: 'Rang', key: 'a' }))
       }),
     )))
 
-  // Bug 115 of docs/bugs.md: `entity` of `src/storage/entities.ts` reads the keys in no order, as `nextTimer` says.
-  test.failing('fires two timers due at one time in the order of the stored work', () =>
+  test('fires two timers of an entity due at one time in the order of their keys', () =>
     Effect.runPromise(rehearse(
       meter('Meter'),
       { flags: {}, at: placedAt },
@@ -1118,7 +1118,7 @@ describe('time that passes', () => {
         yield* rehearsal.send({ _tag: 'Arm', key: 'b', at: hours(1), every: null, next: null }, { sender: tester })
         yield* rehearsal.send({ _tag: 'Arm', key: 'a', at: hours(1), every: null, next: null }, { sender: tester })
         yield* rehearsal.advance('1 hour')
-        expect((yield* rehearsal.state).seen.slice(2)).toEqual([seenAs('b', hours(1)), seenAs('a', hours(1))])
+        expect((yield* rehearsal.state).seen.slice(2)).toEqual([seenAs('a', hours(1)), seenAs('b', hours(1))])
       }),
     )))
 

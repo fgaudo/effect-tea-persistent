@@ -13,11 +13,6 @@ come first, since no feature is built while more than ten bugs are open.
 
 ## Next
 
-17. **The bugs no step holds.** (Opus 5.5 · high) It depends on no step. Bugs 95, 99, 102, 103, 105, 110, 114 and
-    115 of `docs/bugs.md` belong to no step, and step 11 waits for ten open bugs at most. Where an entry names two
-    fixes, the step takes the one the values of `AGENTS.md` rank higher. The fix of bug 110 changes `ci.yml`, whose
-    jobs run only once the owner pushes. It is done when the eight have left `docs/bugs.md`.
-
 8. **The questions for the contract.** (Fable 5.2 · high) It depends on steps 6 and 7. The review lists five rules
    of the contract a simpler one may replace, and the slice shows which of them a browser meets. The agent takes
    each or leaves it by the values of `AGENTS.md`, and each one taken changes the machine with its tests. It is
@@ -79,13 +74,17 @@ come first, since no feature is built while more than ten bugs are open.
       `restart` and `deploy` step every entity, in `restart` of `src/rehearse.ts`, until this step decides.
     - The screen of `examples/seat` dies on a reading its contract does not decode, and its page asks for a reload.
       It is what a browser that holds the schemas of the version before meets today.
+    - The JSON of a key's parameter holds at most 256 bytes, which `keyBy` of `src/machine.ts` checks, since an
+      index of PostgreSQL bounds a key. A kind `parameter` of `Migration` meets the same bound.
 
-11. **The release, experimental.** (Opus 5.5 · medium) It depends on steps 9, 10, 15 and 17, and on ten open bugs at
+11. **The release, experimental.** (Opus 5.5 · medium) It depends on steps 9, 10 and 15, and on ten open bugs at
     most. It decides what `exports` names, writes the metadata of `package.json`, and packs the package into a
     project outside Bun that runs and typechecks it. It publishes nothing, since a release is the owner's.
     - No spike sees the runtime on a full volume since the consumers went. A spike of it is owed before the release.
     - `./testing` imports `@effect/sql-sqlite-node`, an optional peer dependency on `node:sqlite`. The project outside
       Bun runs a rehearsal on Node too, at a version that has `node:sqlite` without a flag.
+    - The job `release-postgres` of `ci.yml` runs every case of `test:postgres` on a server, by hand. No run of it
+      was seen before the owner's push, so the release reads its first run.
 
 ## Later
 

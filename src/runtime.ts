@@ -131,8 +131,9 @@ const remembered = 10_000
 
 /**
  * What a caller does with one program's entities. An id that is empty or no text a database holds is the caller's
- * defect. So is a request id that is no text a database holds, and a `keep` that is no non-negative integer of
- * milliseconds. Nothing is read or stored for a call refused.
+ * defect. So is a request id that is no text a database holds, a request whose sender and id encode past 1,024 bytes
+ * of UTF-8, and a `keep` that is no non-negative integer of milliseconds. Nothing is read or stored for a call
+ * refused.
  */
 export interface Handle<T extends Types> {
   /**
@@ -528,6 +529,13 @@ const answerOf = <T extends Types, A>(tx: Transaction<T>, pick: (output: Machine
   throw new Error('the transaction of a request gave no answer to it')
 }
 
+/** The text of a request as it enters, where one the storage cannot key a row by is the defect of whoever sent it. */
+const requestKeyOf = <T extends Types>(program: Program<T>, request: Request<T['sender']>): string => {
+  const fault = Machine.requestFault(program, request)
+  if (fault !== undefined) throw new InvariantDefect({ reason: fault })
+  return Machine.requestKey(program, request)
+}
+
 const send = <T extends Types>(
   p: Process,
   d: Deployment<T>,
@@ -541,7 +549,7 @@ const send = <T extends Types>(
     const asked = yield* Effect.sync(() => {
       encode(d.program.schemas.inbound, message, 'inbound message')
       if (request._tag === 'Caller') encode(d.program.schemas.sender, request.sender, 'sender')
-      return Machine.requestKey(d.program, request)
+      return requestKeyOf(d.program, request)
     })
     // An operation is given again the `NotFound` a run before it was given, so that a run after a crash acts alike.
     if (request._tag === 'Operation') {
@@ -581,7 +589,7 @@ const create = <T extends Types>(
     const asked = yield* Effect.sync(() => {
       encode(d.program.schemas.flags, flags, 'value of the flags')
       if (request._tag === 'Caller') encode(d.program.schemas.sender, request.sender, 'sender')
-      return Machine.requestKey(d.program, request)
+      return requestKeyOf(d.program, request)
     })
     if (request._tag === 'Operation') {
       const kept = yield* d.storage.answer(id, 'Create', request)

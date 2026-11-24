@@ -13,7 +13,10 @@ import {
   type Creation,
   type Piece,
   encode,
+  fits,
+  keyedBytes,
   readBack,
+  requestBytes,
   type IdempotencyKey,
   idempotencyKey,
   indexesOf,
@@ -90,13 +93,18 @@ const declaredKeys = <T extends Types>(program: Program<T>) =>
 
 /**
  * The key `name` with `parameter`: the name alone for a key without one, and otherwise the name and the parameter
- * as its schema encodes it, with the fields of each object in order (decisions 0132, 0136). A parameter its schema
- * refuses is a defect.
+ * as its schema encodes it, with the fields of each object in order. A parameter its schema refuses is a defect, and
+ * so is one whose JSON holds more than `keyedBytes` bytes.
  */
-const keyBy = (name: string, schema: Schema.Codec<unknown, Json> | null, parameter: unknown): Key =>
-  schema === null
-    ? { name }
-    : { name, parameter: ordered(encodeBy(schema, parameter, `parameter of the key '${name}'`)) }
+const keyBy = (name: string, schema: Schema.Codec<unknown, Json> | null, parameter: unknown): Key => {
+  if (schema === null) return { name }
+  const encoded = ordered(encodeBy(schema, parameter, `parameter of the key '${name}'`))
+  // The storage keys the rows of the work by the parameter's JSON, and an index of PostgreSQL bounds a key.
+  if (!fits(JSON.stringify(encoded), keyedBytes)) {
+    broken(`the parameter of the key '${name}' encodes to more than ${keyedBytes} bytes of UTF-8`)
+  }
+  return { name, parameter: encoded }
+}
 
 /**
  * The text the machine indexes its records of a key by, in `Stored.keys` and `Machine.running`: the JSON of the
@@ -361,10 +369,25 @@ const keyed = new WeakMap<object, WeakMap<object, string>>()
 
 /**
  * What a request is deduplicated by: its JSON as text, with the fields of each object in order. Two requests are
- * the same when they encode alike, whoever built them; the text is an index of the machine's, and nothing parses
- * it back (decision 0059). A request that does not encode — a caller's sender its schema refuses — is a defect.
+ * the same when they encode alike, whoever built them. The text is an index of the machine's, and nothing parses
+ * it back. A request that does not encode, as a caller's sender its schema refuses, is a defect. So is one whose
+ * text holds more than `requestBytes` bytes, which a migration of the sender may give.
  */
 export const requestKey = <T extends Types>(program: Program<T>, request: Request<T['sender']>): string => {
+  const fault = requestFault(program, request)
+  return fault === undefined ? requestText(program, request) : broken(fault)
+}
+
+/**
+ * Why the storage cannot key a row by the request, or `undefined` where it can. A handle and a rehearsal refuse such
+ * a request as the defect of whoever sent it, before it reaches the entity.
+ */
+export const requestFault = <T extends Types>(program: Program<T>, request: Request<T['sender']>): string | undefined =>
+  fits(requestText(program, request), requestBytes)
+    ? undefined
+    : `the request encodes to more than ${requestBytes} bytes of UTF-8, the most a database keys a row by`
+
+const requestText = <T extends Types>(program: Program<T>, request: Request<T['sender']>): string => {
   const codec = requestCodec(program)
   let held = keyed.get(codec)
   if (held === undefined) {
@@ -709,18 +732,23 @@ export type Due = Readonly<{ key: Key; incarnation: number; at: DateTime.Utc }>
 
 /**
  * The entity's next timer to fire, of its timers armed and due no later than `until`: the one due earliest, and of
- * those due at one time the first in the stored work, or undefined for none. The stored work lists its keys in the
- * order of the record `work` gave, which a timer armed again does not change, so a restart keeps the order. The
- * runtime and the rehearsal both fire by it (decision 0293).
+ * those due at one time the one whose key's text comes first, or undefined for none. The order of the keys is the
+ * machine's own, since the storage reads an entity's keys in an order each dialect chooses, and a restart reads
+ * them again. The runtime and the rehearsal both fire by it.
  */
 export const nextTimer = <T extends Types>(machine: Machine<T>, until: DateTime.Utc): Due | undefined => {
   let next: Due | undefined
+  let nextText = ''
   for (const [text, held] of Object.entries(machine.stored.keys)) {
     const running = machine.running[text]
     if (running?.kind !== 'Timer' || running.incarnation !== held.incarnation || !isTimer(held.work)) continue
     const { at } = held.work
-    if (DateTime.isGreaterThan(at, until) || (next !== undefined && !DateTime.isLessThan(at, next.at))) continue
+    if (DateTime.isGreaterThan(at, until)) continue
+    const first = next === undefined || DateTime.isLessThan(at, next.at) ||
+      (DateTime.Equivalence(at, next.at) && text < nextText)
+    if (!first) continue
     next = { key: held.key, incarnation: held.incarnation, at }
+    nextText = text
   }
   return next
 }

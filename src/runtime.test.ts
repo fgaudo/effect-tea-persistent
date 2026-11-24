@@ -76,31 +76,6 @@ test('fires a timer whose time passes while the waker reads what is due', () =>
     TestClock.layer(),
   )))
 
-// Bug 114 of docs/bugs.md: the doc comment of `Due.refused` says the waker tries a refused entity again after
-// `retry`, and `waking` reads `ready` and `next` alone. Only SQLite holds a time that is no integer.
-test.failing('the waker reads again after the retry an entity whose time it refused', () =>
-  onEach(['sqlite'], (dialect) =>
-    Effect.runPromise(Effect.provide(
-      Effect.gen(function*() {
-        const sql = yield* SqlClient.SqlClient
-        const { handle, die } = yield* processOn
-        yield* handle.create('e', { requestId: 'creation' })
-        yield* handle.send('e', { _tag: 'Start', key: 't', nonce: 'n' }, { requestId: 'r', keep: 'forever' })
-        yield* quiet
-        // An operator writes a time no version writes, and the waker refuses it once the timer's time passes.
-        yield* sql`UPDATE effecttea_entity_keys SET due = 'soon' WHERE id = 'e' AND due IS NOT NULL`
-        yield* TestClock.adjust('20 millis')
-        yield* quiet
-        // The operator writes the time back, and the waker's next reading, after its retry, finds the timer due.
-        yield* sql`UPDATE effecttea_entity_keys SET due = 0 WHERE id = 'e' AND due IS NOT NULL`
-        yield* TestClock.adjust('60 millis')
-        yield* quiet
-        expect((yield* handle.read('e'))?.seen.some(({ tag }) => tag === 'Rang')).toBe(true)
-        yield* die
-      }).pipe(Effect.provide(clientOf(dialect)), quietly),
-      TestClock.layer(),
-    ))))
-
 /** A failure of the database, as a statement or a commit gives it. */
 const failure = new SqlError.SqlError({
   reason: new SqlError.UnknownError({ cause: null, message: 'the statement failed' }),
@@ -285,9 +260,9 @@ test('a deploy whose reading of the interrupted entities waits for the retry fir
     TestClock.layer(),
   )))
 
-// Bug 105 of docs/bugs.md: a step PostgreSQL cannot write fails in the database, and is tried again after the retry
-// for ever, so the entity's state never moves past it and the entity is not suspended.
-test.failing('a completion whose step writes a long index is stepped or suspends its entity, alike on both dialects', () => {
+// A step PostgreSQL cannot write would fail in the database, and be tried again after the retry for ever. So an
+// index past the bound of a text is the program's defect, which suspends the entity on both dialects.
+test('a completion whose step writes a long index is stepped or suspends its entity, alike on both dialects', () => {
   let seed = 7
   const long = Array.from({ length: 4_000 }, () => {
     seed = (seed * 48_271) % 2_147_483_647
@@ -384,6 +359,15 @@ test('an id, a request id or a time to keep a reply that is no such value is the
     expect(yield* defect(handle.send('e', { _tag: 'Refuse', nonce: 'n' }, { requestId: 'r', keep: { millis: -1 } })))
       .toBe('the reply is kept {"millis":-1}, which is no non-negative integer of milliseconds')
     expect(yield* defect(handle.read('\ud800'))).toBe('the id is "\\ud800", which is no text a database holds')
+    // An entry of an index of PostgreSQL holds a bounded text, so an id and a request id hold 256 bytes of UTF-8.
+    expect(yield* defect(handle.create('é'.repeat(129), { requestId: 'c' })))
+      .toBe(`the id is "${'é'.repeat(129)}", which is no text a database holds`)
+    expect(yield* defect(handle.send('e', { _tag: 'Refuse', nonce: 'n' }, { requestId: 'r'.repeat(257), keep })))
+      .toBe(`the request id is "${'r'.repeat(257)}", which is no text a database holds`)
+    expect(yield* handle.create('é'.repeat(128), { requestId: 'r'.repeat(256) })).toEqual({ _tag: 'Created' })
+    // A request's text holds 1,024 bytes, and JSON writes each of these characters as six.
+    expect(yield* defect(handle.send('e', { _tag: 'Refuse', nonce: 'n' }, { requestId: '\u0001'.repeat(200), keep })))
+      .toBe('the request encodes to more than 1024 bytes of UTF-8, the most a database keys a row by')
     // A call that steps the entity within the caller's transaction would commit with it, so it is refused.
     const sql = yield* SqlClient.SqlClient
     const within = 'the call runs within a transaction of the client of the runtime'

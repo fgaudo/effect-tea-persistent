@@ -157,8 +157,7 @@ describe('the check of a program', () => {
       }])
     })))
 
-  // Bug 95 of docs/bugs.md: `entity` of `src/storage/entities.ts` runs the migrations of the flags outside its guard.
-  test.failing('a migration of the flags that dies on a stored row is a Load of its entity, as one of the state is', () =>
+  test('a migration of the flags that dies on a stored row is a Load of its entity, as one of the state is', () =>
     database(Effect.gen(function*() {
       const at = yield* DateTime.now
       yield* process({}, (runtime) =>

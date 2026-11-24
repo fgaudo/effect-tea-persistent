@@ -11,7 +11,18 @@ import * as Exit from 'effect/Exit'
 import * as Schema from 'effect/Schema'
 import { SqlClient, Statement } from 'effect/sql'
 import * as Machine from './machine.ts'
-import { InvariantDefect, isTimer, type Json, type Migration, noWork, operation, type Program, type Scalar } from './program.ts'
+import {
+  InvariantDefect,
+  isTimer,
+  type Json,
+  keyedBytes,
+  type Migration,
+  noWork,
+  operation,
+  type Program,
+  requestBytes,
+  type Scalar,
+} from './program.ts'
 import {
   batch,
   type Comparison,
@@ -567,29 +578,6 @@ test('a row the runtime never writes fails the call that meets it, and is read a
           sql`UPDATE effecttea_mailbox SET seq = -5 WHERE name = 'Receiver' AND id = 'r'`,
           store.write('r', written({ queued: [inbound('two')] }), 0),
         ],
-        // A timer's time is a whole number of milliseconds, read by the waker. A server of PostgreSQL rounds a double
-        // given a column of integers, so the time is one no column of integers takes.
-        [
-          sql`INSERT INTO effecttea_entity_keys ${
-            sql.insert({
-              name: 'Receiver',
-              id: 'r',
-              key: 'ask',
-              parameter: '',
-              incarnation: 1,
-              version: 1,
-              work: '{"_tag":"Timer","at":1,"message":"rang"}',
-              delivery: null,
-              due: 'soon',
-            })
-          }`,
-          // The waker's reading gives back the entity whose time it refuses, with the reason, and goes on
-          // (decision 0259): the refusal is the call's failure here.
-          Effect.flatMap(store.due(0), ({ refused }) =>
-            refused.length === 1 && refused[0]?.id === 'r'
-              ? Effect.die(new Error(refused[0].reason))
-              : Effect.succeed(refused)),
-        ],
       ] as const
       for (const [index, [breaking, reading]] of broken.entries()) {
         // Broken and read in a transaction that fails with what the reading gave, so that nothing of it stays.
@@ -604,6 +592,45 @@ test('a row the runtime never writes fails the call that meets it, and is read a
         }
       }
       expect((yield* store.load('r'))?.mailbox.map((envelope) => envelope.message)).toEqual(['one'])
+    }).pipe(Effect.orDie)))
+
+// The waker reads a timer's time as an integer of milliseconds within 2^53. A time an operator writes by hand that
+// the waker would not read would stop its entity's timers, so the table refuses it as it is written.
+test('the table refuses a timer’s time the waker would not read, on both dialects', () =>
+  database((sql) =>
+    Effect.gen(function*() {
+      const store = storage(receiver, sql)
+      const row = (due: unknown) =>
+        sql`INSERT INTO effecttea_entity_keys ${
+          sql.insert({
+            name: 'Receiver',
+            id: 'r',
+            key: 'ring',
+            parameter: '',
+            incarnation: 1,
+            version: 1,
+            work: '{"_tag":"Timer","at":1,"message":"rang"}',
+            delivery: null,
+            due: due as never,
+          })
+        }`
+      // Each row is written in a transaction rolled back, so that one taken leaves no row under the key.
+      const taken = (due: unknown) =>
+        Effect.map(Effect.flip(sql.withTransaction(Effect.andThen(row(due), Effect.fail('taken' as const)))), (end) =>
+          end === 'taken')
+      // A server of PostgreSQL rounds a double given a column of integers, where PGlite refuses it, and the waker
+      // reads the integer. So a time that is no integer is written on SQLite alone.
+      const times = [
+        'soon',
+        BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+        -BigInt(Number.MAX_SAFE_INTEGER) - 1n,
+        ...(dialectOf(sql) === 'sqlite' ? [1.5] : []),
+      ]
+      const refused: Array<unknown> = []
+      for (const due of times) if (!(yield* taken(due))) refused.push(due)
+      expect(refused).toEqual(times)
+      yield* row(Number.MAX_SAFE_INTEGER)
+      expect((yield* store.due(0)).next).toBe(Number.MAX_SAFE_INTEGER)
     }).pipe(Effect.orDie)))
 
 // A row is keyed by its request as the version that wrote it encoded it, and by that version (decision 0069).
@@ -1332,14 +1359,15 @@ test('reindex passes over a state an index dies on, names it, and writes the res
       ])
     }).pipe(Effect.orDie)))
 
-/** A text of 4,000 letters that compresses little, past the 2,704 bytes an entry of an index of PostgreSQL holds. */
-const longText = (() => {
-  let seed = 7
-  return Array.from({ length: 4_000 }, () => {
+/** A text of `length` letters that compresses little, drawn from `seed`. */
+const lettersOf = (length: number, seed: number) =>
+  Array.from({ length }, () => {
     seed = (seed * 48_271) % 2_147_483_647
     return String.fromCharCode(97 + (seed % 26))
   }).join('')
-})()
+
+/** A text past the 2,704 bytes an entry of an index of PostgreSQL holds, and past the bound of a text that keys a row. */
+const longText = lettersOf(4_000, 7)
 
 /** What each dialect makes of `body`: its value, or the name of what it failed with. */
 const onEachDialect = async <A>(body: (sql: SqlClient.SqlClient) => Effect.Effect<A, unknown>) => {
@@ -1350,25 +1378,35 @@ const onEachDialect = async <A>(body: (sql: SqlClient.SqlClient) => Effect.Effec
   return outcomes
 }
 
-// Bug 102 of docs/bugs.md: an entry of a B-tree index of PostgreSQL holds a bounded text, where SQLite holds any.
-test.failing('a step whose id, index or request holds a long text is written alike on both dialects', async () => {
-  const written = (write: (store: ReturnType<typeof storage<Ranked>>) => Effect.Effect<unknown, unknown>) =>
-    onEachDialect((sql) => Effect.map(write(storage(ranked, sql)), () => 'written'))
-  const [byId, byIndex, byRequest] = [
-    await written((store) => store.write(longText, created({}), 0)),
-    await written((store) =>
-      Effect.andThen(
-        store.indexed,
-        store.write('a', created({ shown: { projection: JSON.stringify(longText), indexes: { rank: longText } } }), 0),
-      )
-    ),
-    await written((store) => store.write('a', created({ replies: [{ ...reply('held', 1), request: JSON.stringify([longText]) }] }), 0)),
-  ]
-  expect([byId[0], byIndex[0], byRequest[0]]).toEqual([byId[1], byIndex[1], byRequest[1]])
+// An entry of a B-tree index of PostgreSQL holds 2,704 bytes, where SQLite holds any text. The widest key of the
+// storage is the one of `effecttea_waiting`, with seven texts and a request, so each text at its bound fits in it.
+test('every text that keys a row, at its bound, is written alike on both dialects', async () => {
+  const outcomes = await onEachDialect((sql) =>
+    Effect.gen(function*() {
+      const store = storage(ranked, sql)
+      yield* store.indexed
+      const at = (seed: number) => lettersOf(keyedBytes, seed)
+      yield* store.write(at(1), created({ shown: { projection: '0', indexes: { rank: at(2) } } }), 0)
+      yield* sql`INSERT INTO effecttea_waiting ${
+        sql.insert({
+          name: at(3),
+          id: at(4),
+          sender_name: at(5),
+          sender_id: at(6),
+          sender_key: at(7),
+          sender_parameter: at(8),
+          sender_incarnation: 1,
+          request: lettersOf(requestBytes, 9),
+        })
+      }`
+      return 'written'
+    }))
+  expect(outcomes).toEqual(['written', 'written'])
 })
 
-// Bug 103 of docs/bugs.md: `reindex` passes over what the program computes, and dies whole on a statement that fails.
-test.failing('reindex passes over an entity whose new index PostgreSQL cannot hold, alike on both dialects', async () => {
+// `reindex` passes over what the program computes, and would die whole on a statement that fails. An index past the
+// bound of a text is the program's, so `reindex` names its entity on both dialects.
+test('reindex passes over an entity whose new index PostgreSQL cannot hold, alike on both dialects', async () => {
   const reindexed = await onEachDialect((sql) =>
     Effect.gen(function*() {
       const store = storage(ranked, sql)

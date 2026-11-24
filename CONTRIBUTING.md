@@ -22,7 +22,8 @@ run.
 `bun test` runs PostgreSQL on PGlite, which runs one statement at a time on one session. `bun run test:postgres`
 runs the storage's tests and the runtime's on a server of PostgreSQL instead, with the tests of
 [`src/postgres.test.ts`](src/postgres.test.ts) that only a server with many connections runs. Its role makes and
-drops a database for each test, and is a superuser. The CI runs it on Linux, and so can a container:
+drops a database for each test, and is a superuser. The CI runs it on Linux, and so can a container. Under
+`SCHEDULES=all` it runs every case, as the CI does when the workflow is run by hand:
 
 ```sh
 docker run --rm -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:17

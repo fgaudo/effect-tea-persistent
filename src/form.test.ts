@@ -476,8 +476,11 @@ const keysRead = {
   step: ['name', 'uses', 'with', 'run', 'env', 'working-directory'],
 } as const
 
-/** The `if` a job may have: the release's, which runs it when the workflow is run by hand. */
-const conditions: Readonly<Record<string, string>> = { release: "github.event_name == 'workflow_dispatch'" }
+/** The `if` a job may have: the release's two jobs', which run them when the workflow is run by hand. */
+const conditions: Readonly<Record<string, string>> = {
+  release: "github.event_name == 'workflow_dispatch'",
+  'release-postgres': "github.event_name == 'workflow_dispatch'",
+}
 
 type Workflow = Readonly<Record<string, unknown>>
 
@@ -485,7 +488,8 @@ type Workflow = Readonly<Record<string, unknown>>
  * What the workflow `ci.yml` does not keep, given as parsed (decisions 0242, 0250, 0254). It runs on every push and
  * pull request, and by hand. The jobs `test` and `release` run `bun test` and `bun run test:release`, each divided by
  * its matrix into every shard. The jobs `spikes` and `postgres` run `bun run test:spikes` and
- * `bun run test:postgres`. The job `check` runs no test.
+ * `bun run test:postgres`, and the job `release-postgres` runs `bun run test:postgres` too. The job `check` runs no
+ * test.
  * Every key the workflow holds is one of `keysRead`, and a job's `if` is the one `conditions` gives it.
  */
 export const workflowRefused = (workflow: Workflow): ReadonlyArray<string> => {
@@ -535,6 +539,7 @@ export const workflowRefused = (workflow: Workflow): ReadonlyArray<string> => {
   }
   ran('spikes', ['bun run test:spikes'])
   ran('postgres', ['bun run test:postgres'])
+  ran('release-postgres', ['bun run test:postgres'])
   for (const run of runs('check')) if (run.includes('test')) found.push(`check: runs ${run}`)
   return found
 }
@@ -615,9 +620,8 @@ describe('the form of the workflow', () => {
     expect(effectPackagesApart(manifest)).toEqual([])
   })
 
-  // Bug 110 of docs/bugs.md: the job of PostgreSQL runs the sample of each sampled test, and the job that runs every
-  // case has no server.
-  test.failing('a job runs on a server of PostgreSQL every case of the files of test:postgres, as the release runs them on PGlite', () => {
+  // The job of PostgreSQL runs the sample of each sampled test, and the job `release` runs every case on PGlite alone.
+  test('a job runs on a server of PostgreSQL every case of the files of test:postgres, as the release runs them on PGlite', () => {
     type Loose = Readonly<{ env?: Record<string, unknown>; steps?: ReadonlyArray<Readonly<{ run?: string; env?: Record<string, unknown> }>> }>
     const jobs = Object.values((workflowOfTheRepository() as unknown as { jobs: Record<string, Loose> }).jobs)
     const everyCaseOnAServer = jobs.some((job) =>
@@ -630,10 +634,12 @@ describe('the form of the workflow', () => {
     expect(everyCaseOnAServer).toBe(true)
   })
 
-  // Bug 99 of docs/bugs.md: the launch rests on `sql/Migrator.ts` of Effect, which locks before it reads the history.
-  test.failing('the comparison of a move of Effect compares whole the source of Migrator, which the launch rests on', () => {
+  // The launch rests on `sql/Migrator.ts` of Effect, which locks before it reads the history.
+  test('the comparison of a move of Effect compares whole the source of Migrator, which the launch rests on', () => {
     const script = readFileSync(join(import.meta.dir, '..', 'scripts', 'compare-docs.ts'), 'utf8')
     expect(script.includes("'sql/Migrator.ts'")).toBe(true)
+    // Nothing of `src/` rests on Cluster since the restart.
+    expect(script.includes("'cluster/")).toBe(false)
   })
 
   // `bun test` runs no spike, so a job of its own runs them (decision 0250).

@@ -1388,6 +1388,12 @@ describe('what a runtime writes', () => {
             projection === 'go' ? '\ud800' : projection),
           "the index 'shown' is a string a database does not hold",
         ],
+        // An index past 256 bytes of UTF-8, which an entry of an index of PostgreSQL may not hold.
+        [
+          checked((message) => message, () => ({}), undefined, undefined, (projection) =>
+            projection === 'go' ? 'é'.repeat(129) : projection),
+          "the index 'shown' is a string a database does not hold",
+        ],
       ] as const
     ) {
       const transition = handled(machine, inbound)
@@ -1720,7 +1726,7 @@ describe('the order of the timers due at one time', () => {
   })
 })
 
-// The runtime and the rehearsal fire an entity's timers by one function of the machine (decision 0293).
+// The runtime and the rehearsal fire an entity's timers by one function of the machine.
 describe("the choice of an entity's next timer", () => {
   const next = (entity: Entity, until: DateTime.Utc) => Machine.nextTimer(entity, until)?.key.name
 
@@ -1746,21 +1752,23 @@ describe("the choice of an entity's next timer", () => {
     expect(again.outputs).toEqual([{ _tag: 'Dropped', key: fire.key, incarnation: fire.incarnation }])
   })
 
-  test('is, of the timers due at one time, the first in the stored work', () => {
-    expect(next(checked((message) => message, () => ({ reminder: 'timer', deadline: 'timer' })), epoch)).toBe('reminder')
+  // The storage reads an entity's keys in an order each dialect chooses, so the order of the stored work is no order
+  // a restart keeps.
+  test('is, of the timers due at one time, the one whose key comes first, whatever the order of the stored work', () => {
+    expect(next(checked((message) => message, () => ({ reminder: 'timer', deadline: 'timer' })), epoch)).toBe('deadline')
     expect(next(checked((message) => message, () => ({ deadline: 'timer', reminder: 'timer' })), epoch)).toBe('deadline')
   })
 
-  // A timer armed again leaves `running` and enters it at its end, and keeps its place in the stored work.
-  test('keeps the place in the stored work of a timer armed again', () => {
+  // A timer armed again leaves `running` and enters it at its end, and is ordered by its key as before.
+  test('orders a timer armed again by its key', () => {
     const entity = checked(
       (message) => message,
-      (state) => state === 'start' ? { reminder: 'timer', deadline: 'timer' } : { reminder: 'other timer', deadline: 'timer' },
+      (state) => state === 'start' ? { deadline: 'timer', reminder: 'timer' } : { deadline: 'other timer', reminder: 'timer' },
     )
     const moved = handled(entity, { _tag: 'Receive', request: by('move'), message: 'moved' }).machine
-    expect(Object.keys(moved.running)).toEqual(['["deadline"]', '["reminder"]'])
-    expect(moved.running['["reminder"]']?.incarnation).not.toBe(entity.running['["reminder"]']?.incarnation)
-    expect(next(moved, at)).toBe('reminder')
+    expect(Object.keys(moved.running)).toEqual(['["reminder"]', '["deadline"]'])
+    expect(moved.running['["deadline"]']?.incarnation).not.toBe(entity.running['["deadline"]']?.incarnation)
+    expect(next(moved, at)).toBe('deadline')
   })
 
   test('is no timer of a suspended entity', () => {
@@ -2640,6 +2648,8 @@ describe('keys with a parameter', () => {
     const work = { _tag: 'Charge', line: 'a' } as const
     const broken: ReadonlyArray<readonly [() => unknown, string]> = [
       [() => ({ charge: [[7, work]] }), "parameter of the key 'charge'"],
+      // The storage keys a row by the parameter's JSON, here 257 bytes.
+      [() => ({ charge: [['a'.repeat(255), work]] }), "the parameter of the key 'charge' encodes to more than 256 bytes"],
       [() => ({ charge: [['a', work], ['a', work]] }), `the state holds two pieces of work under '["charge","a"]'`],
       [() => ({ charge: work }), "the state holds no list of work under 'charge', which takes a parameter"],
       [() => ({ fee: [['a', work]] }), "the state holds what is no work under 'fee'"],

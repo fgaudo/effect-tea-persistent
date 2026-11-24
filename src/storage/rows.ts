@@ -205,8 +205,8 @@ export const Rows = {
   answerKey: decoder(Schema.Struct({ id: Schema.String, request: Schema.String, kind: Schema.String })),
   /** An entity's id, and 1 where it is suspended: PostgreSQL gives a boolean where SQLite gives an integer. */
   listed: decoder(Schema.Struct({ id: Schema.String, suspended: Count })),
-  /** A timer's time, in milliseconds: one before 1970 is a time too. */
-  due: decoder(Schema.Struct({ id: Schema.String, at: Integer })),
+  /** The earliest time of the timers read, in milliseconds, or null for none: one before 1970 is a time too. */
+  earliest: decoder(Schema.Struct({ at: Schema.NullOr(Integer) })),
   /** An aggregate over no rows is null. */
   last: decoder(Schema.Struct({ seq: Schema.NullOr(Count) })),
 } as const
