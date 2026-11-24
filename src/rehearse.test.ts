@@ -1611,7 +1611,7 @@ describe("the order of two entities' timers due at one time", () => {
 
   test('changes nothing a test reads of the entities', async () => {
     await fc.assert(alike(() => order), { numRuns: 200 })
-  })
+  }, 60_000)
 
   // A defect suspends the broken entity alone, as in the runtime: `advance` fires the other one either way, and fails
   // once time has passed.

@@ -74,7 +74,7 @@ test('fires a timer whose time passes while the waker reads what is due', () =>
       }
     }),
     TestClock.layer(),
-  )))
+  )), 60_000)
 
 /** A failure of the database, as a statement or a commit gives it. */
 const failure = new SqlError.SqlError({

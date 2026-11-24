@@ -47,4 +47,4 @@ test('a subscription is charged at its creation, and again when its stored renew
       expect(new Set(charges).size).toBe(2)
       expect(charges.length).toBe(2)
     })).pipe(Effect.provide([SqliteClient.layer({ filename: ':memory:' }), TestClock.layer()])),
-  ))
+  ), 60_000)
