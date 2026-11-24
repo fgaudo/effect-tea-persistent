@@ -1379,7 +1379,8 @@ const onEachDialect = async <A>(body: (sql: SqlClient.SqlClient) => Effect.Effec
 }
 
 // An entry of a B-tree index of PostgreSQL holds 2,704 bytes, where SQLite holds any text. The widest key of the
-// storage is the one of `effecttea_waiting`, with seven texts and a request, so each text at its bound fits in it.
+// storage is the one of `effecttea_waiting`, with six texts, an integer and the name an operation sends under, which
+// only the bound of its request bounds. So each part at its bound fits in it.
 test('every text that keys a row, at its bound, is written alike on both dialects', async () => {
   const outcomes = await onEachDialect((sql) =>
     Effect.gen(function*() {

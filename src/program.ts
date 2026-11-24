@@ -691,12 +691,16 @@ export const migrationOf = <T extends Types>(
 
 /**
  * The most bytes of UTF-8 a text that keys a row holds: an id, a request id, a name, a string an index holds, and the
- * JSON of a key's parameter. An entry of an index of PostgreSQL holds 2,704 bytes, where SQLite holds any text, and
- * the widest key of the storage holds seven such texts, one of them a request's.
+ * JSON of a key's parameter. An entry of an index of PostgreSQL holds 2,704 bytes, where SQLite holds any text. The
+ * widest key of the storage, of `effecttea_waiting`, holds six such texts, an integer, and the name an operation
+ * sends under, which only `requestBytes` bounds, so 2,568 bytes at most.
  */
 export const keyedBytes = 256
 
-/** The most bytes of UTF-8 the text of a request holds, the eighth text of the widest key of the storage. */
+/**
+ * The most bytes of UTF-8 the text of a request holds. The widest key that holds a request, of `effecttea_replies`,
+ * holds two texts, a request and an integer.
+ */
 export const requestBytes = 1024
 
 const utf8 = new TextEncoder()

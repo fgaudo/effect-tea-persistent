@@ -1036,10 +1036,11 @@ is written once. A launch on a client of any other dialect is the launcher's def
   gives back as written, so that two ids would be one. Anything else is the defect of whoever gave it.
 - Each of those texts holds at most 256 bytes of UTF-8, and so does the JSON of a key's parameter. The text of a
   request holds at most 1,024 bytes. An entry of an index of PostgreSQL holds 2,704 bytes, where SQLite holds any
-  text, and the widest key of the storage holds seven such texts and a request. So a text past its bound is refused
-  where it enters, on both dialects. A caller's id, request id or request is the caller's defect, an operation's
-  request is the operation's, and a parameter or an index is the program's, which suspends the entity. A step whose
-  row PostgreSQL could not hold would otherwise fail in the database, and be tried again for ever.
+  text. The widest key of the storage, of `effecttea_waiting`, holds six such texts, an integer, and the name an
+  operation sends under, which only the bound of its request bounds, so 2,568 bytes. So a text past its bound is
+  refused where it enters, on both dialects. A caller's id, request id or request is the caller's defect, an
+  operation's request is the operation's, and a parameter or an index is the program's, which suspends the entity. A
+  step whose row PostgreSQL could not hold would otherwise fail in the database, and be tried again for ever.
 - An id is not empty either. The waker and `reindex` page the entities from the empty id up, so an entity under it
   would never be woken nor indexed. A handle, an operation and a rehearsal refuse it as the defect of whoever gave it
   ([decision 0179](decisions/0179-an-id-is-not-empty.md)).
