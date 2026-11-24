@@ -149,8 +149,8 @@ test('fires a timer that a step arms while the waker reads what is due', () =>
     TestClock.layer(),
   )))
 
-// Bug 117 of docs/bugs.md: `due` dies on a failure of the database, and the waker caught the fire's alone.
-test.failing('a reading of what is due that fails in the database is read again at the retry', () =>
+// `due` dies on a failure of the database, and the waker reads again after the retry, as it fires again.
+test('a reading of what is due that fails in the database is read again at the retry', () =>
   run(Effect.provide(
     Effect.gen(function*() {
       const scope = yield* Scope.make()

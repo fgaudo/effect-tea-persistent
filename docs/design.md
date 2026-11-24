@@ -1000,7 +1000,8 @@ is written once. A launch on a client of any other dialect is the launcher's def
   ([decision 0279](decisions/0279-createtables-dies-within-a-transaction-of-its-client.md)).
 - A transaction that fails in the database, as a deadlock fails it on PostgreSQL, is tried again at the launch's
   `retry`. A receiver's transaction is sent again by its sender, an operation's end by the operation's fiber, and a
-  timer's fire by the waker. Each is logged as a warning with its cause. A commit that failed may have committed,
+  timer's fire by the waker. The waker's reading of the due timers is read again too, so that one failure does not
+  end the waker. Each is logged as a warning with its cause. A commit that failed may have committed,
   and the event tried again is then one the machine ignores. A caller's transaction is not tried again, and the caller is given the failure as a defect.
 - Four readings run several statements in one transaction, begun at `REPEATABLE READ` on PostgreSQL where the
   transaction is the reading's own: a page of a query, `inspect`, `suspended`, and the reading of each entity by
@@ -1184,7 +1185,7 @@ The waker sleeps by `Effect.sleep` until the earliest time stored, or until a st
 reads the wall clock and the due timers again, so a wall clock set back fires no timer early. While it reads and
 fires, every timer a step arms wakes it again. On a pool a step of another entity may commit its timer after the
 reading's snapshot, and the time of the round before would not say that the timer is earlier. A due timer whose fire
-failed is read again after `retry`, and not at once. A sleep past the host's limit of 2^31 − 1 milliseconds is set
+failed is read again after `retry`, and not at once, and so is a reading that failed. A sleep past the host's limit of 2^31 − 1 milliseconds is set
 by Effect as timers of the host in turn
 ([decision 0194](decisions/0194-a-timer-months-away-sleeps-on-effects-promise-of-a-duration.md)).
 

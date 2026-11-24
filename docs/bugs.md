@@ -95,11 +95,6 @@ again, so a bug that leaves this file leaves a gap in the list. Git keeps the bu
   in `src/rehearse.test.ts`, where `a` fires before `b` though `b` was armed first. The fix is one of two: the
   storage keeps the order of the work, or `docs/design.md` promises no order of one entity's timers due together,
   and `nextTimer` says so.
-- **117. One reading of what is due that fails in the database ends the waker for good.** `due` of
-  `src/storage/entities.ts` dies on an `SqlError`, and `waking` of `src/runtime.ts` catches the fire's failure alone.
-  So after one `ConnectionError` no timer of the program fires again in the process, though `docs/design.md` says a
-  fire that fails in the database is tried again. The test is `a reading of what is due that fails in the database
-  is read again at the retry`, in `src/runtime.test.ts`. The fix reads again after `retry`, and logs the failure.
 - **118. A run whose runner ends interrupted is lost.** `operating` of `src/runtime.ts` records nothing for a cause
   of interruptions only, as for a run the runtime interrupted. So the operation stays stored with no fiber and no
   log, and `settled` returns. The entity's next transaction applies `Restart`, which records `Unknown` for every run

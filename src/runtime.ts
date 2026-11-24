@@ -492,9 +492,9 @@ const operating = <T extends Types>(
 const failedInDatabase = (cause: Cause.Cause<never>) =>
   !Cause.hasInterrupts(cause) && SqlError.isSqlError(Cause.squash(cause))
 
-/** Logs a transaction that failed in the database and is tried again, with its cause. */
-const retried = (cause: Cause.Cause<never>) =>
-  Effect.logWarning('a transaction failed in the database; it is tried again after the retry', cause)
+/** Logs a transaction, or another reading, that failed in the database and is tried again, with its cause. */
+const retried = (cause: Cause.Cause<never>, what = 'a transaction') =>
+  Effect.logWarning(`${what} failed in the database; it is tried again after the retry`, cause)
 
 /**
  * Runs the transaction `effect` again after `retry` while it fails in the database, as a deadlock fails it on
@@ -689,7 +689,16 @@ const waking = <T extends Types>(p: Process, d: Deployment<T>): Effect.Effect<ne
     // after the reading's snapshot pokes the waker, whatever the time of the round before.
     d.next = null
     const now = yield* DateTime.now
-    const due = yield* d.storage.due(DateTime.toEpochMillis(now))
+    // A reading that fails in the database fires nothing, and is read again after `retry`, or sooner at a poke.
+    const due = yield* Effect.catchCauseIf(
+      d.storage.due(DateTime.toEpochMillis(now)),
+      failedInDatabase,
+      (cause) => Effect.as(retried(cause, 'a reading of the due timers'), null),
+    )
+    if (due === null) {
+      yield* Effect.race(Queue.take(d.poke), Effect.sleep(`${p.retry} millis`))
+      return
+    }
     let fired = 0
     for (const id of due.ready) {
       // A fire that fails in the database fires nothing, and its timer is read again as one due and not fired.
