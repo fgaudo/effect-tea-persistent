@@ -57,19 +57,19 @@ roadmap that waits for it. No question waits today.
   - A test that launches two runtimes at once in one process on a file with no tables, and times the second, would
     decide it.
 - **A `PgClient` given `transformQueryNames`.** The function would change the name `effecttea_migrations` where
-  `Migrator` and `tablesMade` name it as an identifier. It would not change the name in the text that `to_regclass`
-  of `firstSchema`, in `src/storage/tables.ts`, is given. So the check of `firstSchema` would look for a name other
-  than the one made.
+  `Migrator` names it as an identifier, and so the name of the table made. It would not change the name in the SQL
+  text of `tablesMade` and of `onFirstSchema`, in `src/storage/tables.ts`, which write the name as text. So
+  `tablesMade` would read a table other than the one made, and `onFirstSchema` would look for that other table too.
   - Whether a launch refuses a client given `transformQueryNames`, or a test of `src/storage.test.ts` on PGlite with
     such a client, would decide it.
-- **A set of tables the `search_path` no longer names.** `firstSchema` of `src/storage/tables.ts` dies where a schema
+- **A set of tables the `search_path` no longer names.** `onFirstSchema` of `src/storage/tables.ts` dies where a schema
   further on the `search_path` holds the tables. A launch whose `search_path` no longer names the schema that holds
   them, as `runtime` alone where the tables are in `public`, finds no history and makes an empty set of tables, with
   no error. It would be decided by:
   - whether a launch dies where any schema of the database but the first holds `effecttea_migrations`, and what that
     costs an operator who keeps a copy of the tables in another schema;
   - a test of `src/storage.test.ts` on PGlite of the case.
-- **A connection of a pool whose `search_path` is another.** `firstSchema` reads one connection, and `Migrator` runs
+- **A connection of a pool whose `search_path` is another.** `onFirstSchema` reads one connection, and `Migrator` runs
   its transaction on the connection the pool gives it next. A connection whose `search_path` a `SET` of a session or
   a pooler changed is not seen by the check. The tests of `src/postgres.test.ts` set the `search_path` of the role,
   which every connection shares. It would be decided by:
