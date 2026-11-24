@@ -7,9 +7,10 @@ import { expect, test } from 'bun:test'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import * as Fiber from 'effect/Fiber'
 import * as Schema from 'effect/Schema'
 import * as Scope from 'effect/Scope'
-import { SqlClient } from 'effect/sql'
+import { SqlClient, SqlError, Statement } from 'effect/sql'
 import { TestClock } from 'effect/testing'
 import { first, type Operation, type T, toy } from './machine.test_histories.ts'
 import { type Address, program } from './program.ts'
@@ -99,6 +100,143 @@ test.failing('the waker reads again after the retry an entity whose time it refu
       }).pipe(Effect.provide(clientOf(dialect)), quietly),
       TestClock.layer(),
     ))))
+
+/** A failure of the database, as a statement or a commit gives it. */
+const failure = new SqlError.SqlError({
+  reason: new SqlError.UnknownError({ cause: null, message: 'the statement failed' }),
+})
+
+// Bug 116 of docs/bugs.md. On a pool a step of another entity may commit its timer after the waker's statement of
+// `MIN(due)` and before the waker stores the time it sleeps until. The test runs that step in place of the statement,
+// and runs the statement blind to that entity, as a snapshot taken before its commit reads. The timer of `x` was
+// stopped, so the waker still holds its time, which is before the new timer of `y`.
+test.failing('fires a timer that a step arms while the waker reads what is due', () =>
+  run(Effect.provide(
+    Effect.gen(function*() {
+      const keep = 'forever' as const
+      const scope = yield* Scope.make()
+      let handle: Handle<T> | undefined
+      const armed = { now: false }
+      const blind: Statement.Transformer = (statement, sql) =>
+        Effect.gen(function*() {
+          const [text, params] = statement.compile()
+          if (!armed.now || !text.includes('MIN(due)') || handle === undefined) return statement
+          armed.now = false
+          yield* handle.send('y', { _tag: 'Start', key: 't', nonce: 'n' }, { requestId: 'r', keep }).pipe(
+            Effect.provideService(Statement.CurrentTransformer, undefined),
+          )
+          return sql.unsafe(text.replace('WHERE name = ', `WHERE id <> 'y' AND name = `), params)
+        })
+      const runtime = yield* Effect.provideService(launch(), Scope.Scope, scope)
+      handle = yield* runtime.deploy(toy(first, () => Effect.never)).pipe(
+        Effect.provideService(Scope.Scope, scope),
+        Effect.provideService(Statement.CurrentTransformer, blind),
+      )
+      yield* handle.create('x', { requestId: 'c-x' })
+      yield* handle.create('y', { requestId: 'c-y' })
+      yield* handle.send('x', { _tag: 'Start', key: 't', nonce: 'start' }, { requestId: 'start', keep })
+      yield* quiet
+      yield* handle.send('x', { _tag: 'Stop', key: 't', nonce: 'stop' }, { requestId: 'stop', keep })
+      armed.now = true
+      yield* TestClock.adjust('10 millis')
+      yield* quiet
+      expect(armed.now).toBe(false)
+      yield* TestClock.adjust('60 millis')
+      yield* quiet
+      expect((yield* handle.read('y'))?.seen.some(({ tag }) => tag === 'Rang')).toBe(true)
+      yield* Scope.close(scope, Exit.void)
+    }),
+    TestClock.layer(),
+  )))
+
+// Bug 117 of docs/bugs.md: `due` dies on a failure of the database, and the waker caught the fire's alone.
+test.failing('a reading of what is due that fails in the database is read again at the retry', () =>
+  run(Effect.provide(
+    Effect.gen(function*() {
+      const scope = yield* Scope.make()
+      const armed = { now: false }
+      const failing: Statement.Transformer = (statement) =>
+        Effect.suspend(() => {
+          if (!armed.now || !statement.compile()[0].includes('MIN(due)')) return Effect.succeed(statement)
+          armed.now = false
+          return Effect.die(failure)
+        })
+      const runtime = yield* Effect.provideService(launch(), Scope.Scope, scope)
+      const handle = yield* runtime.deploy(toy(first, () => Effect.never)).pipe(
+        Effect.provideService(Scope.Scope, scope),
+        Effect.provideService(Statement.CurrentTransformer, failing),
+      )
+      yield* handle.create('e', { requestId: 'creation' })
+      yield* handle.send('e', { _tag: 'Start', key: 't', nonce: 'n' }, { requestId: 'r', keep: 'forever' })
+      yield* quiet
+      armed.now = true
+      yield* TestClock.adjust('10 millis')
+      yield* quiet
+      expect(armed.now).toBe(false)
+      yield* TestClock.adjust('60 millis')
+      yield* quiet
+      expect((yield* handle.read('e'))?.seen.some(({ tag }) => tag === 'Rang')).toBe(true)
+      yield* Scope.close(scope, Exit.void)
+    }),
+    TestClock.layer(),
+  )))
+
+// Bug 118 of docs/bugs.md: the runtime recorded nothing for a run that ended interrupted, as for one it interrupted.
+test.failing('an operation that ends interrupted, which no step dropped, suspends its entity', () =>
+  run(Effect.gen(function*() {
+    const scope = yield* Scope.make()
+    const runtime = yield* Effect.provideService(launch(), Scope.Scope, scope)
+    const handle = yield* Effect.provideService(
+      runtime.deploy(toy(first, (run) => run.key === 'd' ? Effect.interrupt : Effect.never)),
+      Scope.Scope,
+      scope,
+    )
+    yield* handle.create('e', { requestId: 'creation' })
+    yield* handle.send('e', { _tag: 'Start', key: 'd', nonce: 'n' }, { requestId: 'r', keep: 'forever' })
+    yield* quiet
+    const suspended = yield* handle.suspended
+    expect(suspended.map(({ id, on }) => [id, on._tag])).toEqual([['e', 'Operation']])
+    // The run under `b` still runs, so nothing records its `Unknown`.
+    expect((yield* handle.inspect('e'))?.mailbox).toEqual([])
+    yield* Scope.close(scope, Exit.void)
+  })))
+
+// Bug 119 of docs/bugs.md: the deploy registered the program, and then died on the restart of an interrupted entity.
+test.failing('a deploy whose restart of an interrupted entity fails in the database restarts it at the retry', () =>
+  run(Effect.provide(
+    Effect.gen(function*() {
+      const crashed = yield* processOn
+      yield* crashed.handle.create('e', { requestId: 'creation' })
+      yield* crashed.handle.send('e', { _tag: 'Start', key: 'd', nonce: 'n' }, { requestId: 'r', keep: 'forever' })
+      yield* quiet
+      yield* crashed.die
+      // The first transaction of the next process is the deploy's restart of `e`, and it fails at its commit.
+      const fails = { now: true }
+      const probe = (point: Point) =>
+        Effect.suspend(() => {
+          if (point !== 'BeforeCommit' || !fails.now) return Effect.void
+          fails.now = false
+          return Effect.die(failure)
+        })
+      const scope = yield* Scope.make()
+      const runs: Array<Operation> = []
+      const runtime = yield* Effect.provideService(launch({ probe }), Scope.Scope, scope)
+      const deploying = yield* Effect.forkChild(Effect.provideService(
+        runtime.deploy(toy(first, (run) => Effect.andThen(Effect.sync(() => runs.push(run)), Effect.never))),
+        Scope.Scope,
+        scope,
+      ))
+      yield* quiet
+      expect(fails.now).toBe(false)
+      yield* TestClock.adjust('50 millis')
+      yield* quiet
+      const handle = yield* Fiber.join(deploying)
+      expect(runs.map(({ key }) => key)).toEqual(['d'])
+      expect(yield* handle.read('e')).not.toBeNull()
+      yield* Scope.close(scope, Exit.void)
+    }),
+    TestClock.layer(),
+  )))
 
 // Bug 105 of docs/bugs.md: a step PostgreSQL cannot write fails in the database, and is tried again after the retry
 // for ever, so the entity's state never moves past it and the entity is not suspended.

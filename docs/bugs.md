@@ -11,7 +11,7 @@ again, so a bug that leaves this file leaves a gap in the list. Git keeps the bu
 - The agent that fixes a bug chooses its fix by the values of [`AGENTS.md`](../AGENTS.md), and says the choice in a
   line of the commit.
 - A bug fixed leaves this file in the commit of its fix. A bug whose piece of the library goes leaves with it.
-- A bug found is added at the end, under the next number. The next number is 116.
+- A bug found is added at the end, under the next number. The next number is 120.
 
 ## The list
 
@@ -95,3 +95,26 @@ again, so a bug that leaves this file leaves a gap in the list. Git keeps the bu
   in `src/rehearse.test.ts`, where `a` fires before `b` though `b` was armed first. The fix is one of two: the
   storage keeps the order of the work, or `docs/design.md` promises no order of one entity's timers due together,
   and `nextTimer` says so.
+- **116. The waker misses a timer that a step of another entity arms while the waker reads what is due.** `inEntity`
+  of `src/runtime.ts` pokes the waker only for a time before `d.next`, and `waking` sets `d.next` after its reading.
+  So on a pool a step that commits after the reading's `MIN(due)` compares its timer with the time of the round
+  before, and sends no poke. The waker then sleeps past the timer, for ever where nothing else is due. The test is
+  `fires a timer that a step arms while the waker reads what is due`, in `src/runtime.test.ts`. The fix clears
+  `d.next` before the reading, so that every timer armed during it pokes the waker.
+- **117. One reading of what is due that fails in the database ends the waker for good.** `due` of
+  `src/storage/entities.ts` dies on an `SqlError`, and `waking` of `src/runtime.ts` catches the fire's failure alone.
+  So after one `ConnectionError` no timer of the program fires again in the process, though `docs/design.md` says a
+  fire that fails in the database is tried again. The test is `a reading of what is due that fails in the database
+  is read again at the retry`, in `src/runtime.test.ts`. The fix reads again after `retry`, and logs the failure.
+- **118. A run whose runner ends interrupted is lost.** `operating` of `src/runtime.ts` records nothing for a cause
+  of interruptions only, as for a run the runtime interrupted. So the operation stays stored with no fiber and no
+  log, and `settled` returns. The entity's next transaction applies `Restart`, which records `Unknown` for every run
+  of the entity, one whose fiber still runs among them, and that run's `Done` is then dropped. The test is `an
+  operation that ends interrupted, which no step dropped, suspends its entity`, in `src/runtime.test.ts`. The fix
+  records such a run's end as its death, a defect of the program.
+- **119. A deploy that fails while it restarts an interrupted entity leaves its program deployed.** `deployed` of
+  `src/runtime.ts` registers the program before `deploy` reads and steps the entities a crash interrupted, outside
+  `persisting`. So an `SqlError` there ends the deploy, and every deploy after it is refused, with no waker and no
+  sweep for the program. The test is `a deploy whose restart of an interrupted entity fails in the database restarts
+  it at the retry`, in `src/runtime.test.ts`. The fix starts the waker and the sweep before the restarts, and tries
+  each restart again after `retry` while it fails in the database.
