@@ -16,8 +16,10 @@ import {
   type IdempotencyKey,
   idempotencyKey,
   InvariantDefect,
+  isText,
   isTimer,
   type Json,
+  keyedBytes,
   noWork,
   operation,
   ordered,
@@ -2161,6 +2163,23 @@ describe('who a request belongs to', () => {
       name: 'seats',
     } as const as Request<null>
     expect(Machine.requestKey(other, asked)).toBe(Machine.requestKey(base, asked))
+  })
+
+  // Each part of an operation's request is bounded where it enters, by its JSON, so the request always fits in the
+  // bound of a request, however JSON writes its texts.
+  test("an operation's request whose every part is at its bound is one the storage keys a row by", () => {
+    const text = `${'\u0001'.repeat(42)}ab`
+    expect(JSON.stringify(text)).toHaveLength(keyedBytes)
+    expect(isText(text)).toBe(true)
+    expect(isText(`${text}c`)).toBe(false)
+    const asked = {
+      _tag: 'Operation',
+      entity: { name: text, id: text },
+      key: { name: text, parameter: text },
+      incarnation: Number.MAX_SAFE_INTEGER,
+      name: text,
+    } as const as Request<null>
+    expect(Machine.requestFault(tiny((message) => message, () => ({})), asked)).toBeUndefined()
   })
 
   test('the same request id from different senders is different requests, each answered its own reply', () => {

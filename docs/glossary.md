@@ -120,10 +120,10 @@ so.
 - **Suspended.** An entity after a defect: its state stays, the message stays unhandled, its timers are disarmed, and
   nothing is handled until an operator resumes it or discards the message. Its operations run to their end, and
   their completions wait behind the message. A caller meanwhile is answered `Suspended`, which is no reply.
-- **Text a database holds.** A string of at most 256 bytes of UTF-8, with no U+0000, which PostgreSQL holds in no
-  text, and no lone surrogate, which no database gives back as written. The bound is what an entry of an index of
-  PostgreSQL holds. An id, a request id, a name and a string an index holds are such text, or the defect of
-  whoever gave them. An id and a program's name are not empty either.
+- **Text a database holds.** A string whose JSON holds at most 256 bytes of UTF-8, with no U+0000, which PostgreSQL
+  holds in no text, and no lone surrogate, which no database gives back as written. The bound is what an entry of an
+  index of PostgreSQL holds. An id, a request id, a name, the name an operation sends under and a string an index
+  holds are such text, or the defect of whoever gave them. An id and a program's name are not empty either.
 - **Timer.** Work that delivers one internal message at its time, derived from the state. It may be dropped in any
   state, and one that changes is armed again as new work.
 - **Types, `TypesOf`.** Of a program: the type of its state, flags, messages, operations, keys and their

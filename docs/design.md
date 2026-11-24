@@ -943,7 +943,8 @@ runtime's step, with one time, one database and one process for all of them:
   ([decision 0187](decisions/0187-a-rehearsal-moves-time-by-a-duration.md)).
 
 What the runtime makes a defect suspends the sender, and fails the run with `EntitySuspended`: a run that sends
-twice under one name to one entity, a droppable operation that sends, and a runner that dies. A receiver with no
+twice under one name to one entity, a run that sends under a name that is no text a database holds, a droppable
+operation that sends, and a runner that dies. A receiver with no
 reply, since it is suspended, fails the run with no step, and the operation stays under way: the runtime would send
 again once the receiver is resumed. A world does not choose the order of steps of the entities: each act of the
 test runs to its end before the next, which is one order the runtime can take.
@@ -1031,16 +1032,20 @@ is written once. A launch on a client of any other dialect is the launcher's def
 - An integer of a row may come from the driver as a number or as a bigint: PGlite gives a number, and
   `@effect/sql-pg` a bigint. Either is read as a number up to 2^53
   ([decision 0222](decisions/0222-postgresql-with-many-connections.md)).
-- An id, a request id, a name, a key's name and a string an index holds are text every
-  database holds as it is: no U+0000, which PostgreSQL holds in no text, and no lone surrogate, which no database
-  gives back as written, so that two ids would be one. Anything else is the defect of whoever gave it.
-- Each of those texts holds at most 256 bytes of UTF-8, and so does the JSON of a key's parameter. The text of a
-  request holds at most 1,024 bytes. An entry of an index of PostgreSQL holds 2,704 bytes, where SQLite holds any
-  text. The widest key of the storage, of `effecttea_waiting`, holds six such texts, an integer, and the name an
-  operation sends under, which only the bound of its request bounds, so 2,568 bytes. So a text past its bound is
-  refused where it enters, on both dialects. A caller's id, request id or request is the caller's defect, an
-  operation's request is the operation's, and a parameter or an index is the program's, which suspends the entity. A
-  step whose row PostgreSQL could not hold would otherwise fail in the database, and be tried again for ever.
+- An id, a request id, a name, a key's name, the name an operation sends under and a string an index holds are text
+  every database holds as it is: no U+0000, which PostgreSQL holds in no text, and no lone surrogate, which no
+  database gives back as written, so that two ids would be one. Anything else is the defect of whoever gave it.
+- The JSON of each of those texts holds at most 256 bytes of UTF-8, and so does the JSON of a key's parameter. A text
+  is measured by its JSON because a request holds it as JSON, which writes a control character as six bytes. The
+  text of a request holds at most 1,536 bytes. An entry of an index of PostgreSQL holds 2,704 bytes, where SQLite
+  holds any text. The widest key of the storage, of `effecttea_waiting`, holds seven such texts and an integer, so
+  1,800 bytes. The widest key that holds a request, of `effecttea_replies`, holds two texts, a request and an
+  integer, so 2,056 bytes. So a text past its bound is refused where it enters, on both dialects. A step whose row
+  PostgreSQL could not hold would otherwise fail in the database, and be tried again for ever.
+- A caller's id, request id or request past its bound is the caller's defect. The name an operation sends under is
+  the operation's defect, which suspends the sender. A parameter or an index is the program's, which suspends the
+  entity. An operation's request holds four texts, a parameter, an integer and less than 120 bytes besides, so it
+  always fits, and only a caller's sender can take a request past its bound.
 - An id is not empty either. The waker and `reindex` page the entities from the empty id up, so an entity under it
   would never be woken nor indexed. A handle, an operation and a rehearsal refuse it as the defect of whoever gave it
   ([decision 0179](decisions/0179-an-id-is-not-empty.md)).

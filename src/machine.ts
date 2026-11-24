@@ -379,8 +379,9 @@ export const requestKey = <T extends Types>(program: Program<T>, request: Reques
 }
 
 /**
- * Why the storage cannot key a row by the request, or `undefined` where it can. A handle and a rehearsal refuse such
- * a request as the defect of whoever sent it, before it reaches the entity.
+ * Why the storage cannot key a row by the request, or `undefined` where it can. Only a caller's request can be one,
+ * since each part of an operation's is bounded where it enters. A handle and a rehearsal refuse such a request as the
+ * caller's defect, before it reaches the entity.
  */
 export const requestFault = <T extends Types>(program: Program<T>, request: Request<T['sender']>): string | undefined =>
   fits(requestText(program, request), requestBytes)

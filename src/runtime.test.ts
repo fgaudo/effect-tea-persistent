@@ -359,15 +359,16 @@ test('an id, a request id or a time to keep a reply that is no such value is the
     expect(yield* defect(handle.send('e', { _tag: 'Refuse', nonce: 'n' }, { requestId: 'r', keep: { millis: -1 } })))
       .toBe('the reply is kept {"millis":-1}, which is no non-negative integer of milliseconds')
     expect(yield* defect(handle.read('\ud800'))).toBe('the id is "\\ud800", which is no text a database holds')
-    // An entry of an index of PostgreSQL holds a bounded text, so an id and a request id hold 256 bytes of UTF-8.
-    expect(yield* defect(handle.create('é'.repeat(129), { requestId: 'c' })))
-      .toBe(`the id is "${'é'.repeat(129)}", which is no text a database holds`)
-    expect(yield* defect(handle.send('e', { _tag: 'Refuse', nonce: 'n' }, { requestId: 'r'.repeat(257), keep })))
-      .toBe(`the request id is "${'r'.repeat(257)}", which is no text a database holds`)
-    expect(yield* handle.create('é'.repeat(128), { requestId: 'r'.repeat(256) })).toEqual({ _tag: 'Created' })
-    // A request's text holds 1,024 bytes, and JSON writes each of these characters as six.
-    expect(yield* defect(handle.send('e', { _tag: 'Refuse', nonce: 'n' }, { requestId: '\u0001'.repeat(200), keep })))
-      .toBe('the request encodes to more than 1024 bytes of UTF-8, the most a database keys a row by')
+    // An entry of an index of PostgreSQL holds a bounded text, so the JSON of an id and a request id holds 256 bytes
+    // of UTF-8, the quotes with it.
+    expect(yield* defect(handle.create('é'.repeat(128), { requestId: 'c' })))
+      .toBe(`the id is "${'é'.repeat(128)}", which is no text a database holds`)
+    expect(yield* defect(handle.send('e', { _tag: 'Refuse', nonce: 'n' }, { requestId: 'r'.repeat(255), keep })))
+      .toBe(`the request id is "${'r'.repeat(255)}", which is no text a database holds`)
+    expect(yield* handle.create('é'.repeat(127), { requestId: 'r'.repeat(254) })).toEqual({ _tag: 'Created' })
+    // A request holds its texts as JSON, which writes each of these characters as six.
+    expect(yield* defect(handle.send('e', { _tag: 'Refuse', nonce: 'n' }, { requestId: '\u0001'.repeat(43), keep })))
+      .toBe(`the request id is ${JSON.stringify('\u0001'.repeat(43))}, which is no text a database holds`)
     // A call that steps the entity within the caller's transaction would commit with it, so it is refused.
     const sql = yield* SqlClient.SqlClient
     const within = 'the call runs within a transaction of the client of the runtime'

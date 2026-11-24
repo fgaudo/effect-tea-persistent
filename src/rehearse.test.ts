@@ -28,6 +28,7 @@ import {
   program as declare,
   reference,
   rejectWith,
+  requestBytes,
   type Runner,
   send,
   timer,
@@ -411,6 +412,21 @@ describe("a rehearsal's request ids", () => {
         const cause = Exit.isFailure(exit) ? Cause.squash(exit.cause) : null
         expect(cause instanceof InvariantDefect && cause.reason)
           .toBe('the request id is "entry\\u0000", which is no text a database holds')
+      }),
+    )))
+
+  // A caller's request holds the sender, which the program's schema need not bound, so a request past the bound of
+  // the storage is the caller's defect.
+  test('fails a send whose request is past the bound of a request', () =>
+    Effect.runPromise(rehearse(
+      door,
+      opened,
+      Effect.fnUntraced(function*(rehearsal) {
+        const far = { _tag: 'Turnstile', id: 'n'.repeat(requestBytes) } as const
+        const exit = yield* Effect.exit(rehearsal.send(entered, { sender: far }))
+        const cause = Exit.isFailure(exit) ? Cause.squash(exit.cause) : null
+        expect(cause instanceof InvariantDefect && cause.reason)
+          .toBe(`the request encodes to more than ${requestBytes} bytes of UTF-8, the most a database keys a row by`)
       }),
     )))
 
@@ -1767,6 +1783,20 @@ describe('a failure a scenario catches', () => {
         ),
       },
     } as unknown as typeof booking
+    // The storage keys a wait by the name an operation sends under, so a name that is no text is the operation's.
+    const unnamed = {
+      ...booking,
+      name: 'Unnamed',
+      operations: {
+        ...booking.operations,
+        Hold: operation(({ event, seats }: { _tag: 'Hold'; event: string; seats: number }) =>
+          Effect.as(
+            send(inventory, event, { _tag: 'HoldRequested', seats }, 'hold\u0000'),
+            { _tag: 'SeatsHeld' } as const,
+          )
+        ),
+      },
+    } as unknown as typeof booking
     const dying = {
       ...booking,
       name: 'Dying',
@@ -1783,6 +1813,7 @@ describe('a failure a scenario catches', () => {
       yield* world.create(inventory, 'concert-1', { capacity: 4 })
       const programs = [
         ['a run that sends twice under one name', twice],
+        ['a run that sends under a name that is no text', unnamed],
         ['a runner that dies', dying],
         ['a runner that ends interrupted', interrupted],
       ] as const
@@ -1796,6 +1827,7 @@ describe('a failure a scenario catches', () => {
     })))
     expect(seen).toEqual({
       'a run that sends twice under one name': ['Failure', 'Failure'],
+      'a run that sends under a name that is no text': ['Failure', 'Failure'],
       'a runner that dies': ['Failure', 'Failure'],
       'a runner that ends interrupted': ['Failure', 'Failure'],
     })

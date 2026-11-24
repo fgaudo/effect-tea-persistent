@@ -690,18 +690,21 @@ export const migrationOf = <T extends Types>(
 }
 
 /**
- * The most bytes of UTF-8 a text that keys a row holds: an id, a request id, a name, a string an index holds, and the
- * JSON of a key's parameter. An entry of an index of PostgreSQL holds 2,704 bytes, where SQLite holds any text. The
- * widest key of the storage, of `effecttea_waiting`, holds six such texts, an integer, and the name an operation
- * sends under, which only `requestBytes` bounds, so 2,568 bytes at most.
+ * The most bytes of UTF-8 the JSON of a text that keys a row holds: an id, a request id, a name, the name an operation
+ * sends under, a string an index holds, and a key's parameter. A text is measured by its JSON, since a request holds
+ * it as JSON, which writes a control character as six bytes. An entry of an index of PostgreSQL holds 2,704 bytes,
+ * where SQLite holds any text. The widest key of the storage, of `effecttea_waiting`, holds seven such texts and an
+ * integer, so 1,800 bytes at most.
  */
 export const keyedBytes = 256
 
 /**
- * The most bytes of UTF-8 the text of a request holds. The widest key that holds a request, of `effecttea_replies`,
- * holds two texts, a request and an integer.
+ * The most bytes of UTF-8 the text of a request holds. An operation's request holds four texts, a parameter, an
+ * integer and less than 120 bytes besides, so it always fits, and only a caller's sender can pass the bound. The
+ * widest key that holds a request, of `effecttea_replies`, holds two texts, a request and an integer, so 2,056 bytes
+ * at most.
  */
-export const requestBytes = 1024
+export const requestBytes = 1536
 
 const utf8 = new TextEncoder()
 
@@ -710,14 +713,14 @@ export const fits = (text: string, most: number): boolean =>
   text.length <= most && (text.length * 3 <= most || utf8.encode(text).length <= most)
 
 /**
- * Whether a string is text every database holds as it is, in a key: it holds at most `keyedBytes` bytes of UTF-8,
- * no U+0000, which PostgreSQL holds in no text and parses in no JSON, and no lone surrogate, which PostgreSQL writes
- * as U+FFFD, so that two strings would be one, and SQLite gives back as U+FFFD for each of its bytes, so that the
- * string read finds no row. A regular expression with the flag `u` reads a pair of surrogates as one code point, so
+ * Whether a string is text every database holds as it is, in a key. Its JSON holds at most `keyedBytes` bytes of
+ * UTF-8. It holds no U+0000, which PostgreSQL holds in no text and parses in no JSON. It holds no lone surrogate,
+ * which PostgreSQL writes as U+FFFD, so that two strings would be one, and SQLite gives back as U+FFFD for each of its
+ * bytes, so that the string read finds no row. A regular expression with the flag `u` reads a pair of surrogates as one code point, so
  * `\p{Cs}` finds a lone one only.
  */
 export const isText = (text: string): boolean =>
-  fits(text, keyedBytes) && !text.includes('\u0000') && !/\p{Cs}/u.test(text)
+  fits(JSON.stringify(text), keyedBytes) && !text.includes('\u0000') && !/\p{Cs}/u.test(text)
 
 /**
  * Why a string a caller gave as an id is no id, or `undefined` when it is one. An id is text a database holds, and

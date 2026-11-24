@@ -1379,14 +1379,15 @@ const onEachDialect = async <A>(body: (sql: SqlClient.SqlClient) => Effect.Effec
 }
 
 // An entry of a B-tree index of PostgreSQL holds 2,704 bytes, where SQLite holds any text. The widest key of the
-// storage is the one of `effecttea_waiting`, with six texts, an integer and the name an operation sends under, which
-// only the bound of its request bounds. So each part at its bound fits in it.
+// storage is the one of `effecttea_waiting`, with seven texts and an integer. The widest key that holds a request is
+// the one of `effecttea_replies`, with two texts, a request and an integer. So each part at its bound fits in both.
 test('every text that keys a row, at its bound, is written alike on both dialects', async () => {
   const outcomes = await onEachDialect((sql) =>
     Effect.gen(function*() {
       const store = storage(ranked, sql)
       yield* store.indexed
-      const at = (seed: number) => lettersOf(keyedBytes, seed)
+      // A text is measured by its JSON, quotes and all.
+      const at = (seed: number) => lettersOf(keyedBytes - 2, seed)
       yield* store.write(at(1), created({ shown: { projection: '0', indexes: { rank: at(2) } } }), 0)
       yield* sql`INSERT INTO effecttea_waiting ${
         sql.insert({
@@ -1395,10 +1396,13 @@ test('every text that keys a row, at its bound, is written alike on both dialect
           sender_name: at(5),
           sender_id: at(6),
           sender_key: at(7),
-          sender_parameter: at(8),
-          sender_incarnation: 1,
-          request: lettersOf(requestBytes, 9),
+          sender_parameter: JSON.stringify(at(8)),
+          sender_incarnation: Number.MAX_SAFE_INTEGER,
+          request: at(9),
         })
+      }`
+      yield* sql`INSERT INTO effecttea_replies ${
+        sql.insert({ name: at(10), id: at(11), request: lettersOf(requestBytes, 12), tag: 'Accepted', version: 1 })
       }`
       return 'written'
     }))

@@ -28,6 +28,7 @@ import {
   type FlagsOf,
   idFault,
   InvariantDefect,
+  isText,
   isTimer,
   type Key,
   type Piece,
@@ -645,6 +646,10 @@ const entitiesOf = (p: Process, entity: Address, key: Key, incarnation: number, 
       if (droppable) refuse(`the droppable operation under '${Machine.shownKey(key)}' sent to ${program} '${id}'`)
       const fault = idFault(id)
       if (fault !== undefined) refuse(fault)
+      // The storage keys a wait by the name, and a reply by the request, which holds the name.
+      if (!isText(name)) {
+        refuse(`the operation sent under the name ${JSON.stringify(name)}, which is no text a database holds`)
+      }
       // A name used twice with one entity would be answered the first request's reply, and never applied.
       const to = JSON.stringify([kind, program, id, name])
       if (used.has(to)) refuse(`the operation ${kind} '${name}' to ${program} '${id}' twice`)
