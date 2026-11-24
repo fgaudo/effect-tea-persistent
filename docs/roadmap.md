@@ -13,26 +13,8 @@ come first, since no feature is built while more than ten bugs are open.
 
 ## Next
 
-15. **The waker and the runs outlive a failure.** (Opus 5.5 · high) It depends on no step. A hunt of 2026-11-24
-    found four bugs of `src/runtime.ts`, each reproduced by a test that was not kept. The step writes each as a bug
-    of `docs/bugs.md` with its `test.failing`, and fixes it. It is done when the four tests are `test`s.
-    - The waker misses a timer armed while it reads what is due. `inEntity` pokes the waker only for a time before
-      `d.next`, and `waking` sets `d.next` after its reading. So a step of another entity that commits after the
-      reading's `MIN(due)`, on another connection of a pool, sends no poke, and the waker sleeps past the timer, for
-      ever where nothing else is due. A client that runs the step right after that statement reaches it on SQLite.
-    - One reading of what is due that fails ends the waker for good. `due` of `src/storage/entities.ts` dies on an
-      `SqlError`, and `waking` catches the fire alone. So after one `ConnectionError` no timer of the program fires
-      again in the process, though `docs/design.md` says a fire that fails in the database is tried again.
-    - A run whose runner ends interrupted is lost. `operating` records nothing for a cause of interruptions only, so
-      the operation stays stored with no fiber, unlogged, and `settled` returns. The entity's next transaction
-      applies `Restart`, which records `Unknown` for every run of the entity, one whose fiber still runs among them.
-      That run's `Done` is then dropped.
-    - A deploy that fails while it restarts an interrupted entity leaves its program deployed. `deployed` registers
-      the program before `deploy` steps the entities of `interrupted`, outside `persisting`. So an `SqlError` there
-      ends the deploy, and every deploy after it is refused, with no waker and no sweep for the program.
-
-16. **What the storage and the checks let through.** (Opus 5.5 · medium) It depends on no step. The same hunt
-    found four narrow bugs, each reproduced by a test that was not kept. The step writes each as a bug of
+16. **What the storage and the checks let through.** (Opus 5.5 · medium) It depends on no step. A hunt of
+    2026-11-24 found four narrow bugs, each reproduced by a test that was not kept. The step writes each as a bug of
     `docs/bugs.md` with its `test.failing`, and fixes it. It is done when the four tests are `test`s, or a sentence
     of `docs/design.md` refuses the case where it enters.
     - On PostgreSQL a launch dies where the first schema of the `search_path` has a dot in its name. `migrationsTable`

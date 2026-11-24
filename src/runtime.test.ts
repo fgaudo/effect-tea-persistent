@@ -201,8 +201,8 @@ test('an operation that ends interrupted, which no step dropped, suspends its en
     yield* Scope.close(scope, Exit.void)
   })))
 
-// Bug 119 of docs/bugs.md: the deploy registered the program, and then died on the restart of an interrupted entity.
-test.failing('a deploy whose restart of an interrupted entity fails in the database restarts it at the retry', () =>
+// A deploy registers the program and starts its waker, and then restarts the entities a crash interrupted.
+test('a deploy whose restart of an interrupted entity fails in the database restarts it at the retry', () =>
   run(Effect.provide(
     Effect.gen(function*() {
       const crashed = yield* processOn

@@ -194,7 +194,9 @@ export interface Handle<T extends Types> {
 /** A runtime launched on one client. */
 export interface Runtime {
   /**
-   * Deploys a program with its services, restarts the operations a crash interrupted, and gives its handle. With
+   * Deploys a program with its services, restarts the operations a crash interrupted, and gives its handle. The
+   * program's timers fire from the start of the restarts, and a restart that fails in the database is tried again
+   * after the launch's retry, so a deploy that ends leaves no entity it did not restart. With
    * `outbox: true`, each creation of an entity and each step that changes its projection writes a row of
    * `effecttea_outbox` in the step's transaction. Without it, no row is written. The library never deletes a row
    * of the outbox: its reader deletes the rows it handled.
@@ -931,10 +933,15 @@ export const launch = (options: Options = {}): Effect.Effect<Runtime, never, Sql
         const services = yield* Effect.context<Exclude<T['services'], Entities>>()
         const d = yield* deployed(p, program, options.outbox === true, (operation) =>
           Effect.provideContext(operation, services) as Effect.Effect<void>)
-        // An operation a crash interrupted has no fiber in this process, so a transaction of its entity restarts it.
-        for (const id of yield* d.storage.interrupted) yield* inEntity(p, d, id, () => Effect.void)
+        // The deployment is whole before the restarts, so that a deploy whose restarts wait on the database, or whose
+        // caller gives up, leaves the program deployed with its waker and its sweep.
         yield* apart(p, waking(p, d))
         if (sweep !== 'none') yield* apart(p, sweeping(d, sweep.millis))
+        // An operation a crash interrupted has no fiber in this process, so a transaction of its entity restarts it.
+        // The restarts are the runtime's own transactions, tried again while they fail in the database.
+        for (const id of yield* persisting(p, d.storage.interrupted)) {
+          yield* persisting(p, inEntity(p, d, id, () => Effect.void))
+        }
         const caller = (request: Readonly<{ requestId: string; sender?: unknown }>): Request<T['sender']> => ({
           _tag: 'Caller',
           sender: request.sender === undefined ? null : request.sender,

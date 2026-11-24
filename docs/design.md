@@ -1001,8 +1001,8 @@ is written once. A launch on a client of any other dialect is the launcher's def
   begun after the caller's snapshot
   ([decision 0279](decisions/0279-createtables-dies-within-a-transaction-of-its-client.md)).
 - A transaction that fails in the database, as a deadlock fails it on PostgreSQL, is tried again at the launch's
-  `retry`. A receiver's transaction is sent again by its sender, an operation's end by the operation's fiber, and a
-  timer's fire by the waker. The waker's reading of the due timers is read again too, so that one failure does not
+  `retry`. A receiver's transaction is sent again by its sender, an operation's end by the operation's fiber, a
+  timer's fire by the waker, and the restart of an interrupted entity by the deploy. The waker's reading of the due timers is read again too, so that one failure does not
   end the waker. Each is logged as a warning with its cause. A commit that failed may have committed,
   and the event tried again is then one the machine ignores. A caller's transaction is not tried again, and the caller is given the failure as a defect.
 - Four readings run several statements in one transaction, begun at `REPEATABLE READ` on PostgreSQL where the
@@ -1040,7 +1040,10 @@ is written once. A launch on a client of any other dialect is the launcher's def
 ### Deployments
 
 A deployment's waker, its sweep and its operations run in the scope the runtime was launched in, and stop when
-that scope closes. A process deploys a name once: a new version, a fix included, is deployed by
+that scope closes. A deploy registers the program and starts its waker and its sweep, and then restarts the
+entities a crash interrupted. So a deploy whose caller gives up still leaves the program whole, and an entity it
+did not reach waits for its next transaction, or for the deploy of a later process. A restart that fails in the database is tried again after the
+`retry`, as every transaction of the runtime's own is. A process deploys a name once: a new version, a fix included, is deployed by
 a new process ([decision 0075](decisions/archive/0075-a-name-is-deployed-once-in-a-process.md)).
 
 ### The public surface

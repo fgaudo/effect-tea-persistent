@@ -95,9 +95,3 @@ again, so a bug that leaves this file leaves a gap in the list. Git keeps the bu
   in `src/rehearse.test.ts`, where `a` fires before `b` though `b` was armed first. The fix is one of two: the
   storage keeps the order of the work, or `docs/design.md` promises no order of one entity's timers due together,
   and `nextTimer` says so.
-- **119. A deploy that fails while it restarts an interrupted entity leaves its program deployed.** `deployed` of
-  `src/runtime.ts` registers the program before `deploy` reads and steps the entities a crash interrupted, outside
-  `persisting`. So an `SqlError` there ends the deploy, and every deploy after it is refused, with no waker and no
-  sweep for the program. The test is `a deploy whose restart of an interrupted entity fails in the database restarts
-  it at the retry`, in `src/runtime.test.ts`. The fix starts the waker and the sweep before the restarts, and tries
-  each restart again after `retry` while it fails in the database.
