@@ -5,6 +5,12 @@ rests on as it stands now, and says what would decide it: a test, a step of the 
 dependency, or a program with a requirement that no example has yet. A question leaves this file when a test, a
 sentence of [`design.md`](design.md) or a step of the roadmap decides it.
 
+## For the owner
+
+What only the owner decides, as [`AGENTS.md`](../AGENTS.md) lists under Deciding. A question gives the agent's choice
+first, what each answer changes for a user of the library, and whether it can be undone. It names the step of the
+roadmap that waits for it. No question waits today.
+
 ## Storage and reading
 
 - **An array with an own property besides its indices.** `isJson` of `src/program.ts` reads only the indices of an
@@ -366,8 +372,8 @@ The rest is not decided, and is listed here.
   left unused, a `yield*` missing, and an import that is not a namespace. Its rule `unstableApiUsage` fails on a module
   marked `@stability unstable`. The library imports `effect/sql` and `effect/encoding`, both unstable, and the
   examples import `effect/http` and `effect/http-api`, so that rule cannot be an error here. It could check instead
-  that `src/` imports no unstable module beyond a list the maintainer agreed to, which `AGENTS.md` asks and no check
-  holds. effect-tea's `prepare` runs `effect-tsgo patch --typescript`, which changes TypeScript in `node_modules`,
+  that each unstable module `src/` imports has a spike of what the code rests on, which `AGENTS.md` asks and no
+  check holds. effect-tea's `prepare` runs `effect-tsgo patch --typescript`, which changes TypeScript in `node_modules`,
   while `AGENTS.md` says that a dependency is never changed there. It would be decided by:
   - whether a patch of the compiler that only the typecheck runs counts as a change of a dependency;
   - whether the language service runs without the patch, and which of its rules this repository would keep.

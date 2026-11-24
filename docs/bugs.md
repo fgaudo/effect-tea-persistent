@@ -8,8 +8,8 @@ again, so a bug that leaves this file leaves a gap in the list. Git keeps the bu
 
 - Each bug has a `test.failing` on `main`, named in its entry, so that `bun test` passes while the bug holds and fails
   once a change fixes it. The fix makes that test a `test`.
-- A fix is proposed to the maintainer with its alternatives before any code, and the code waits for the maintainer's
-  choice.
+- The agent that fixes a bug chooses its fix by the values of [`AGENTS.md`](../AGENTS.md), and says the choice in a
+  line of the commit.
 - A bug fixed leaves this file in the commit of its fix. A bug whose piece of the library goes leaves with it.
 - A bug found is added at the end, under the next number. The next number is 116.
 
@@ -84,15 +84,14 @@ again, so a bug that leaves this file leaves a gap in the list. Git keeps the bu
   `src/runtime.ts` reads `ready` and `next` alone, and sleeps until `next`, or for ever where `next` is null. So an
   operator who mends a refused row by hand waits for another timer or a step before the timer fires. Only SQLite
   holds such a row, since a column of PostgreSQL refuses a time that is no integer. The test is `the waker reads
-  again after the retry an entity whose time it refused`, in `src/runtime.test.ts`. The fix is the maintainer's
-  choice: the waker reads again after `retry` while a row is refused, and logs it, or the promise and the field
-  `refused` go.
+  again after the retry an entity whose time it refused`, in `src/runtime.test.ts`. The fix is one of two: the waker
+  reads again after `retry` while a row is refused, and logs it, or the promise and the field `refused` go.
 - **115. The storage reads an entity's keys in no order, so two of its timers due at one time fire in an order
   `nextTimer` does not say.** The doc comment of `nextTimer`, in `src/machine.ts`, says that of two timers due at one
   time the first in the stored work fires first, and that a restart keeps the order. `entity` of
   `src/storage/entities.ts` reads the rows of `effecttea_entity_keys` with no `ORDER BY`. SQLite gives them by their
   primary key, and PostgreSQL in any order. So a program whose two timers fall due together handles their messages in
   an order that a dialect may change. The test is `fires two timers due at one time in the order of the stored work`,
-  in `src/rehearse.test.ts`, where `a` fires before `b` though `b` was armed first. The fix is the maintainer's
-  choice: the storage keeps the order of the work, or `docs/design.md` promises no order of one entity's timers due
-  together, and `nextTimer` says so.
+  in `src/rehearse.test.ts`, where `a` fires before `b` though `b` was armed first. The fix is one of two: the
+  storage keeps the order of the work, or `docs/design.md` promises no order of one entity's timers due together,
+  and `nextTimer` says so.

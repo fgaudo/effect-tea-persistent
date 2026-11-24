@@ -35,7 +35,7 @@ operator rely on. The last section, [How the runtime keeps it](#how-the-runtime-
 the runtime.
 
 - [What it is for](#what-it-is-for)
-- [A program](#a-program), with its [children](#children)
+- [A program](#a-program), with [what is left to you](#what-is-left-to-you) and its [children](#children)
 - [Messages](#messages)
 - [Work](#work): [keys with a parameter](#keys-with-a-parameter), [incarnations](#incarnations) and
   [entities that talk](#entities-that-talk)
@@ -145,12 +145,6 @@ A state is an object, as in the Guide ([decision 0031](decisions/archive/0031-a-
 of the types, and the Guide's one state machine per concern is how the examples are written: it is also what
 gives `work` and `project` a case to match on.
 
-Nothing that crosses the library is mutated: the program and its schemas, its states, flags, messages,
-operations, timers and projections, and what the library gives back. A new value is a new object, as the Guide
-says of a state. The library relies on it — a step whose next state is the same object stores nothing callers
-read, and an operation changed in place is never seen to change — and, as for purity, checks nothing of it
-([decision 0052](decisions/archive/0052-what-crosses-the-library-is-never-mutated.md)).
-
 A program is checked where it enters — `deploy`, which a fix is too, and `rehearse` — before anything is stored
 or run: one whose name is empty, or one of whose indexes is not a word, is refused. The check is pure and made
 once, since a program is never mutated
@@ -162,6 +156,17 @@ or of a reference to it, so a boundary names the handle it launched as `Handle<T
 ([decision 0188](decisions/0188-typesof-gives-a-programs-types.md)).
 
 [`examples/order/order.ts`](../examples/order/order.ts) is a whole program.
+
+### What is left to you
+
+The library checks nothing of the rules below. A rule that no type and no defect can hold is added to them.
+
+- **The functions of a program are pure.** The library calls each when it chooses, and as often as it chooses.
+- **Nothing that crosses the library is mutated.** The rule holds for the program and its schemas, for its states,
+  flags, messages, operations, timers and projections, and for what the library gives back. A new value is a new
+  object, as the Guide says of a state. The library relies on the rule. A step whose next state is the same object
+  stores nothing callers read, and an operation changed in place is never seen to change
+  ([decision 0052](decisions/archive/0052-what-crosses-the-library-is-never-mutated.md)).
 
 ## Children
 

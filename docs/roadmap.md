@@ -3,18 +3,57 @@
 The steps from here to a library, in order. The library is the server half of the Elm architecture end to end on
 Effect: [effect-tea](https://github.com/fgaudo/effect-tea) in the browser, entities on the server, and one set of
 schemas for both. [`review-2026-11.md`](review-2026-11.md) says why the work starts again from the pure core, and
-what the maintainer chose on 2026-11-21. A step that is done leaves this file. The code and the roadmap before the
+what the owner chose on 2026-11-21. A step that is done leaves this file. The code and the roadmap before the
 review are at the tag `pre-restart`. A step keeps its number once another leaves, so that a citation of it stays
 true.
 
-Each step names its model and effort, what it depends on, and how to tell it is done.
+Each step names its model and effort, what it depends on, and how to tell it is done. The step to do is the first
+of Next whose dependencies have left this file, and that waits for no answer of the owner. The steps that fix bugs
+come first, since no feature is built while more than ten bugs are open.
 
 ## Next
 
+15. **The waker and the runs outlive a failure.** (Opus 5.5 · high) It depends on no step. A hunt of 2026-11-24
+    found four bugs of `src/runtime.ts`, each reproduced by a test that was not kept. The step writes each as a bug
+    of `docs/bugs.md` with its `test.failing`, and fixes it. It is done when the four tests are `test`s.
+    - The waker misses a timer armed while it reads what is due. `inEntity` pokes the waker only for a time before
+      `d.next`, and `waking` sets `d.next` after its reading. So a step of another entity that commits after the
+      reading's `MIN(due)`, on another connection of a pool, sends no poke, and the waker sleeps past the timer, for
+      ever where nothing else is due. A client that runs the step right after that statement reaches it on SQLite.
+    - One reading of what is due that fails ends the waker for good. `due` of `src/storage/entities.ts` dies on an
+      `SqlError`, and `waking` catches the fire alone. So after one `ConnectionError` no timer of the program fires
+      again in the process, though `docs/design.md` says a fire that fails in the database is tried again.
+    - A run whose runner ends interrupted is lost. `operating` records nothing for a cause of interruptions only, so
+      the operation stays stored with no fiber, unlogged, and `settled` returns. The entity's next transaction
+      applies `Restart`, which records `Unknown` for every run of the entity, one whose fiber still runs among them.
+      That run's `Done` is then dropped.
+    - A deploy that fails while it restarts an interrupted entity leaves its program deployed. `deployed` registers
+      the program before `deploy` steps the entities of `interrupted`, outside `persisting`. So an `SqlError` there
+      ends the deploy, and every deploy after it is refused, with no waker and no sweep for the program.
+
+16. **What the storage and the checks let through.** (Opus 5.5 · medium) It depends on no step. The same hunt
+    found four narrow bugs, each reproduced by a test that was not kept. The step writes each as a bug of
+    `docs/bugs.md` with its `test.failing`, and fixes it. It is done when the four tests are `test`s, or a sentence
+    of `docs/design.md` refuses the case where it enters.
+    - On PostgreSQL a launch dies where the first schema of the `search_path` has a dot in its name. `migrationsTable`
+      of `src/storage/tables.ts` joins the schema and the table with a dot, and `sql` splits the name at each dot.
+    - An entity suspended at a time before 1970 is written and never read back. `Rows.entity` and `Rows.suspended`
+      of `src/storage/rows.ts` decode `suspended_at` as a `Count`, and `Rows.due` takes any integer.
+    - A timer whose time is no `DateTime`, which a cast lets through, is stored with no time. `checkWork` of
+      `src/machine.ts` checks a time only where `DateTime.isDateTime` holds. The timer never fires, and `load` dies
+      on its row. A `work` that gives a `Map`, through a cast too, is read as no work, with no defect.
+    - `projectionViolations` of `src/testing.ts` reads `allows` through the prototype chain. So a kind `__proto__`,
+      which the type `Allows` lets through, makes the check throw where it should pass over the kind.
+
+17. **The bugs no step holds.** (Opus 5.5 · high) It depends on no step. Bugs 95, 99, 102, 103, 105, 110, 114 and
+    115 of `docs/bugs.md` belong to no step, and step 11 waits for ten open bugs at most. Where an entry names two
+    fixes, the step takes the one the values of `AGENTS.md` rank higher. The fix of bug 110 changes `ci.yml`, whose
+    jobs run only once the owner pushes. It is done when the eight have left `docs/bugs.md`.
+
 8. **The questions for the contract.** (Fable 5.2 · high) It depends on steps 6 and 7. The review lists five rules
-   of the contract a simpler one may replace, and the slice shows which of them a browser meets. The maintainer
-   takes each or leaves it, and each one taken changes the machine with its tests. It is done when each of the five
-   is taken or left, in a sentence of `docs/design.md`.
+   of the contract a simpler one may replace, and the slice shows which of them a browser meets. The agent takes
+   each or leaves it by the values of `AGENTS.md`, and each one taken changes the machine with its tests. It is
+   done when each of the five is taken or left, in a sentence of `docs/design.md`.
    - A rehearsal answers as the runtime does, since step 5 of 2026-11-21. A defect on a caller's message fails the
      rehearsal's `send` with `EntitySuspended`, and its `discard` is the operator's. Either goes with its rule.
    - The slice of step 6, [`examples/seat`](../examples/seat), met two of the five. Its screen may be answered
@@ -52,6 +91,7 @@ Each step names its model and effort, what it depends on, and how to tell it is 
    `docs/rejected.md` are deleted. `docs/cluster.md` stays, as the study the step on several machines begins from.
    A reader checks the guide by the skill `guide-reader`. It is done when `bun run links` and the build of the site
    pass, and no comment cites a note.
+   - The design written again keeps its section What is left to you, where `AGENTS.md` sends a rule nothing checks.
    - The browser of `examples/seat` imports no entry of the library. Its schemas are a module of the example that
      imports `effect/Schema` alone, and both programs import that module. The README and `docs/design.md` still say
      that a browser imports a program's module through `./program`. Step 12 gives the browser something to import.
@@ -72,42 +112,9 @@ Each step names its model and effort, what it depends on, and how to tell it is 
     - The screen of `examples/seat` dies on a reading its contract does not decode, and its page asks for a reload.
       It is what a browser that holds the schemas of the version before meets today.
 
-15. **The waker and the runs outlive a failure.** (Opus 5.5 · high) It depends on no step. A hunt of 2026-11-24
-    found four bugs of `src/runtime.ts`, each reproduced by a test that was not kept. The step writes each as a bug
-    of `docs/bugs.md` with its `test.failing`, and proposes its fix to the maintainer. It is done when the four tests
-    are `test`s.
-    - The waker misses a timer armed while it reads what is due. `inEntity` pokes the waker only for a time before
-      `d.next`, and `waking` sets `d.next` after its reading. So a step of another entity that commits after the
-      reading's `MIN(due)`, on another connection of a pool, sends no poke, and the waker sleeps past the timer, for
-      ever where nothing else is due. A client that runs the step right after that statement reaches it on SQLite.
-    - One reading of what is due that fails ends the waker for good. `due` of `src/storage/entities.ts` dies on an
-      `SqlError`, and `waking` catches the fire alone. So after one `ConnectionError` no timer of the program fires
-      again in the process, though `docs/design.md` says a fire that fails in the database is tried again.
-    - A run whose runner ends interrupted is lost. `operating` records nothing for a cause of interruptions only, so
-      the operation stays stored with no fiber, unlogged, and `settled` returns. The entity's next transaction
-      applies `Restart`, which records `Unknown` for every run of the entity, one whose fiber still runs among them.
-      That run's `Done` is then dropped.
-    - A deploy that fails while it restarts an interrupted entity leaves its program deployed. `deployed` registers
-      the program before `deploy` steps the entities of `interrupted`, outside `persisting`. So an `SqlError` there
-      ends the deploy, and every deploy after it is refused, with no waker and no sweep for the program.
-
-16. **What the storage and the checks let through.** (Opus 5.5 · medium) It depends on no step. The same hunt
-    found four narrow bugs, each reproduced by a test that was not kept. The step writes each as a bug of
-    `docs/bugs.md` with its `test.failing`, and fixes it once the maintainer chooses. It is done when the four tests
-    are `test`s, or a sentence of `docs/design.md` refuses the case where it enters.
-    - On PostgreSQL a launch dies where the first schema of the `search_path` has a dot in its name. `migrationsTable`
-      of `src/storage/tables.ts` joins the schema and the table with a dot, and `sql` splits the name at each dot.
-    - An entity suspended at a time before 1970 is written and never read back. `Rows.entity` and `Rows.suspended`
-      of `src/storage/rows.ts` decode `suspended_at` as a `Count`, and `Rows.due` takes any integer.
-    - A timer whose time is no `DateTime`, which a cast lets through, is stored with no time. `checkWork` of
-      `src/machine.ts` checks a time only where `DateTime.isDateTime` holds. The timer never fires, and `load` dies
-      on its row. A `work` that gives a `Map`, through a cast too, is read as no work, with no defect.
-    - `projectionViolations` of `src/testing.ts` reads `allows` through the prototype chain. So a kind `__proto__`,
-      which the type `Allows` lets through, makes the check throw where it should pass over the kind.
-
-11. **The release, experimental.** (Opus 5.5 · medium) It depends on steps 9, 10, 15 and 16, and on ten open bugs
+11. **The release, experimental.** (Opus 5.5 · medium) It depends on steps 9, 10, 15, 16 and 17, and on ten open bugs
     at most. It decides what `exports` names, writes the metadata of `package.json`, and packs the package into a
-    project outside Bun that runs and typechecks it.
+    project outside Bun that runs and typechecks it. It publishes nothing, since a release is the owner's.
     - No spike sees the runtime on a full volume since the consumers went. A spike of it is owed before the release.
     - `./testing` imports `@effect/sql-sqlite-node`, an optional peer dependency on `node:sqlite`. The project outside
       Bun runs a rehearsal on Node too, at a version that has `node:sqlite` without a flag.
