@@ -455,9 +455,10 @@ const inEntity = <T extends Types, A>(
 
 /**
  * The fiber of one run of an operation. It runs the operation with the program's services, and then steps its
- * completion or its death in a transaction of the entity. A run the runtime interrupted records nothing: its step
- * dropped it, or the process is stopping. A run that ends interrupted otherwise dies, since it neither completed nor
- * died, and a run left stored with no fiber would be restarted as after a crash.
+ * completion or its death in a transaction of the entity. A run the runtime interrupts, as its step dropped it or as
+ * the process stops, records nothing, since its fiber ends before that transaction. A run that ends interrupted by
+ * itself dies, since it neither completed nor died, and a run left stored with no fiber would be restarted as after a
+ * crash.
  */
 const operating = <T extends Types>(
   p: Process,
@@ -481,13 +482,9 @@ const operating = <T extends Types>(
         const completed = { _tag: 'Complete', key, incarnation, message: exit.value } as const
         return persisting(p, inEntity(p, d, id, (tx) => tx.apply(completed)))
       }
-      // The runtime interrupts a run only once its step released it, or once the process's scope closes, whose state
-      // is `Closed` while it interrupts its fibers. Any other end by interruption is the operation's own.
-      const interrupted = Cause.hasInterruptsOnly(exit.cause)
-      if (interrupted && (p.operations.get(addressOf(entity))?.has(run) !== true || p.scope.state._tag === 'Closed')) {
-        return Effect.void
-      }
-      const cause = interrupted
+      // An interruption from outside ends this fiber before it gets here, since Effect skips the handler of
+      // `Effect.exit` in a fiber that is interrupted and interruptible. So an interruption here is the operation's own.
+      const cause = Cause.hasInterruptsOnly(exit.cause)
         ? new Error(`the operation under '${Machine.shownKey(key)}' ended interrupted, and neither completed nor died`)
         : Cause.squash(exit.cause)
       return persisting(p, inEntity(p, d, id, (tx) => tx.apply({ _tag: 'Die', key, incarnation, cause })))

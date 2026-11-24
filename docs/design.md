@@ -692,8 +692,9 @@ handled once the entity is resumed, so a charge under way when an unrelated mess
 left `unknown`. An operation still running at the resumption is kept. One that dies meanwhile leaves the suspension
 as it is, and runs again at the resumption ([decision 0113](decisions/archive/0113-a-suspended-entitys-operations-run-to-their-end.md)). A defect in an
 operation, in `work` or `project` on a step's next state, or in a new program activating the stored state,
-suspends it too. An operation that ends interrupted dies, where neither its step dropped it nor its process stops:
-it neither completed nor died, and a run stored with no fiber would be restarted as after a crash. A rehearsal
+suspends it too. An operation that ends interrupted by itself dies: it neither completed nor died, and a run stored
+with no fiber would be restarted as after a crash. A run the runtime interrupts, as its step dropped it or as its
+process stops, records nothing, since Effect ends an interrupted fiber before the run's end is stepped. A rehearsal
 interrupts no run, so there every run that ends interrupted dies. A defect is what the program does: what one of its functions or schemas throws, each caught on
 its own, or a rule of the design it breaks. Anything else thrown while an event is applied — a bug of the machine,
 a row the runtime corrupted — is the runtime's, and is no suspension
