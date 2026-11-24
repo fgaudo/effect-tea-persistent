@@ -238,6 +238,53 @@ test('a deploy whose restart of an interrupted entity fails in the database rest
     TestClock.layer(),
   )))
 
+// The deploy starts the waker before it reads the entities a crash interrupted. So a timer that is due fires while
+// that reading fails in the database and waits for the retry, which the clock never reaches here.
+test('a deploy whose reading of the interrupted entities waits for the retry fires a due timer meanwhile', () =>
+  run(Effect.provide(
+    Effect.gen(function*() {
+      const sql = yield* SqlClient.SqlClient
+      const crashed = yield* processOn
+      yield* crashed.handle.create('e', { requestId: 'creation' })
+      yield* crashed.handle.send('e', { _tag: 'Start', key: 't', nonce: 'n' }, { requestId: 'r', keep: 'forever' })
+      yield* quiet
+      yield* crashed.die
+      // The toy's timer arms itself again as it fires, so a fire moves its time.
+      const dueOf = Effect.map(
+        sql<{ readonly due: number | string }>`SELECT due FROM effecttea_entity_keys WHERE id = 'e' AND due IS NOT NULL`,
+        (rows) => rows.map((row) => Number(row.due)),
+      ).pipe(Effect.orDie)
+      const armed = yield* dueOf
+      expect(armed.length).toBe(1)
+      yield* TestClock.adjust('60 millis')
+      const fails = { now: true }
+      const failing: Statement.Transformer = (statement) =>
+        Effect.suspend(() => {
+          const [text] = statement.compile()
+          if (!fails.now || !text.includes('UNION') || !text.includes('effecttea_mailbox')) {
+            return Effect.succeed(statement)
+          }
+          fails.now = false
+          return Effect.die(failure)
+        })
+      const scope = yield* Scope.make()
+      const runtime = yield* Effect.provideService(launch(), Scope.Scope, scope)
+      const deploying = yield* Effect.forkChild(runtime.deploy(toy(first, () => Effect.never)).pipe(
+        Effect.provideService(Scope.Scope, scope),
+        Effect.provideService(Statement.CurrentTransformer, failing),
+      ))
+      yield* quiet
+      expect(fails.now).toBe(false)
+      expect(yield* dueOf).not.toEqual(armed)
+      yield* TestClock.adjust('50 millis')
+      yield* quiet
+      const handle = yield* Fiber.join(deploying)
+      expect((yield* handle.read('e'))?.seen.some(({ tag }) => tag === 'Rang')).toBe(true)
+      yield* Scope.close(scope, Exit.void)
+    }),
+    TestClock.layer(),
+  )))
+
 // Bug 105 of docs/bugs.md: a step PostgreSQL cannot write fails in the database, and is tried again after the retry
 // for ever, so the entity's state never moves past it and the entity is not suspended.
 test.failing('a completion whose step writes a long index is stepped or suspends its entity, alike on both dialects', () => {
