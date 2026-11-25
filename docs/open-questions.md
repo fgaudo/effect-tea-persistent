@@ -394,13 +394,15 @@ The rest is not decided, and is listed here.
   step 11 of the [roadmap](roadmap.md) runs a rehearsal on Node in a project outside Bun. It would be decided by:
   - whether a deployment runs the runtime on Node, or a browser loads more than a program's module;
   - whether the run of step 11 is a job of the CI, or the tests of `src/` run on Node too.
-- **Three tests that time out on Windows.** On the maintainer's Windows machine, `fires a timer whose time passes
-  while the waker reads what is due` of `src/runtime.test.ts`, `changes nothing a test reads of the entities` of
+- **Three slow tests of timers.** On the maintainer's Windows machine, `fires a timer whose time passes while the
+  waker reads what is due` of `src/runtime.test.ts`, `changes nothing a test reads of the entities` of
   `src/rehearse.test.ts`, and `a subscription is charged at its creation, and again when its stored renewal comes
-  due` of `examples/subscription/runtime.test.ts` pass on the CI's Linux and end past the timeout of 5 seconds. Each
-  fails alike at `c55a1b2`, alone or in the whole run. It would be decided by:
+  due` of `examples/subscription/runtime.test.ts` each take 5 to 10 seconds, past the default timeout of 5 seconds.
+  Since `054faac` each test has a timeout of 60 seconds of its own, as the tests of histories have, so all three
+  pass. The timeouts hide the time rather than explain it. It would be decided by:
   - whether the library is tested on Windows at all, or the CI's Linux is the only platform the tests promise;
-  - a measure of where the time goes, the clock of the test or the database.
+  - a measure of where the time goes, the clock of the test or the database, which could take the three timeouts
+    out.
 - **A spike whose comment names an option that is gone.** The header comment of
   `spikes/pglite-role-without-ddl.test.ts` says a runtime is launched with `tables: 'existing'`, and `launch` takes no
   such option since the restart. It would be decided by:
