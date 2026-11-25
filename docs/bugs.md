@@ -11,7 +11,7 @@ again, so a bug that leaves this file leaves a gap in the list. Git keeps the bu
 - The agent that fixes a bug chooses its fix by the values of [`AGENTS.md`](../AGENTS.md), and says the choice in a
   line of the commit.
 - A bug fixed leaves this file in the commit of its fix. A bug whose piece of the library goes leaves with it.
-- A bug found is added at the end, under the next number. The next number is 124.
+- A bug found is added at the end, under the next number. The next number is 125.
 
 ## The list
 
@@ -33,3 +33,12 @@ again, so a bug that leaves this file leaves a gap in the list. Git keeps the bu
   it was not run through the runtime. The fix is step 10 of the [roadmap](roadmap.md): a kind `parameter` of
   `Migration`, or a rule that a deploy keeps a parameter's encoding while work is under way under it, which `check`
   reports.
+- **124. A query refuses a criterion whose string is longer than 254 bytes, though the criterion keys no row.**
+  `isCompared` of `src/storage/projections.ts` takes a string only where `isText` holds. Since `ec36292`, `isText`
+  also bounds the JSON of a text at 256 bytes, so that PostgreSQL can hold the text in an entry of an index. A
+  criterion's value is a parameter of the statement, and is never written in an index. Each dialect compares a long
+  string as it compares a short one. So `query` with `rank < 'c'.repeat(256)` fails as the caller's defect, where
+  both dialects would find every row below it. The second value of `AGENTS.md` refuses only a misuse that leaves the
+  behaviour undefined. The test is `a criterion whose string is past the bound of a text that keys a row is compared,
+  on both dialects`, in `src/storage.test.ts`. The fix checks a criterion's string for U+0000 and lone surrogates
+  alone, and `docs/design.md` says under `query` that a criterion's string has no bound.

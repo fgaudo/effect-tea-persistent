@@ -1278,6 +1278,18 @@ test('a criterion or a cursor that is no scalar a query compares is its callerâ€
       expect(yield* store.query({ limit: all, where: [{ index: 'rank', is: '<', value: 2 }] })).toHaveLength(1)
     })))
 
+// Bug 124 of docs/bugs.md: a criterion's value keys no row, and each dialect compares a long string alike, yet the
+// bound of a text that keys a row refuses it.
+test.failing('a criterion whose string is past the bound of a text that keys a row is compared, on both dialects', () =>
+  database((sql) =>
+    Effect.gen(function*() {
+      const store = storage(ranked, sql)
+      yield* store.write('a', created({ shown: { projection: '1', indexes: { rank: 'b' } } }), 0)
+      const long = 'c'.repeat(keyedBytes)
+      expect(yield* store.query({ limit: all, where: [{ index: 'rank', is: '<', value: long }] })).toHaveLength(1)
+      expect(yield* store.query({ limit: all, where: [{ index: 'rank', is: '=', value: long }] })).toHaveLength(0)
+    })))
+
 // `JSON.stringify` writes an integer beyond 2^53 with the fewest digits that read back as it, which SQLite reads as
 // another integer: without the exact digits, the page gives the row for ever, and a criterion misses it (decision 0146).
 test('a query pages past, and finds by its value, a row whose index is an integer beyond 2^53', () =>
