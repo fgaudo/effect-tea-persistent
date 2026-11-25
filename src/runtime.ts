@@ -132,7 +132,7 @@ const remembered = 10_000
 
 /**
  * What a caller does with one program's entities. An id that is empty or no text a database holds is the caller's
- * defect. So is a request id that is no text a database holds, a request whose sender and id encode past 1,024 bytes
+ * defect. So is a request id that is no text a database holds, a request whose sender and id encode past 1,536 bytes
  * of UTF-8, and a `keep` that is no non-negative integer of milliseconds. Nothing is read or stored for a call
  * refused.
  */
