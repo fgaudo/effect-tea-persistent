@@ -713,14 +713,19 @@ export const fits = (text: string, most: number): boolean =>
   text.length <= most && (text.length * 3 <= most || utf8.encode(text).length <= most)
 
 /**
- * Whether a string is text every database holds as it is, in a key. Its JSON holds at most `keyedBytes` bytes of
- * UTF-8. It holds no U+0000, which PostgreSQL holds in no text and parses in no JSON. It holds no lone surrogate,
- * which PostgreSQL writes as U+FFFD, so that two strings would be one, and SQLite gives back as U+FFFD for each of its
- * bytes, so that the string read finds no row. A regular expression with the flag `u` reads a pair of surrogates as one code point, so
- * `\p{Cs}` finds a lone one only.
+ * Whether every database holds a string as it is written, at any length. The string holds no U+0000, which PostgreSQL
+ * holds in no text and parses in no JSON. It holds no lone surrogate, which PostgreSQL writes as U+FFFD, so that two
+ * strings would be one, and SQLite gives back as U+FFFD for each of its bytes, so that the string read finds no row.
+ * A regular expression with the flag `u` reads a pair of surrogates as one code point, so `\p{Cs}` finds a lone one
+ * only.
  */
-export const isText = (text: string): boolean =>
-  fits(JSON.stringify(text), keyedBytes) && !text.includes('\u0000') && !/\p{Cs}/u.test(text)
+export const isHeld = (text: string): boolean => !text.includes('\u0000') && !/\p{Cs}/u.test(text)
+
+/**
+ * Whether a string is text every database holds as it is, in a key: a string every database holds, whose JSON holds
+ * at most `keyedBytes` bytes of UTF-8.
+ */
+export const isText = (text: string): boolean => fits(JSON.stringify(text), keyedBytes) && isHeld(text)
 
 /**
  * Why a string a caller gave as an id is no id, or `undefined` when it is one. An id is text a database holds, and

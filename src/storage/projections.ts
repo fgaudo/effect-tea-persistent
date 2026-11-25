@@ -6,18 +6,19 @@ import * as Effect from 'effect/Effect'
 import * as Hash from 'effect/Hash'
 import type { Statement } from 'effect/sql'
 import * as Machine from '../machine.ts'
-import { InvariantDefect, isText, type Json, type Scalar, type Types } from '../program.ts'
+import { InvariantDefect, isHeld, type Json, type Scalar, type Types } from '../program.ts'
 import type { Storage } from '../storage.ts'
 import type { Held } from './held.ts'
 import { batch, Rows } from './rows.ts'
 
 /**
  * Whether a caller's value is one a query compares alike on both dialects: null, a boolean, a finite number, or a
- * string that is text a database holds (decisions 0143, 0207).
+ * string every database holds. A query binds the value as a parameter, which no index holds, so a string has no bound
+ * of length.
  */
 const isCompared = (value: unknown): value is Scalar =>
   value === null || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))
-  || (typeof value === 'string' && isText(value))
+  || (typeof value === 'string' && isHeld(value))
 
 /** A caller's value as a reason shows it: a string as JSON writes it, so that U+0000 is read. */
 const shownValue = (value: unknown): string =>
@@ -31,8 +32,8 @@ const comparisons: ReadonlyArray<Comparison> = ['=', '<>', '<', '<=', '>', '>=']
 /**
  * One thing that holds of the entities a query finds: the value of an index, compared with a value. Against
  * `null`, `=` and `<>` ask whether the index holds one; an order against `null` finds nothing, as in SQL. A value
- * that is a number but not finite, or a string that is no text a database holds, is the caller's defect, since the
- * dialects would answer it otherwise (decision 0207).
+ * that is a number but not finite, or a string with U+0000 or a lone surrogate, is the caller's defect, since the
+ * dialects would answer it otherwise. A string of any length is compared.
  */
 export type Criterion<T extends Types> = Readonly<{ index: T['index']; is: Comparison; value: Scalar }>
 
@@ -227,10 +228,10 @@ export const projectionsOf = <T extends Types>(held: Held<T>): Pick<
     if (typeof after !== 'object' || after === null) {
       throw new InvariantDefect({ reason: `the row after is ${String(after)}, which is no row` })
     }
-    // No row holds an id that is no text a database holds, and PostgreSQL takes no U+0000 in a parameter of text
-    // (decision 0207).
-    if (typeof after.id !== 'string' || !isText(after.id)) {
-      throw new InvariantDefect({ reason: `the id after is ${shownValue(after.id)}, which is no text a database holds` })
+    // The id is compared as a criterion's string is: PostgreSQL takes no U+0000 in a parameter of text, and a long id
+    // is a parameter that no index holds.
+    if (typeof after.id !== 'string' || !isHeld(after.id)) {
+      throw new InvariantDefect({ reason: `the id after is ${shownValue(after.id)}, which is no string a query compares` })
     }
     if (index === undefined) return null
     const value: unknown = (after.indexes as Readonly<Record<string, unknown>> | undefined)?.[index]

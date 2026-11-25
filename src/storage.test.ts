@@ -1266,7 +1266,7 @@ test('a criterion or a cursor that is no scalar a query compares is its callerâ€
       }
       const order = { index: 'rank' } as const
       const cursors = [
-        [{ id: 'a\u0000', indexes: { rank: 1 } }, 'the id after is "a\\u0000", which is no text a database holds'],
+        [{ id: 'a\u0000', indexes: { rank: 1 } }, 'the id after is "a\\u0000", which is no string a query compares'],
         [{ id: 'a', indexes: { rank: 'x\u0000' } }, `the index 'rank' after is "x\\u0000", which is no scalar`],
       ] as const
       for (const [after, reason] of cursors) {
@@ -1278,9 +1278,9 @@ test('a criterion or a cursor that is no scalar a query compares is its callerâ€
       expect(yield* store.query({ limit: all, where: [{ index: 'rank', is: '<', value: 2 }] })).toHaveLength(1)
     })))
 
-// Bug 124 of docs/bugs.md: a criterion's value keys no row, and each dialect compares a long string alike, yet the
-// bound of a text that keys a row refuses it.
-test.failing('a criterion whose string is past the bound of a text that keys a row is compared, on both dialects', () =>
+// A query binds a criterion's value and a cursor as parameters, which no index holds, and each dialect compares a
+// long string as it compares a short one: so the bound of a text that keys a row does not refuse them.
+test('a criterion or a cursor whose string is past the bound of a text that keys a row is compared, on both dialects', () =>
   database((sql) =>
     Effect.gen(function*() {
       const store = storage(ranked, sql)
@@ -1288,6 +1288,9 @@ test.failing('a criterion whose string is past the bound of a text that keys a r
       const long = 'c'.repeat(keyedBytes)
       expect(yield* store.query({ limit: all, where: [{ index: 'rank', is: '<', value: long }] })).toHaveLength(1)
       expect(yield* store.query({ limit: all, where: [{ index: 'rank', is: '=', value: long }] })).toHaveLength(0)
+      const order = { index: 'rank', descending: true } as const
+      const after = { id: long, indexes: { rank: long } }
+      expect((yield* store.query({ limit: all, order, after })).map(({ id }) => id)).toEqual(['a'])
     })))
 
 // `JSON.stringify` writes an integer beyond 2^53 with the fewest digits that read back as it, which SQLite reads as
