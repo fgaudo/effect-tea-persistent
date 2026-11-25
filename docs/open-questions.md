@@ -248,16 +248,6 @@ roadmap that waits for it. No question waits today.
   decided by:
   - whether a module of Effect at the version pinned does the same, among the unstable ones too;
   - whether the three take their signal alike, or the waker's queue needs another form.
-- **A request received behind one a migration lengthened.** `docs/design.md` says, under the texts a database holds,
-  that a step that only compares another request with a lengthened one does not fail. No test fails without that
-  sentence. A `requestKey` of `src/machine.ts` that threw past `requestBytes` fails only the two tests of the bound
-  itself, and each by its message alone. A test was tried and not kept, since a review commits no test that passes.
-  The test built the entity of `a caller's request a migration lengthened past its bound suspends the entity where it
-  is handled`, in `src/machine.test.ts`, stepped it a `Receive` of another caller's request, and read a mailbox of
-  two messages and no suspension. It passes at `71ed246`, and fails where `requestKey` throws past the bound. It
-  would be decided by:
-  - that test added to `src/machine.test.ts`, which keeps the sentence;
-  - or the sentence taken out of `docs/design.md`, where no rule needs it.
 
 ## Programs
 

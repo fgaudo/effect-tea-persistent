@@ -2153,9 +2153,8 @@ describe('who a request belongs to', () => {
     expect(Machine.requestFault(tiny((message) => message, () => ({})), asked)).toBeUndefined()
   })
 
-  // A migration of the sender may lengthen a caller's request that waits in the mailbox past the bound of a request,
-  // and the storage could key no reply by it.
-  test("a caller's request a migration lengthened past its bound suspends the entity where it is handled", () => {
+  /** An entity whose mailbox holds a caller's request that a migration of the sender lengthened past its bound. */
+  const lengthened = () => {
     const base = tiny((message) => message, () => ({}))
     const named = { ...base, schemas: { ...base.schemas, sender: Schema.String } } as unknown as Program<Tiny>
     const created = Machine.start(named, 'tiny', null, epoch, { _tag: 'Caller', sender: 'ann', id: 'c' } as never)
@@ -2164,10 +2163,30 @@ describe('who a request belongs to', () => {
     const long = { _tag: 'Caller', sender: 'n'.repeat(requestBytes), id: 'r' } as unknown as Request<null>
     const stored = { ...created.machine.stored, mailbox: [{ _tag: 'Inbound', request: long, message: 'go' }] as const }
     const entity: Entity = { ...created.machine, stored, program: named, replies: new Map() }
+    return entity
+  }
+
+  // A migration of the sender may lengthen a caller's request that waits in the mailbox past the bound of a request,
+  // and the storage could key no reply by it.
+  test("a caller's request a migration lengthened past its bound suspends the entity where it is handled", () => {
+    const entity = lengthened()
     const transition = stepped(entity, { _tag: 'Handle', at })
     expect(reasonOfSuspension(transition))
       .toBe(`the request encodes to more than ${requestBytes} bytes of UTF-8, the most a database keys a row by`)
-    expect(transition.machine.stored.mailbox).toEqual(stored.mailbox)
+    expect(transition.machine.stored.mailbox).toEqual(entity.stored.mailbox)
+  })
+
+  // A request received behind the lengthened one is only compared with it, as a retry is, and nothing keys a row by
+  // the lengthened request in that step.
+  test("a caller's request received behind one a migration lengthened is queued, and suspends nothing", () => {
+    const entity = lengthened()
+    const other = { _tag: 'Caller', sender: 'bob', id: 's' } as unknown as Request<null>
+    const received = stepped(entity, { _tag: 'Receive', request: other, message: 'next' })
+    expect(received.machine.stored.suspension).toBeNull()
+    expect(received.machine.stored.mailbox).toEqual([
+      ...entity.stored.mailbox,
+      { _tag: 'Inbound', request: other, message: 'next' },
+    ])
   })
 
   test('the same request id from different senders is different requests, each answered its own reply', () => {
